@@ -16,7 +16,7 @@ import { useEffect, useRef, useState } from 'react';
 
 const { width, height } = Dimensions.get('window');
 const isTablet = width >= 768;
-const NOTCH_HEIGHT = isTablet ? Math.min(450, height * 0.35) : Math.min(400, height * 0.5);
+const NOTCH_HEIGHT = isTablet ? Math.min(350, height * 0.3) : Math.min(340, height * 0.42);
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -303,9 +303,6 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              {/* Divider */}
-              <View style={styles.greetingDivider} />
-
               {/* Row 2: Upcoming Session */}
               {myBookedClasses.length > 0 ? (
                 <View style={styles.upcomingSessionSection}>
@@ -426,9 +423,19 @@ export default function HomeScreen() {
                   </View>
                 </View>
               ) : (
-                <View style={styles.upcomingSessionSection}>
-                  <Text style={styles.upcomingSessionTitle}>אין שיעורים קרובים</Text>
-                </View>
+                <TouchableOpacity
+                  style={styles.upcomingSessionSection}
+                  onPress={() => router.push('/classes' as any)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.emptySessionContent}>
+                    <View style={styles.emptySessionIconContainer}>
+                      <Plus size={36} color={Colors.background} strokeWidth={2.5} />
+                    </View>
+                    <Text style={styles.emptySessionTitle}>הזמן שיעור</Text>
+                    <Text style={styles.emptySessionSubtitle}>לחץ כאן להזמנת שיעור חדש</Text>
+                  </View>
+                </TouchableOpacity>
               )}
           </View>
         </View>
@@ -466,35 +473,25 @@ export default function HomeScreen() {
 
         {/* Achievements & Challenge Row */}
         <View style={styles.achievementsRow}>
-            {/* Active Challenge Card (30%) */}
+            {/* Active Challenge Card */}
             <TouchableOpacity
               style={styles.challengeCardSmall}
-              onPress={() => router.push('/achievements' as any)}
+              onPress={() => router.push({ pathname: '/achievements', params: { tab: 'challenges' } })}
             >
               {activeChallenge ? (
                 <>
+                  <Text style={styles.challengeCardHeader}>אתגר פעיל</Text>
                   <Image
                     source={{ uri: activeChallenge.achievement.icon }}
                     style={styles.challengeIcon}
                   />
-                  <Text style={styles.challengeText} numberOfLines={2}>
-                    {activeChallenge.achievement.name_hebrew}
+                  <Text
+                    style={styles.challengeName}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {activeChallenge.achievement.name_hebrew || activeChallenge.achievement.name}
                   </Text>
-                  <View style={styles.challengeProgress}>
-                    <View style={styles.challengeProgressBg}>
-                      <View
-                        style={[
-                          styles.challengeProgressFill,
-                          {
-                            width: `${Math.min((activeChallenge.progress / activeChallenge.achievement.task_requirement) * 100, 100)}%`
-                          }
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.challengeProgressTextSmall}>
-                      {activeChallenge.progress}/{activeChallenge.achievement.task_requirement}
-                    </Text>
-                  </View>
                 </>
               ) : (
                 <>
@@ -607,8 +604,8 @@ const styles = StyleSheet.create({
   headerNotch: {
     width: '100%',
     minHeight: NOTCH_HEIGHT,
-    borderBottomLeftRadius: 50,
-    borderBottomRightRadius: 50,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
     shadowColor: Colors.primary,
     shadowOffset: {
       width: 0,
@@ -621,7 +618,7 @@ const styles = StyleSheet.create({
   },
   headerNotchContent: {
     flex: 1,
-    paddingBottom: 20,
+    paddingBottom: 16,
   },
   arrowContainer: {
     position: 'absolute',
@@ -648,8 +645,8 @@ const styles = StyleSheet.create({
   messageContent: {
     width: width,
     paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 24,
+    paddingTop: 20,
+    paddingBottom: 18,
     justifyContent: 'center',
   },
   greetingRow: {
@@ -693,17 +690,66 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   plateIconGreeting: {
-    width: 18,
-    height: 18,
+    width: 40,
+    height: 40,
   },
   plateBalanceGreetingText: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '800',
     color: Colors.background,
   },
   upcomingSessionSection: {
-    marginTop: 20,
+    marginTop: 12,
+    gap: 10,
+    backgroundColor: 'rgba(0, 0, 0, 1)',
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1.5,
+
+    shadowColor: '#000000ff',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  emptySessionContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
     gap: 8,
+    minHeight: 90,
+  },
+  emptySessionIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(198, 70, 126, 0.69)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    shadowColor: '#ff6b35',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  emptySessionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: Colors.background,
+    letterSpacing: 0.5,
+  },
+  emptySessionSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.75)',
+    letterSpacing: 0.2,
   },
   sessionTitleRow: {
     flexDirection: 'row',
@@ -712,34 +758,39 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   upcomingSessionTitle: {
-    fontSize: 13,
-    color: Colors.textSecondary,
+    fontSize: 14,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.9)',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   sessionBadgesRow: {
     flexDirection: 'row',
     gap: 6,
   },
   sessionBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 1,
+      height: 2,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
   sessionBadgeLateCancellation: {
     backgroundColor: 'rgba(255, 107, 53, 0.4)',
   },
   sessionBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.background,
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.dark,
   },
   sessionDetailsRow: {
     flexDirection: 'row',
@@ -753,9 +804,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   sessionDateText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    fontWeight: '500',
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.95)',
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   bookClassButtonGreeting: {
     flexDirection: 'row',
@@ -798,14 +850,20 @@ const styles = StyleSheet.create({
   sessionInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 4,
+    gap: 10,
+    marginTop: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    padding: 12,
+    borderRadius: 14,
+    borderLeftWidth: 4,
+    borderLeftColor: '#ff6b35',
   },
   sessionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '800',
     color: Colors.background,
     flex: 1,
+    letterSpacing: 0.3,
   },
   countdownContainer: {
     marginTop: 8,
@@ -1239,7 +1297,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: Colors.borderLight,
+    borderColor: "#dbdadaff",
     padding: 16,
     marginBottom: 20,
   },
@@ -1249,40 +1307,35 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   challengeCardSmall: {
-    flex: 0.3,
+    flex: 0.32,
     backgroundColor: Colors.cardBackground,
     borderRadius: 16,
-    padding: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 12,
     borderWidth: 1,
     borderColor: Colors.border,
+    minHeight: 190,
   },
-  challengeIcon: {
-    width: 40,
-    height: 40,
-    resizeMode: 'contain',
-  },
-  challengeText: {
+  challengeCardHeader: {
     fontSize: 12,
-    fontWeight: '600',
-    color: Colors.text,
-    textAlign: 'center',
-  },
-  challengeProgressBg: {
-    width: '100%',
-    height: 4,
-    backgroundColor: Colors.border,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  challengeProgressTextSmall: {
-    fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '700',
     color: Colors.textSecondary,
     textAlign: 'center',
-    marginTop: 4,
+  },
+  challengeIcon: {
+    width: 72,
+    height: 72,
+    resizeMode: 'contain',
+  },
+  challengeName: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: Colors.text,
+    textAlign: 'center',
+    marginTop: 8,
   },
   emptyChallengeText: {
     fontSize: 11,

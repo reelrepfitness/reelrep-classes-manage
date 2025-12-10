@@ -7,6 +7,7 @@ import { useAuth } from './AuthContext';
 import { supabase } from '@/constants/supabase';
 
 const BOOKINGS_STORAGE_KEY = '@reelrep_bookings';
+const formatDateKey = (date: Date) => date.toLocaleDateString('en-CA');
 
 export const [ClassesProvider, useClasses] = createContextHook(() => {
   const { user, isAdmin } = useAuth();
@@ -29,20 +30,22 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
 
       for (let week = 0; week < 2; week++) {
         for (const schedule of data || []) {
-          const dayOffset = schedule.day_of_week - now.getDay() + (week * 7);
+          const scheduleDayOfWeek = Math.max(0, Math.min(6, (schedule.day_of_week || 1) - 1));
+          const dayOffset = scheduleDayOfWeek - now.getDay() + (week * 7);
           const classDate = new Date(now);
           classDate.setDate(now.getDate() + dayOffset);
           classDate.setHours(0, 0, 0, 0);
 
           const [hours, minutes] = schedule.start_time.split(':');
 
+          const dateKey = formatDateKey(classDate);
           classes.push({
             id: schedule.id, // Use schedule UUID directly
             scheduleId: schedule.id,
             classDate: classDate.toISOString(),
             title: schedule.name,
             instructor: schedule.coach_name,
-            date: classDate.toISOString().split('T')[0],
+            date: dateKey,
             time: `${hours}:${minutes}`,
             duration: schedule.duration_minutes,
             capacity: schedule.max_participants,
@@ -100,7 +103,7 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
           const matchesSchedule = b.classes.schedule_id === classItem.scheduleId;
 
           // Match by date (compare date strings)
-          const bookingDate = new Date(b.classes.class_date).toISOString().split('T')[0];
+          const bookingDate = formatDateKey(new Date(b.classes.class_date));
           const classDate = classItem.date;
           const matchesDate = bookingDate === classDate;
 
@@ -315,15 +318,20 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
     return classes.filter(c => new Date(c.date + ' ' + c.time) > now);
   }, [classes]);
 
-  const isClassBooked = useCallback((classId: string) => {
-    // classId is the schedule UUID from the displayed classes
-    const classItem = classes.find(c => c.id === classId);
+  const isClassBooked = useCallback((classInfo: Class | string) => {
+    const classItem =
+      typeof classInfo === 'string'
+        ? classes.find(c => c.id === classInfo)
+        : classInfo;
+
     if (!classItem) return false;
+
+    const classDate = classItem.date;
 
     return bookings.some((b: any) => {
       const matchesSchedule = b.scheduleId === classItem.scheduleId;
-      const bookingDate = b.classDate ? new Date(b.classDate).toISOString().split('T')[0] : null;
-      const matchesDate = bookingDate === classItem.date;
+      const bookingDate = b.classDate ? formatDateKey(new Date(b.classDate)) : null;
+      const matchesDate = bookingDate === classDate;
       return matchesSchedule && matchesDate && b.status === 'confirmed';
     });
   }, [bookings, classes]);
@@ -335,7 +343,7 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
 
     return bookings.find((b: any) => {
       const matchesSchedule = b.scheduleId === classItem.scheduleId;
-      const bookingDate = b.classDate ? new Date(b.classDate).toISOString().split('T')[0] : null;
+      const bookingDate = b.classDate ? formatDateKey(new Date(b.classDate)) : null;
       const matchesDate = bookingDate === classItem.date;
       return matchesSchedule && matchesDate && b.status === 'confirmed';
     });
@@ -373,7 +381,7 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
         .from('class_bookings')
         .select('*, profiles:user_id(id, name, email, avatar_url, full_name)')
         .eq('class_id', classInstance.id)
-        .eq('status', 'confirmed');
+        .in('status', ['confirmed', 'completed', 'no_show']);
 
       if (bookingsError) {
         console.error('Error fetching class bookings:', bookingsError);

@@ -1,18 +1,20 @@
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, Platform, Image, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Calendar, Users, Trophy } from 'lucide-react-native';
+import { Calendar, Users, Trophy, Lock, Check, X, Clock } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ResponsiveWaveBackground } from '@/components/ResponsiveWaveBackground';
 import { useAuth } from '@/contexts/AuthContext';
 import { useClasses } from '@/contexts/ClassesContext';
+import { useAchievements } from '@/contexts/AchievementsContext';
 import Colors from '@/constants/colors';
 import { hebrew } from '@/constants/hebrew';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import BottomSheet, { BottomSheetView, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { supabase } from '@/constants/supabase';
 
 const { width, height } = Dimensions.get('window');
 const isTablet = width >= 768;
-const NOTCH_HEIGHT = isTablet ? Math.min(450, height * 0.35) : Math.min(400, height * 0.5);
+const NOTCH_HEIGHT = isTablet ? Math.min(300, height * 0.25) : Math.min(270, height * 0.35);
 
 function getNextThursdayNoon(): Date {
   const now = new Date();
@@ -96,21 +98,27 @@ function formatCountdown(ms: number): string {
   }
 }
 
-const DAYS_OF_WEEK = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
-
-function getDayOfWeek(date: string): number {
-  return new Date(date).getDay();
-}
+const DAYS_OF_WEEK = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
+const formatDateKey = (date: Date) => date.toLocaleDateString('en-CA');
+const parseDateKey = (key: string) => {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+const NEXT_WEEK_LOCK_MESSAGE = 'ההרשמה לשבוע הבא נפתחת כל חמישי ב-12:00';
 
 export default function ClassesScreen() {
   const insets = useSafeAreaInsets();
-  const { user, isAdmin } = useAuth();
-  const { classes, bookClass, isClassBooked, getClassBookings } = useClasses();
+  const { user, isAdmin, updateUser } = useAuth();
+  const { classes, bookClass, isClassBooked, getClassBookings, cancelBooking, getClassBooking } = useClasses();
+  const { updateProgress } = useAchievements();
   const [countdown, setCountdown] = useState<string>('');
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedClass, setSelectedClass] = useState<any>(null);
   const [enrolledUsers, setEnrolledUsers] = useState<any[]>([]);
   const [loadingEnrolled, setLoadingEnrolled] = useState(false);
+
+  const lateCancellations = user?.lateCancellations || 0;
+  const blockEndDate = user?.blockEndDate || null;
 
   const bottomSheetRef = useRef<BottomSheet>(null);
   const snapPoints = useMemo(() => ['75%'], []);
@@ -190,105 +198,246 @@ export default function ClassesScreen() {
     return Math.round((enrolled / capacity) * 100);
   };
 
-  const groupedClasses = classes.reduce((groups, classItem) => {
-    const dayOfWeek = getDayOfWeek(classItem.date);
-    const isNextWeekClass = isNextWeek(classItem.date);
-    
-    if (isNextWeekClass) {
-      if (!groups['nextWeek']) {
-        groups['nextWeek'] = [];
-      }
-      groups['nextWeek'].push(classItem);
-    } else {
-      if (!groups[dayOfWeek]) {
-        groups[dayOfWeek] = [];
-      }
-      groups[dayOfWeek].push(classItem);
+  const canCancelClass = (classItem: any) => {
+    const classDateTime = new Date(classItem.date + ' ' + classItem.time).getTime();
+    const now = Date.now();
+    const hoursUntilClass = (classDateTime - now) / (1000 * 60 * 60);
+    return hoursUntilClass >= 6;
+  };
+
+  const canSwitchClass = (classItem: any) => {
+    const classDateTime = new Date(classItem.date + ' ' + classItem.time).getTime();
+    const now = Date.now();
+    const hoursUntilClass = (classDateTime - now) / (1000 * 60 * 60);
+    return hoursUntilClass >= 1;
+  };
+
+  const handleCancelClass = (classItem: any) => {
+    const booking = getClassBooking(classItem.id);
+    if (!booking) return;
+
+    const isLateCancellation = !canCancelClass(classItem);
+
+    if (blockEndDate && new Date(blockEndDate) > new Date()) {
+      Alert.alert('חשבון חסום', 'לא ניתן לבטל שיעורים כרגע. החשבון שלך חסום עד ' + new Date(blockEndDate).toLocaleDateString('he-IL'));
+      return;
     }
+
+    if (isLateCancellation) {
+      // Late cancellation
+      if (user?.ticket) {
+        // User has ticket
+        Alert.alert(
+          'ביטול מאוחר',
+          'בטוח שמבטלים? עבר זמן מועד הביטול האימון הזה ינוקב בכל זאת.',
+          [
+            { text: 'ביטול', style: 'cancel' },
+            {
+              text: 'אשר ביטול',
+              style: 'destructive',
+              onPress: () => {
+                cancelBooking(booking.id);
+                Alert.alert('בוטל', 'השיעור בוטל. האימון נוקב מהכרטיסייה שלך.');
+              }
+            }
+          ]
+        );
+      } else {
+        // User has subscription - use existing late cancellation logic
+        Alert.alert(
+          'ביטול מאוחר',
+          'לא ניתן לבטל שיעור פחות מ-6 שעות לפני תחילתו. ביטול יגרור חיוב. ביטולים מאוחרים: ' + lateCancellations + '/3',
+          [
+            { text: 'ביטול', style: 'cancel' },
+            {
+              text: 'אשר ביטול + חיוב',
+              style: 'destructive',
+              onPress: () => {
+                cancelBooking(booking.id);
+                const newLateCancellations = lateCancellations + 1;
+
+                if (newLateCancellations >= 3) {
+                  const blockEnd = new Date();
+                  blockEnd.setDate(blockEnd.getDate() + 3);
+                  updateUser({
+                    lateCancellations: newLateCancellations,
+                    blockEndDate: blockEnd.toISOString()
+                  });
+                  Alert.alert('חשבון חסום', 'ביטלת 3 שיעורים באיחור. החשבון שלך חסום ל-3 ימים. חשבונך יחויב.');
+                } else {
+                  updateUser({ lateCancellations: newLateCancellations });
+                  Alert.alert('בוטל', `השיעור בוטל. חשבונך יחויב בגין ביטול מאוחר. ביטולים מאוחרים: ${newLateCancellations}/3`);
+                }
+              }
+            }
+          ]
+        );
+      }
+    } else {
+      // Normal cancellation
+      Alert.alert(
+        'ביטול שיעור',
+        'מבטלים בוודאות?',
+        [
+          { text: 'לא', style: 'cancel' },
+          {
+            text: 'כן, בטל',
+            style: 'destructive',
+            onPress: () => {
+              cancelBooking(booking.id);
+              Alert.alert('בוטל', 'השיעור בוטל בהצלחה.');
+            }
+          }
+        ]
+      );
+    }
+  };
+
+  const handleSwitchClass = (classItem: any) => {
+    if (blockEndDate && new Date(blockEndDate) > new Date()) {
+      Alert.alert('חשבון חסום', 'לא ניתן להחליף שיעורים כרגע. החשבון שלך חסום עד ' + new Date(blockEndDate).toLocaleDateString('he-IL'));
+      return;
+    }
+
+    if (!canSwitchClass(classItem)) {
+      Alert.alert('זמן החלפה עבר', 'לא ניתן להחליף שיעור פחות משעה לפני תחילתו.');
+      return;
+    }
+
+    const availableClasses = classes.filter(c =>
+      c.id !== classItem.id &&
+      c.date === classItem.date &&
+      c.enrolled < c.capacity &&
+      (user?.subscription?.type ? c.requiredSubscription.includes(user.subscription.type) : false)
+    );
+
+    if (availableClasses.length === 0) {
+      Alert.alert('אין שיעורים זמינים', 'אין שיעורים זמינים להחלפה באותו יום.');
+      return;
+    }
+
+    const message = 'שיעורים זמינים להחלפה:\n' +
+      availableClasses.map(c => `• ${c.time} - ${c.title}`).join('\n');
+
+    Alert.alert('החלף שיעור', message, [
+      { text: 'סגור', style: 'cancel' }
+    ]);
+  };
+
+  const handleMarkAttendance = async (booking: any, status: 'attended' | 'no_show') => {
+    try {
+      const userId = booking.user_id;
+
+      if (status === 'attended') {
+        // Mark as attended (came to class)
+        const { error } = await supabase
+          .from('class_bookings')
+          .update({
+            status: 'completed',
+            attended_at: new Date().toISOString(),
+          })
+          .eq('id', booking.id);
+
+        if (error) throw error;
+
+        // Update achievements progress for classes_attended
+        await updateProgress(userId, 'classes_attended', 1);
+
+        // Refresh enrolled users list
+        if (selectedClass) {
+          const bookings = await getClassBookings(selectedClass.id);
+          setEnrolledUsers(bookings);
+        }
+
+        Alert.alert('עודכן', 'המשתתף סומן כנוכח');
+      } else if (status === 'no_show') {
+        // Mark as no-show (didn't come to class)
+        const { error } = await supabase
+          .from('class_bookings')
+          .update({
+            status: 'no_show',
+            attended_at: null,
+          })
+          .eq('id', booking.id);
+
+        if (error) throw error;
+
+        // Refresh enrolled users list
+        if (selectedClass) {
+          const bookings = await getClassBookings(selectedClass.id);
+          setEnrolledUsers(bookings);
+        }
+
+        Alert.alert('עודכן', 'המשתתף סומן כלא הגיע');
+      }
+    } catch (error) {
+      console.error('Error updating attendance:', error);
+      Alert.alert('שגיאה', 'לא ניתן לעדכן נוכחות');
+    }
+  };
+
+  const groupedClasses = classes.reduce((groups, classItem) => {
+    const classDateKey = classItem.date;
+    if (!groups[classDateKey]) {
+      groups[classDateKey] = [];
+    }
+    groups[classDateKey].push(classItem);
     return groups;
-  }, {} as Record<string | number, typeof classes>);
+  }, {} as Record<string, typeof classes>);
 
   const generateCalendarDays = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const currentDay = today.getDay();
-    const now = new Date();
-    const currentHour = now.getHours();
     const days = [];
 
-    const isThursdayAfterNoon = currentDay === 4 && currentHour >= 12;
+    const { start: currentWeekStart } = getWeekRange(today);
+    const nextWeekStart = new Date(currentWeekStart);
+    nextWeekStart.setDate(currentWeekStart.getDate() + 7);
+    nextWeekStart.setHours(0, 0, 0, 0);
 
-    let endDate: Date;
-    if (isThursdayAfterNoon) {
-      endDate = new Date(today);
-      endDate.setDate(today.getDate() + (7 + (5 - currentDay)));
-    } else {
-      endDate = new Date(today);
-      const daysToFriday = (5 - currentDay + 7) % 7;
-      endDate.setDate(today.getDate() + (daysToFriday === 0 ? 7 : daysToFriday));
-    }
-
-    console.log('[Calendar] Today:', today.toISOString());
-    console.log('[Calendar] Current day:', currentDay, '- Current hour:', currentHour);
-    console.log('[Calendar] Is Thursday after noon:', isThursdayAfterNoon);
-    console.log('[Calendar] End date:', endDate.toISOString());
-
-    // Only show upcoming days (today and future), excluding Saturdays
-    for (let i = 0; i < 14; i++) {
+    for (let offset = 0; days.length < 7; offset++) {
       const date = new Date(today);
-      date.setDate(today.getDate() + i);
+      date.setDate(today.getDate() + offset);
       const dayOfWeek = date.getDay();
-
-      // Skip Saturdays
-      if (dayOfWeek !== 6) {
-        const isAvailable = date <= endDate;
-
-        // Only add available days (not past days)
-        if (isAvailable) {
-          days.push({
-            dayOfWeek,
-            date: date.toISOString(),
-            dayNumber: date.getDate(),
-            isAvailable: true,
-            isFirstBlocked: false,
-          });
-        }
-      }
+      if (dayOfWeek === 6) continue;
+      const isFutureWeek = date >= nextWeekStart;
+      const isLocked = isFutureWeek && !isRegistrationOpen();
+      days.push({
+        dayOfWeek,
+        date: date.toISOString(),
+        dateKey: formatDateKey(date),
+        dayNumber: date.getDate(),
+        isLocked,
+      });
     }
-
-    console.log('[Calendar] Generated', days.length, 'upcoming days');
 
     return days;
   };
 
   const calendarDays = generateCalendarDays();
 
-  const availableDays = Object.keys(groupedClasses)
-    .filter(key => key !== 'nextWeek')
-    .map(Number)
-    .sort((a, b) => a - b);
-
-  const getUserClassForDay = (dayOfWeek: number) => {
-    const dayClasses = groupedClasses[dayOfWeek] || [];
-    return dayClasses.find((c) => isClassBooked(c.id));
+  const getUserClassForDay = (dateISO: string) => {
+    const targetDate = formatDateKey(new Date(dateISO));
+    const dayClasses = groupedClasses[targetDate] || [];
+    return dayClasses.find((c) => c.date === targetDate && isClassBooked(c));
   };
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayDayOfWeek = today.getDay();
+  const todayKey = formatDateKey(today);
 
   useEffect(() => {
-    if (selectedDay === null) {
-      setSelectedDay(todayDayOfWeek);
+    if (selectedDate === null) {
+      setSelectedDate(formatDateKey(today));
     }
   }, []);
 
-  const filteredClasses = selectedDay !== null
-    ? (groupedClasses[selectedDay] || [])
+  const filteredClasses = selectedDate !== null
+    ? (groupedClasses[selectedDate] || [])
         .filter(classItem => {
           // Check if class has already passed today
           const now = new Date();
-          const classDate = new Date(classItem.date);
+          const classDate = parseDateKey(classItem.date);
           const isToday = classDate.toDateString() === now.toDateString();
 
           if (isToday) {
@@ -320,47 +469,54 @@ export default function ClassesScreen() {
         <View style={styles.headerNotchContent}>
           <View style={styles.header}>
             <Text style={styles.title}>{hebrew.classes.allClasses}</Text>
-            {(user?.subscription || isAdmin) && (
-              <View style={styles.classesInfo}>
-                <Text style={styles.classesText}>
-                  {isAdmin && !user?.subscription
-                    ? 'מנהל - גישה מלאה'
-                    : `${user?.subscription?.classesUsed || 0}/${user?.subscription?.classesPerMonth || 0} ${hebrew.classes.classesUsed}`
-                  }
-                </Text>
-              </View>
-            )}
           </View>
 
           <View style={styles.calendarStripWrapper}>
             <View style={styles.calendarStrip}>
               {calendarDays.map((day, index) => {
-                const bookedClass = getUserClassForDay(day.dayOfWeek);
-                const isToday = day.dayOfWeek === todayDayOfWeek && new Date(day.date).toDateString() === today.toDateString();
+                const dayKey = day.dateKey;
+                const bookedClass = getUserClassForDay(day.date);
+                const isToday = dayKey === today.toISOString().split('T')[0];
+                const isSelected = selectedDate === dayKey;
 
                 return (
                   <TouchableOpacity
                     key={`${day.dayOfWeek}-${index}`}
                     style={[
                       styles.calendarDayCard,
-                      selectedDay === day.dayOfWeek && styles.calendarDayCardActive,
+                      isSelected && styles.calendarDayCardActive,
                       isToday && styles.calendarDayCardToday,
+                      day.isLocked && styles.calendarDayCardLocked,
                     ]}
                     onPress={() => {
-                      setSelectedDay(selectedDay === day.dayOfWeek ? null : day.dayOfWeek);
+                      if (day.isLocked) {
+                        Alert.alert('מוקדם מדי', NEXT_WEEK_LOCK_MESSAGE);
+                        return;
+                      }
+                      setSelectedDate(isSelected ? null : dayKey);
                     }}
                     activeOpacity={0.7}
                   >
+                    <View
+                      style={[
+                        styles.calendarDayDotBase,
+                        bookedClass ? styles.calendarDayBookedDot : styles.calendarDayAvailableDot,
+                      ]}
+                    />
                     <Text style={[
                       styles.calendarDayNumber,
-                      selectedDay === day.dayOfWeek && styles.calendarDayNumberActive,
+                      isSelected && styles.calendarDayNumberActive,
+                      day.isLocked && styles.calendarDayNumberLocked,
                     ]}>{day.dayNumber}</Text>
                     <Text style={[
                       styles.calendarDayName,
-                      selectedDay === day.dayOfWeek && styles.calendarDayNameActive,
+                      isSelected && styles.calendarDayNameActive,
+                      day.isLocked && styles.calendarDayNameLocked,
                     ]}>{DAYS_OF_WEEK[day.dayOfWeek]}</Text>
-                    {bookedClass && (
-                      <Text style={styles.bookedClassTime}>רשום ל{bookedClass.time}</Text>
+                    {day.isLocked && (
+                      <View style={styles.calendarDayLockOverlay}>
+                        <Lock size={16} color={Colors.background} />
+                      </View>
                     )}
                   </TouchableOpacity>
                 );
@@ -375,7 +531,7 @@ export default function ClassesScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {selectedDay === null ? (
+        {selectedDate === null ? (
           <View style={styles.emptyState}>
             <Calendar size={48} color={Colors.textSecondary} />
             <Text style={styles.emptyStateText}>בחר יום כדי לראות שיעורים זמינים</Text>
@@ -386,7 +542,7 @@ export default function ClassesScreen() {
             <Text style={styles.emptyStateText}>אין שיעורים זמינים ביום זה</Text>
           </View>
         ) : filteredClasses.map((classItem, index) => {
-          const booked = isClassBooked(classItem.id);
+          const booked = isClassBooked(classItem);
           const isFull = classItem.enrolled >= classItem.capacity;
 
           return (
@@ -399,6 +555,9 @@ export default function ClassesScreen() {
               getDifficultyColor={getDifficultyColor}
               getCapacityColor={getCapacityColor}
               getCapacityPercentage={getCapacityPercentage}
+              onCancel={handleCancelClass}
+              onSwitch={handleSwitchClass}
+              canCancel={canCancelClass}
             />
           );
         })}
@@ -449,9 +608,15 @@ export default function ClassesScreen() {
                       const userAchievements = userData?.user_achievements || [];
                       const userName = userData?.full_name || userData?.name || 'משתמש';
                       const userInitial = userName.charAt(0).toUpperCase();
+                      const isAttended = booking.attended_at !== null;
+                      const isNoShow = booking.status === 'no_show';
 
                       return (
-                        <View key={booking.id} style={styles.enrolledUserCard}>
+                        <View key={booking.id} style={[
+                          styles.enrolledUserCard,
+                          isAttended && styles.enrolledUserCardAttended,
+                          isNoShow && styles.enrolledUserCardCancelled,
+                        ]}>
                           <View style={styles.userInfo}>
                             {userData?.avatar_url ? (
                               <Image
@@ -463,19 +628,55 @@ export default function ClassesScreen() {
                                 <Text style={styles.userAvatarText}>{userInitial}</Text>
                               </View>
                             )}
-                            <Text style={styles.userName}>{userName}</Text>
+                            <View style={styles.userNameContainer}>
+                              <Text style={styles.userName}>{userName}</Text>
+                              {isAttended && (
+                                <View style={styles.attendanceStatusBadge}>
+                                  <Check size={10} color={Colors.success} />
+                                  <Text style={styles.attendanceStatusText}>נוכח</Text>
+                                </View>
+                              )}
+                              {isNoShow && (
+                                <View style={[styles.attendanceStatusBadge, styles.attendanceStatusBadgeCancelled]}>
+                                  <X size={10} color={Colors.error} />
+                                  <Text style={[styles.attendanceStatusText, styles.attendanceStatusTextCancelled]}>לא הגיע</Text>
+                                </View>
+                              )}
+                            </View>
                           </View>
-                          <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.achievementsRow}
-                          >
-                            {userAchievements.slice(0, 5).map((ach: any, index: number) => (
-                              <View key={index} style={styles.achievementBadge}>
-                                <Trophy size={12} color={Colors.primary} />
+
+                          <View style={styles.userCardRight}>
+                            <ScrollView
+                              horizontal
+                              showsHorizontalScrollIndicator={false}
+                              style={{ maxWidth: 150 }}
+                              contentContainerStyle={styles.achievementsRow}
+                            >
+                              {userAchievements.slice(0, 5).map((ach: any, index: number) => (
+                                <View key={index} style={styles.achievementBadge}>
+                                  <Trophy size={12} color={Colors.primary} />
+                                </View>
+                              ))}
+                            </ScrollView>
+
+                            {isAdmin && (
+                              <View style={styles.adminActionsRow}>
+                                <TouchableOpacity
+                                  style={[styles.adminActionButton, styles.adminActionButtonAttended, isAttended && styles.adminActionButtonActive]}
+                                  onPress={() => handleMarkAttendance(booking, 'attended')}
+                                >
+                                  <Check size={16} color={isAttended ? Colors.background : Colors.success} />
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                  style={[styles.adminActionButton, styles.adminActionButtonNoShow, isNoShow && styles.adminActionButtonActive]}
+                                  onPress={() => handleMarkAttendance(booking, 'no_show')}
+                                >
+                                  <X size={16} color={isNoShow ? Colors.background : Colors.error} />
+                                </TouchableOpacity>
                               </View>
-                            ))}
-                          </ScrollView>
+                            )}
+                          </View>
                         </View>
                       );
                     })}
@@ -488,15 +689,15 @@ export default function ClassesScreen() {
               <TouchableOpacity
                 style={[
                   styles.confirmBookButton,
-                  isClassBooked(selectedClass.id) && styles.confirmBookButtonBooked,
-                  (selectedClass.enrolled >= selectedClass.capacity && !isAdmin && !isClassBooked(selectedClass.id)) && styles.confirmBookButtonDisabled,
+                  isClassBooked(selectedClass) && styles.confirmBookButtonBooked,
+                  (selectedClass.enrolled >= selectedClass.capacity && !isAdmin && !isClassBooked(selectedClass)) && styles.confirmBookButtonDisabled,
                 ]}
                 onPress={handleConfirmBooking}
-                disabled={isClassBooked(selectedClass.id) || (selectedClass.enrolled >= selectedClass.capacity && !isAdmin)}
+                disabled={isClassBooked(selectedClass) || (selectedClass.enrolled >= selectedClass.capacity && !isAdmin)}
                 activeOpacity={0.7}
               >
                 <Text style={styles.confirmBookButtonText}>
-                  {isClassBooked(selectedClass.id)
+                  {isClassBooked(selectedClass)
                     ? 'כבר נרשמת לשיעור זה'
                     : (selectedClass.enrolled >= selectedClass.capacity && !isAdmin)
                     ? 'השיעור מלא'
@@ -520,6 +721,9 @@ interface ClassCardProps {
   getDifficultyColor: (difficulty: string) => string;
   getCapacityColor: (percentage: number) => string;
   getCapacityPercentage: (enrolled: number, capacity: number) => number;
+  onCancel: (classItem: any) => void;
+  onSwitch: (classItem: any) => void;
+  canCancel: (classItem: any) => boolean;
 }
 
 function ClassCard({
@@ -530,6 +734,9 @@ function ClassCard({
   getDifficultyColor,
   getCapacityColor,
   getCapacityPercentage,
+  onCancel,
+  onSwitch,
+  canCancel,
 }: ClassCardProps) {
   return (
     <TouchableOpacity
@@ -574,6 +781,34 @@ function ClassCard({
           />
         </View>
       </View>
+
+      {booked && (
+        <View style={styles.actionButtonsRow}>
+          <TouchableOpacity
+            style={styles.switchButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              onSwitch(classItem);
+            }}
+          >
+            <Text style={styles.switchButtonText}>החלפה</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.cancelButton,
+              !canCancel(classItem) && styles.cancelButtonLate,
+            ]}
+            onPress={(e) => {
+              e.stopPropagation();
+              onCancel(classItem);
+            }}
+          >
+            <Text style={styles.cancelButtonText}>
+              {canCancel(classItem) ? 'ביטול' : 'ביטול מאוחר'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </TouchableOpacity>
   );
 }
@@ -597,14 +832,14 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 12,
     position: 'relative' as const,
-    paddingBottom: 20,
+    paddingBottom: 13,
   },
   headerNotchContent: {
     flex: 1,
   },
   header: {
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 10,
     borderBottomWidth: 0,
     borderBottomColor: 'transparent',
   },
@@ -654,7 +889,8 @@ const styles = StyleSheet.create({
   },
   classCardBooked: {
     borderColor: Colors.success,
-    borderWidth: 2,
+    backgroundColor: Colors.card,
+    borderWidth: 6,
   },
   lockedBanner: {
     position: 'absolute' as const,
@@ -876,7 +1112,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
     backgroundColor: 'transparent',
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingBottom: 10,
   },
   calendarStrip: {
     flexDirection: 'row',
@@ -890,10 +1126,10 @@ const styles = StyleSheet.create({
     maxWidth: 70,
     paddingVertical: 10,
     paddingHorizontal: 8,
-    borderRadius: 12,
-    backgroundColor:"#f5f5f50a",
+    borderRadius: 30,
+    backgroundColor:"transparent",
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: "transparent",
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: Colors.shadow,
@@ -904,50 +1140,65 @@ const styles = StyleSheet.create({
     position: 'relative' as const,
   },
   calendarDayCardActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    backgroundColor: Colors.dark,
+    borderColor: "transparent",
     shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 3,
   },
-  calendarDayCardDisabled: {
-    opacity: 0.4,
+  calendarDayCardLocked: {
+    opacity: 0.55,
   },
   calendarDayCardToday: {
-    borderColor: Colors.accent,
+    borderColor: "transparent",
     borderWidth: 2,
   },
   calendarDayNumber: {
     fontSize: 18,
-    fontWeight: '700' as const,
-    color: Colors.text,
+    fontWeight: '800' as const,
+    color: Colors.light,
     marginBottom: 2,
   },
   calendarDayNumberActive: {
-    color: Colors.background,
+    color: Colors.light,
   },
-  calendarDayNumberDisabled: {
+  calendarDayNumberLocked: {
     color: Colors.textSecondary,
   },
   calendarDayName: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
+    color: Colors.light,
     writingDirection: 'rtl' as const,
   },
   calendarDayNameActive: {
-    color: Colors.background,
+    color: Colors.light,
   },
-  calendarDayNameDisabled: {
+  calendarDayNameLocked: {
     color: Colors.textSecondary,
   },
-  bookedClassTime: {
-    fontSize: 12,
-    fontWeight: '700' as const,
-    color: '#242424ff',
-    writingDirection: 'rtl' as const,
-    marginTop: 4,
-    textAlign: 'center',
+  calendarDayDotBase: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginBottom: 6,
+  },
+  calendarDayBookedDot: {
+    backgroundColor: Colors.success,
+  },
+  calendarDayAvailableDot: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  calendarDayLockOverlay: {
+    position: 'absolute' as const,
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderRadius: 30,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   bigCountdownCard: {
     backgroundColor: Colors.accent + '20',
@@ -1206,6 +1457,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
   },
   userAvatar: {
     width: 48,
@@ -1271,5 +1523,129 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: Colors.background,
     writingDirection: 'rtl' as const,
+  },
+  actionButtonsRow: {
+    flexDirection: 'row' as const,
+    gap: 8,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  switchButton: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center' as const,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  switchButtonText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.text,
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center' as const,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  cancelButtonLate: {
+    backgroundColor: 'rgba(255, 107, 53, 0.15)',
+    borderColor: 'rgba(255, 107, 53, 0.3)',
+  },
+  cancelButtonText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.text,
+  },
+  enrolledUserCardAttended: {
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.success,
+    backgroundColor: 'rgba(16, 185, 129, 0.05)',
+  },
+  enrolledUserCardCancelled: {
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.error,
+    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+  },
+  userNameContainer: {
+    flex: 1,
+    gap: 4,
+  },
+  attendanceStatusBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+  },
+  attendanceStatusBadgeCancelled: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+  },
+  attendanceStatusText: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: Colors.success,
+    writingDirection: 'rtl' as const,
+  },
+  attendanceStatusTextCancelled: {
+    color: Colors.error,
+  },
+  userCardRight: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 12,
+    flexShrink: 0,
+  },
+  adminActionsRow: {
+    flexDirection: 'row' as const,
+    gap: 8,
+    marginLeft: 12,
+  },
+  adminActionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    borderWidth: 1,
+  },
+  adminActionButtonAttended: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  adminActionButtonNoShow: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  adminActionButtonActive: {
+    backgroundColor: Colors.success,
+    borderColor: Colors.success,
   },
 });

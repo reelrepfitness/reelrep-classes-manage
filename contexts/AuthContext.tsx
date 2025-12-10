@@ -33,7 +33,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('id, name, avatar_url, is_admin, is_coach')
+          .select('id, name, full_name, avatar_url, is_admin, is_coach, plate_balance')
           .eq('id', sessionId)
           .single();
         if (error) {
@@ -56,31 +56,91 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Fetch user subscription from database
+  const subscriptionQuery = useQuery({
+    queryKey: ['subscription', sessionId],
+    queryFn: async () => {
+      if (!sessionId) return null;
+      try {
+        const { data, error } = await supabase
+          .from('user_subscriptions')
+          .select(`
+            *,
+            plan:subscription_plans!user_subscriptions_plan_id_fkey(
+              name,
+              type,
+              sessions_per_week
+            )
+          `)
+          .eq('user_id', sessionId)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (error) {
+          if (error.code === 'PGRST116') {
+            // No active subscription found
+            console.log('[Auth] No active subscription found');
+            return null;
+          }
+          console.error('[Auth] Subscription fetch error:', error.message);
+          return null;
+        }
+        console.log('[Auth] Subscription data:', data);
+        return data;
+      } catch (err) {
+        console.error('[Auth] Subscription fetch exception:', err);
+        return null;
+      }
+    },
+    enabled: !!sessionId,
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
+
   useEffect(() => {
     if (session?.user && profileQuery.data !== undefined) {
       const profile = profileQuery.data;
+      const subscription = subscriptionQuery.data;
+
+      let userSubscription: User['subscription'] | undefined;
+
+      if (subscription && subscription.plan) {
+        const plan = subscription.plan as any;
+        const now = new Date();
+        const endDate = new Date(subscription.end_date);
+        const isActive = subscription.is_active && endDate > now;
+
+        userSubscription = {
+          type: plan.type || 'basic',
+          status: isActive ? 'active' : 'expired',
+          startDate: subscription.start_date,
+          endDate: subscription.end_date,
+          classesPerMonth: plan.sessions_per_week ? plan.sessions_per_week * 4 : 0,
+          classesUsed: profile?.classes_used || 0,
+        };
+      }
+
       const user: User = {
         id: session.user.id,
-        name: profile?.name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
+        name: profile?.name || profile?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
         email: session.user.email || '',
         role: profile?.is_admin ? 'admin' : (profile?.is_coach ? 'coach' : 'user'),
         profileImage: profile?.avatar_url || session.user.user_metadata?.avatar_url || '',
-        subscription: {
-          plan: session.user.user_metadata?.subscription_plan || 'premium',
-          classesRemaining: session.user.user_metadata?.classes_remaining || 12,
-          renewalDate: session.user.user_metadata?.renewal_date || '2024-02-01',
-        },
+        subscription: userSubscription,
+        plateBalance: profile?.plate_balance || 0,
         stats: {
-          totalWorkouts: session.user.user_metadata?.total_workouts || 0,
-          totalMinutes: session.user.user_metadata?.total_minutes || 0,
-          currentStreak: session.user.user_metadata?.current_streak || 0,
+          totalWorkouts: profile?.total_workouts || 0,
+          totalMinutes: 0,
+          currentStreak: 0,
         },
       };
       setCurrentUser(user);
     } else if (!session?.user) {
       setCurrentUser(null);
     }
-  }, [session, profileQuery.data]);
+  }, [session, profileQuery.data, subscriptionQuery.data]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
@@ -174,12 +234,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     isAuthenticated: currentUser !== null && session !== null,
     isAdmin: currentUser?.role === 'admin',
     isCoach: currentUser?.role === 'coach' || currentUser?.role === 'admin',
-    isLoading: authQuery.isLoading || profileQuery.isLoading,
+    isLoading: authQuery.isLoading || profileQuery.isLoading || subscriptionQuery.isLoading,
     signInWithPassword,
     signInWithOTP,
     verifyOTP,
     resetPassword,
     signOut,
     updateUser,
-  }), [currentUser, session, authQuery.isLoading, profileQuery.isLoading, signInWithPassword, signInWithOTP, verifyOTP, resetPassword, signOut, updateUser]);
+  }), [currentUser, session, authQuery.isLoading, profileQuery.isLoading, subscriptionQuery.isLoading, signInWithPassword, signInWithOTP, verifyOTP, resetPassword, signOut, updateUser]);
 });

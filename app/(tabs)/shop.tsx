@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, TextInput, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, ShoppingCart, Minus, Plus } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ResponsiveWaveBackground } from '@/components/ResponsiveWaveBackground';
 import { useShop } from '@/contexts/ShopContext';
 import Colors from '@/constants/colors';
@@ -11,6 +12,7 @@ export default function ShopScreen() {
   const insets = useSafeAreaInsets();
   const { 
     packages, 
+    isLoading,
     cart, 
     addToCart, 
     removeFromCart, 
@@ -24,6 +26,12 @@ export default function ShopScreen() {
   } = useShop();
   const [showPlateInput, setShowPlateInput] = useState<boolean>(false);
   const [platesInput, setPlatesInput] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<'subscriptions' | 'tickets' | 'products'>('subscriptions');
+  const shopTabs = [
+    { key: 'subscriptions', label: 'מנויים' },
+    { key: 'tickets', label: 'כרטיסיות' },
+    { key: 'products', label: 'מוצרים' },
+  ] as const;
 
   const handleAddToCart = (pkg: any) => {
     addToCart(pkg);
@@ -34,84 +42,148 @@ export default function ShopScreen() {
     return cart.some(item => item.package.id === pkgId);
   };
 
+  const filteredPackages = selectedCategory === 'subscriptions' ? packages : [];
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       <ResponsiveWaveBackground variant="shop" />
-      <View style={styles.header}>
-        <Text style={styles.title}>{hebrew.shop.subscriptions}</Text>
-        {cart.length > 0 && (
-          <View style={styles.cartBadge}>
-            <ShoppingCart size={20} color={Colors.background} />
-            <Text style={styles.cartCount}>{cart.length}</Text>
+
+      <LinearGradient
+        colors={['#1a1a1a', '#2d2d2d', '#1a1a1a', '#000000']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.headerNotch, { paddingTop: insets.top }]}
+      >
+        <View style={styles.headerNotchContent}>
+          <View style={styles.headerTopRow}>
+            <Text style={styles.title}>{hebrew.shop.subscriptions}</Text>
+            {cart.length > 0 && (
+              <View style={styles.cartBadge}>
+                <ShoppingCart size={20} color={Colors.background} />
+                <Text style={styles.cartCount}>{cart.length}</Text>
+              </View>
+            )}
           </View>
-        )}
-      </View>
+
+          <Text style={styles.headerSubtitle}>בחר את הדרך שלך להתאמן</Text>
+
+          <View style={styles.shopTabsRow}>
+            {shopTabs.map(tab => (
+              <TouchableOpacity
+                key={tab.key}
+                style={[
+                  styles.shopTab,
+                  selectedCategory === tab.key && styles.shopTabActive,
+                ]}
+                onPress={() => setSelectedCategory(tab.key)}
+                activeOpacity={0.7}
+              >
+                <Text style={[
+                  styles.shopTabText,
+                  selectedCategory === tab.key && styles.shopTabTextActive,
+                ]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </LinearGradient>
 
       <ScrollView 
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {packages.map((pkg) => {
-          const inCart = isInCart(pkg.id);
-          
-          return (
-            <View 
-              key={pkg.id} 
-              style={[
-                styles.packageCard,
-                pkg.popular && styles.packageCardPopular,
-              ]}
-            >
-              {pkg.popular && (
-                <View style={styles.popularBadge}>
-                  <Text style={styles.popularText}>{hebrew.shop.popular}</Text>
-                </View>
-              )}
-              
-              <View style={styles.packageHeader}>
-                <Text style={styles.packageName}>{pkg.name}</Text>
-                <View style={styles.priceContainer}>
-                  <Text style={styles.price}>{pkg.price.toString()}</Text>
-                  <Text style={styles.currency}>{pkg.currency}</Text>
-                  <Text style={styles.duration}>/{hebrew.shop.month}</Text>
-                </View>
-              </View>
-
-              <View style={styles.features}>
-                {pkg.features.map((feature, index) => (
-                  <View key={index} style={styles.featureItem}>
-                    <Check size={16} color={Colors.success} />
-                    <Text style={styles.featureText}>{feature}</Text>
-                  </View>
-                ))}
-              </View>
-
-              <TouchableOpacity
-                style={[
-                  styles.addButton,
-                  inCart && styles.addButtonActive,
-                ]}
-                onPress={() => {
-                  if (inCart) {
-                    const item = cart.find(i => i.package.id === pkg.id);
-                    if (item) removeFromCart(item.id);
-                  } else {
-                    handleAddToCart(pkg);
-                  }
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={[
-                  styles.addButtonText,
-                  inCart && styles.addButtonTextActive,
-                ]}>
-                  {inCart ? 'בסל' : hebrew.shop.addToCart}
-                </Text>
-              </TouchableOpacity>
+        {selectedCategory === 'subscriptions' ? (
+          isLoading ? (
+            <View style={styles.availableSoonCard}>
+              <Text style={styles.availableSoonTitle}>טוען מנויים...</Text>
+              <Text style={styles.availableSoonSubtitle}>מתעדכן בהיצע העדכני מהסטודיו</Text>
             </View>
-          );
-        })}
+          ) : filteredPackages.length > 0 ? (
+            filteredPackages.map((pkg) => {
+              const inCart = isInCart(pkg.id);
+              return (
+                <View 
+                  key={pkg.id} 
+                  style={[
+                    styles.packageCard,
+                    pkg.popular && styles.packageCardPopular,
+                  ]}
+                >
+                  {pkg.popular && (
+                    <View style={styles.popularBadge}>
+                      <Text style={styles.popularText}>הכי משתלם</Text>
+                    </View>
+                  )}
+                  <View style={styles.packageHeader}>
+                    <View style={styles.packageHeaderTop}>
+                      <Text style={styles.packageName}>{pkg.name}</Text>
+                      <Text style={styles.durationChip}>{pkg.durationLabel}</Text>
+                    </View>
+                    <View style={styles.priceContainer}>
+                      <Text style={styles.price}>{pkg.price.toFixed(0)}</Text>
+                      <Text style={styles.currency}>{pkg.currency}</Text>
+                      <Text style={styles.duration}>/{hebrew.shop.month}</Text>
+                    </View>
+                    <Text style={styles.planMeta}>
+                      {pkg.planType === 'unlimited'
+                        ? 'אימונים ללא הגבלה'
+                        : `${pkg.classesPerMonth || 0} אימונים בחודש`}
+                    </Text>
+                  </View>
+                  <View style={styles.features}>
+                    {pkg.features.map((feature, index) => (
+                      <View key={index} style={styles.featureItem}>
+                        <Check size={16} color={Colors.success} />
+                        <Text style={styles.featureText}>{feature}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.addButton,
+                      inCart && styles.addButtonActive,
+                    ]}
+                    onPress={() => {
+                      if (inCart) {
+                        const item = cart.find(i => i.package.id === pkg.id);
+                        if (item) removeFromCart(item.id);
+                      } else {
+                        handleAddToCart(pkg);
+                      }
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[
+                      styles.addButtonText,
+                      inCart && styles.addButtonTextActive,
+                    ]}>
+                      {inCart ? 'בסל' : hebrew.shop.addToCart}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })
+          ) : (
+            <View style={styles.availableSoonCard}>
+              <Text style={styles.availableSoonTitle}>אין מנויים להצגה</Text>
+              <Text style={styles.availableSoonSubtitle}>בדקו שוב מאוחר יותר</Text>
+            </View>
+          )
+        ) : (
+          <View style={styles.availableSoonCard}>
+            <Text style={styles.availableSoonTitle}>
+              {selectedCategory === 'tickets' ? 'כרטיסיות בקרוב' : 'חנות מוצרים תעלה בקרוב'}
+            </Text>
+            <Text style={styles.availableSoonSubtitle}>
+              {selectedCategory === 'tickets'
+                ? 'עובדים על חבילות כרטיסיות שיתאימו לכל רמות התדירות'
+                : 'בקרוב תמצאו כאן ביגוד, אביזרים ומוצרים משלימים'}
+            </Text>
+          </View>
+        )}
 
         {cart.length > 0 && (
           <View style={styles.cartSummary}>
@@ -267,19 +339,40 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  header: {
+  headerNotch: {
+    width: '100%',
+    minHeight: 220,
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
+    marginBottom: 12,
+  },
+  headerNotchContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    gap: 16,
+  },
+  headerTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '800' as const,
-    color: Colors.text,
+    color: Colors.background,
+    textAlign: 'right',
+    writingDirection: 'rtl' as const,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.light,
     textAlign: 'right',
     writingDirection: 'rtl' as const,
   },
@@ -297,11 +390,36 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: Colors.background,
   },
+  shopTabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  shopTab: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+  },
+  shopTabActive: {
+    backgroundColor: Colors.primary,
+  },
+  shopTabText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.light,
+    writingDirection: 'rtl' as const,
+  },
+  shopTabTextActive: {
+    color: Colors.background,
+    fontWeight: '800' as const,
+  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     padding: 20,
+    paddingTop: 8,
   },
   packageCard: {
     backgroundColor: Colors.card,
@@ -335,6 +453,11 @@ const styles = StyleSheet.create({
   },
   packageHeader: {
     marginBottom: 20,
+  },
+  packageHeaderTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   packageName: {
     fontSize: 24,
@@ -371,6 +494,24 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 20,
   },
+  durationChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: Colors.primary + '20',
+    color: Colors.primary,
+    fontSize: 12,
+    fontWeight: '700' as const,
+    textAlign: 'center',
+    minWidth: 80,
+  },
+  planMeta: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'right',
+    writingDirection: 'rtl' as const,
+    marginTop: 8,
+  },
   featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -406,6 +547,29 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     marginTop: 8,
+  },
+  availableSoonCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 18,
+    padding: 24,
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 16,
+  },
+  availableSoonTitle: {
+    fontSize: 16,
+    fontWeight: '800' as const,
+    color: Colors.text,
+    writingDirection: 'rtl' as const,
+  },
+  availableSoonSubtitle: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    writingDirection: 'rtl' as const,
   },
   cartTitle: {
     fontSize: 20,

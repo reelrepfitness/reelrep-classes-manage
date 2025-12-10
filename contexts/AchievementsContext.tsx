@@ -5,6 +5,7 @@ import { Achievement, UserAchievement } from '@/constants/types';
 import { useAuth } from './AuthContext';
 import { useClasses } from './ClassesContext';
 import { useWorkouts } from './WorkoutContext';
+import { supabase } from '@/constants/supabase';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -18,34 +19,26 @@ export const [AchievementsProvider, useAchievements] = createContextHook(() => {
   const achievementsQuery = useQuery({
     queryKey: ['achievements'],
     queryFn: async () => {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/achievements?is_active=eq.true&order=created_at.desc`, {
-        headers: {
-          'apikey': SUPABASE_ANON_KEY || '',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-      });
-      if (!response.ok) throw new Error('Failed to fetch achievements');
-      return response.json() as Promise<Achievement[]>;
+      const { data, error } = await supabase
+        .from('achievements')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []) as Achievement[];
     },
-    enabled: !!SUPABASE_URL && !!SUPABASE_ANON_KEY,
   });
 
   const userAchievementsQuery = useQuery({
     queryKey: ['userAchievements', user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
-      const response = await fetch(
-        `${SUPABASE_URL}/rest/v1/user_achievements?user_id=eq.${user.id}&select=*,achievements(*)`,
-        {
-          headers: {
-            'apikey': SUPABASE_ANON_KEY || '',
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          },
-        }
-      );
-      if (!response.ok) throw new Error('Failed to fetch user achievements');
-      const data = await response.json();
-      return data.map((ua: any) => ({
+      const { data, error } = await supabase
+        .from('user_achievements')
+        .select('*, achievements(*)')
+        .eq('user_id', user.id);
+      if (error) throw error;
+      return (data || []).map((ua: any) => ({
         id: ua.id,
         achievement: ua.achievements,
         progress: ua.progress || 0,
@@ -55,7 +48,7 @@ export const [AchievementsProvider, useAchievements] = createContextHook(() => {
         acceptedAt: ua.accepted_at,
       })) as UserAchievement[];
     },
-    enabled: !!user?.id && !!SUPABASE_URL && !!SUPABASE_ANON_KEY,
+    enabled: !!user?.id,
   });
 
   const acceptChallengeMutation = useMutation({
@@ -67,35 +60,27 @@ export const [AchievementsProvider, useAchievements] = createContextHook(() => {
       );
 
       if (existingChallenge && existingChallenge.achievement.id !== achievementId) {
-        await fetch(`${SUPABASE_URL}/rest/v1/user_achievements?id=eq.${existingChallenge.id}`, {
-          method: 'DELETE',
-          headers: {
-            'apikey': SUPABASE_ANON_KEY || '',
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          },
-        });
+        const { error } = await supabase
+          .from('user_achievements')
+          .delete()
+          .eq('id', existingChallenge.id);
+        if (error) throw error;
       }
 
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/user_achievements`, {
-        method: 'POST',
-        headers: {
-          'apikey': SUPABASE_ANON_KEY || '',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=representation',
-        },
-        body: JSON.stringify({
+      const { data, error } = await supabase
+        .from('user_achievements')
+        .insert({
           user_id: user.id,
           achievement_id: achievementId,
           progress: 0,
           completed: false,
           is_challenge: true,
           accepted_at: new Date().toISOString(),
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to accept challenge');
-      return response.json();
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['userAchievements', user?.id] });
@@ -104,18 +89,14 @@ export const [AchievementsProvider, useAchievements] = createContextHook(() => {
 
   const updateProgressMutation = useMutation({
     mutationFn: async ({ userAchievementId, progress }: { userAchievementId: string; progress: number }) => {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/user_achievements?id=eq.${userAchievementId}`, {
-        method: 'PATCH',
-        headers: {
-          'apikey': SUPABASE_ANON_KEY || '',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ progress }),
-      });
-
-      if (!response.ok) throw new Error('Failed to update progress');
-      return response.json();
+      const { data, error } = await supabase
+        .from('user_achievements')
+        .update({ progress })
+        .eq('id', userAchievementId)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['userAchievements', user?.id] });

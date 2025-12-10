@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useWorkouts } from '@/contexts/WorkoutContext';
 import Colors from '@/constants/colors';
 import { hebrew } from '@/constants/hebrew';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -28,42 +29,50 @@ export default function ProfileScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       <ResponsiveWaveBackground variant="profile" />
-      <View style={styles.header}>
-        <View style={styles.profileHeader}>
-          <View style={styles.avatar}>
-            <User size={48} color={Colors.primary} />
-          </View>
-          <View style={styles.profileInfo}>
-            <Text style={styles.name}>{user?.name}</Text>
-            <Text style={styles.email}>{user?.email}</Text>
-            {user?.subscription?.type && (
-              <View style={[styles.subscriptionBadge, { backgroundColor: Colors.primary + '20' }]}>
-                <Text style={[styles.subscriptionText, { color: Colors.primary }]}>
-                  {user.subscription.type.toUpperCase()}
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
-        <TouchableOpacity
-          style={styles.plateBalanceCard}
-          onPress={() => router.push('/plates/store')}
-        >
-          <View style={styles.plateBalanceContent}>
-            <Image
-              source={{ uri: 'https://res.cloudinary.com/diwe4xzro/image/upload/v1762853884/%D7%98%D7%A7%D7%A1%D7%98_%D7%94%D7%A4%D7%A1%D7%A7%D7%94_%D7%A9%D7%9C%D7%9A_2.png_zpdglt.png' }}
-              style={styles.plateIcon}
-            />
-            <View>
-              <Text style={styles.plateBalanceLabel}>יתרת פלטות</Text>
-              <Text style={styles.plateBalanceValue}>{user?.plateBalance || 0}</Text>
+      <LinearGradient
+        colors={['#1a1a1a', '#2d2d2d', '#1a1a1a', '#000000']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.headerNotch, { paddingTop: insets.top }]}
+      >
+        <View style={styles.headerNotchContent}>
+          <View style={styles.profileHeader}>
+            <View style={styles.avatar}>
+              <User size={48} color={Colors.primary} />
+            </View>
+            <View style={styles.profileInfo}>
+              <Text style={styles.name}>{user?.name}</Text>
+              <Text style={styles.email}>{user?.email}</Text>
+              {user?.subscription?.type && (
+                <View style={[styles.subscriptionBadge, { backgroundColor: Colors.primary + '20' }]}>
+                  <Text style={[styles.subscriptionText, { color: Colors.primary }]}>
+                    {user.subscription.type.toUpperCase()}
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
-          <Text style={styles.plateBalanceArrow}>←</Text>
-        </TouchableOpacity>
-      </View>
+
+          <TouchableOpacity
+            style={styles.plateBalanceCard}
+            onPress={() => router.push('/plates/store')}
+          >
+            <View style={styles.plateBalanceContent}>
+              <Image
+                source={{ uri: 'https://res.cloudinary.com/diwe4xzro/image/upload/v1762853884/%D7%98%D7%A7%D7%A1%D7%98_%D7%94%D7%A4%D7%A1%D7%A7%D7%94_%D7%A9%D7%9C%D7%9A_2.png_zpdglt.png' }}
+                style={styles.plateIcon}
+              />
+              <View>
+                <Text style={styles.plateBalanceLabel}>יתרת פלטות</Text>
+                <Text style={styles.plateBalanceValue}>{user?.plateBalance || 0}</Text>
+              </View>
+            </View>
+            <Text style={styles.plateBalanceArrow}>←</Text>
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
 
       <ScrollView 
         style={styles.scrollView}
@@ -153,11 +162,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  header: {
+  headerNotch: {
+    width: '100%',
+    minHeight: 260,
+    borderBottomLeftRadius: 50,
+    borderBottomRightRadius: 50,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
+    marginBottom: 16,
+  },
+  headerNotchContent: {
     paddingHorizontal: 20,
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingBottom: 20,
+    gap: 18,
   },
   profileHeader: {
     flexDirection: 'row',

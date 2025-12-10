@@ -145,6 +145,11 @@ export interface SubscriptionPackage {
   features: string[];
   classesPerMonth: number;
   popular?: boolean;
+  durationLabel?: string;
+  durationMonths?: number;
+  planId?: string;
+  highlight?: boolean;
+  planType?: string;
 }
 
 export interface CartItem {

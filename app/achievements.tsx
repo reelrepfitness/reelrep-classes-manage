@@ -3,18 +3,18 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import { Award, TrendingUp, Target, ChevronRight, Lock } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ResponsiveWaveBackground } from '@/components/ResponsiveWaveBackground';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAchievements } from '@/contexts/AchievementsContext';
 import Colors from '@/constants/colors';
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { Achievement } from '@/constants/types';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import Svg, { Circle } from 'react-native-svg';
 
 const { width, height } = Dimensions.get('window');
 const isTablet = width >= 768;
-const NOTCH_HEIGHT = isTablet ? Math.min(450, height * 0.35) : Math.min(400, height * 0.5);
+const NOTCH_HEIGHT = isTablet ? Math.min(380, height * 0.3) : Math.min(320, height * 0.38);
 
 const CATEGORY_CONFIG = [
   { key: 'פזמ', label: 'פז״מ' },
@@ -136,6 +136,7 @@ export default function AchievementsScreen() {
     completedAchievements, 
     availableAchievements,
     challengeAchievements,
+    activeChallenge,
     hasActiveChallenge,
     acceptChallenge,
     calculateProgress,
@@ -143,9 +144,18 @@ export default function AchievementsScreen() {
 
   const [selectedTab, setSelectedTab] = useState<'achievements' | 'challenges'>('achievements');
   const [selectedChallenge, setSelectedChallenge] = useState<Achievement | null>(null);
+  const params = useLocalSearchParams<{ tab?: string }>();
 
   const bottomSheetRef = useRef<BottomSheet>(null);
-  const snapPoints = useMemo(() => ['60%'], []);
+  const snapPoints = useMemo(() => [
+    Math.min(height * (isTablet ? 0.5 : 0.75), isTablet ? 600 : 560),
+  ], [isTablet]);
+
+  useEffect(() => {
+    if (params.tab === 'challenges') {
+      setSelectedTab('challenges');
+    }
+  }, [params.tab]);
 
   const categorizedAchievements = useMemo<Record<string, Achievement[]>>(() => {
     if (!achievements?.length) return {};
@@ -335,23 +345,58 @@ export default function AchievementsScreen() {
       );
     }
 
+    const orderedChallenges = activeChallenge
+      ? [
+          activeChallenge.achievement,
+          ...challengeAchievements.filter(ch => ch.id !== activeChallenge.achievement.id),
+        ]
+      : challengeAchievements;
+
     return (
       <View style={styles.challengesGrid}>
-        {challengeAchievements.map((challenge) => (
+        {orderedChallenges.map((challenge) => {
+          const isActive = activeChallenge?.achievement.id === challenge.id;
+          return (
           <TouchableOpacity
             key={challenge.id}
-            style={styles.challengeGridCard}
+            style={[
+              styles.challengeGridCard,
+              isActive && styles.challengeGridCardActive,
+            ]}
             onPress={() => handleChallengePress(challenge)}
           >
+            <View style={styles.cardTopRow}>
+              <View style={styles.pointsBadge}>
+                <Image
+                  source={{ uri: PLATE_ICON_URI }}
+                  style={styles.pointsCurrencyIcon}
+                />
+                <Text style={styles.pointsText}>{formatNumber(Number(challenge.points))}</Text>
+              </View>
+            </View>
+
             <Image
               source={{ uri: challenge.icon }}
               style={styles.challengeGridIcon}
             />
-            <Text style={styles.challengeGridName} numberOfLines={2}>
+
+            <Text style={[styles.challengeGridName, isActive && styles.challengeGridNameActive]} numberOfLines={2}>
               {getAchievementName(challenge)}
             </Text>
+            <Text style={[styles.challengeGridDescription, isActive && styles.challengeGridDescriptionActive]} numberOfLines={3}>
+              {getAchievementDescription(challenge)}
+            </Text>
+            {isActive ? (
+              <View style={styles.challengeActiveBadge}>
+                <Text style={styles.challengeActiveBadgeText}>אני על זה!</Text>
+              </View>
+            ) : (
+              <View style={styles.challengeCTA}>
+                <Text style={styles.challengeCTAText}>צפה בפרטים</Text>
+              </View>
+            )}
           </TouchableOpacity>
-        ))}
+        )})}
       </View>
     );
   };
@@ -371,6 +416,12 @@ export default function AchievementsScreen() {
           <Award size={64} color={Colors.textSecondary} />
           <Text style={styles.emptyTitle}>עדיין אין הישגים</Text>
           <Text style={styles.emptySubtitle}>התחל להתאמן והישגים יבואו!</Text>
+          <TouchableOpacity
+            style={styles.emptyActionButton}
+            onPress={() => setSelectedTab('challenges')}
+          >
+            <Text style={styles.emptyActionButtonText}>עבור לאתגרים</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -587,52 +638,76 @@ export default function AchievementsScreen() {
         snapPoints={snapPoints}
         index={-1}
         enablePanDownToClose
+        handleIndicatorStyle={{ backgroundColor: Colors.border }}
       >
-        <BottomSheetScrollView contentContainerStyle={{ padding: 20 }}>
+        <BottomSheetScrollView contentContainerStyle={styles.challengeSheetScroll}>
           {selectedChallenge && (
-            <>
-              <View style={{ alignItems: 'center', marginBottom: 20 }}>
+            <View style={styles.challengeSheetContent}>
+              <View style={styles.challengeSheetIconWrapper}>
                 <Image
                   source={{ uri: selectedChallenge.icon }}
-                  style={{ width: 80, height: 80, borderRadius: 40, marginBottom: 12 }}
+                  style={styles.challengeSheetIcon}
                 />
-                <Text style={{ fontSize: 18, fontWeight: '700', color: Colors.text, textAlign: 'center', writingDirection: 'rtl' }}>
-                  {getAchievementName(selectedChallenge)}
-                </Text>
               </View>
-
-              <Text style={{ fontSize: 14, fontWeight: '500', color: Colors.textSecondary, textAlign: 'center', writingDirection: 'rtl', marginBottom: 16, lineHeight: 20 }}>
+              <Text style={styles.challengeSheetTitle}>
+                {getAchievementName(selectedChallenge)}
+              </Text>
+              <View style={styles.challengeSheetPointsRow}>
+                <View style={styles.challengeSheetPointsBadge}>
+                  <Image
+                    source={{ uri: PLATE_ICON_URI }}
+                    style={styles.pointsCurrencyIcon}
+                  />
+                  <Text style={styles.challengeSheetPointsText}>
+                    {formatNumber(Number(selectedChallenge.points))} פלטות
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.challengeSheetDescription}>
                 {getAchievementDescription(selectedChallenge)}
               </Text>
 
-              <View style={{ gap: 12, marginBottom: 20 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ fontSize: 14, fontWeight: '600', color: Colors.text, writingDirection: 'rtl' }}>
-                    {selectedChallenge.task_requirement} {selectedChallenge.task_type}
+              <View style={styles.challengeSheetStats}>
+                <View style={styles.challengeSheetStatCard}>
+                  <Text style={styles.challengeSheetStatLabel}>יעד</Text>
+                  <Text style={styles.challengeSheetStatValue}>
+                    {formatNumber(Number(selectedChallenge.task_requirement))}
                   </Text>
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: Colors.textSecondary, writingDirection: 'rtl' }}>יעד:</Text>
                 </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ fontSize: 14, fontWeight: '600', color: Colors.text, writingDirection: 'rtl' }}>
-                    {selectedChallenge.points}
+                <View style={styles.challengeSheetStatCard}>
+                  <Text style={styles.challengeSheetStatLabel}>סוג</Text>
+                  <Text style={styles.challengeSheetStatValue}>
+                    {selectedChallenge.catagory || 'אתגר'}
                   </Text>
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: Colors.textSecondary, writingDirection: 'rtl' }}>פלטות:</Text>
                 </View>
+              </View>
+
+              <View style={styles.challengeSheetSellingBox}>
+                <Text style={styles.challengeSheetSellingTitle}>למה להצטרף עכשיו?</Text>
+                <Text style={styles.challengeSheetSellingBullet}>
+                  • תן לעצמך דדליין ותראה את היכולות שלך פורצות קדימה.
+                </Text>
+                <Text style={styles.challengeSheetSellingBullet}>
+                  • פלטות בונוס שמזניקות אותך לחנות ההטבות.
+                </Text>
+                <Text style={styles.challengeSheetSellingBullet}>
+                  • תמיכת המאמן והקהילה בכל הדרך.
+                </Text>
               </View>
 
               <TouchableOpacity
                 style={[
-                  { padding: 16, borderRadius: 12, alignItems: 'center' },
-                  hasActiveChallenge ? { backgroundColor: Colors.border } : { backgroundColor: Colors.primary }
+                  styles.challengeSheetButton,
+                  hasActiveChallenge && styles.challengeSheetButtonDisabled,
                 ]}
                 onPress={handleAcceptChallenge}
                 disabled={hasActiveChallenge}
               >
-                <Text style={{ fontSize: 14, fontWeight: '700', color: Colors.background, writingDirection: 'rtl' }}>
-                  {hasActiveChallenge ? 'יש לך כבר אתגר פעיל' : 'קבל אתגר'}
+                <Text style={styles.challengeSheetButtonText}>
+                  {hasActiveChallenge ? 'יש לך כבר אתגר פעיל' : 'יאללה, אני בפנים'}
                 </Text>
               </TouchableOpacity>
-            </>
+            </View>
           )}
         </BottomSheetScrollView>
       </BottomSheet>
@@ -648,8 +723,8 @@ const styles = StyleSheet.create({
   headerNotch: {
     width: '100%',
     minHeight: NOTCH_HEIGHT,
-    borderBottomLeftRadius: 50,
-    borderBottomRightRadius: 50,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
     shadowColor: Colors.primary,
     shadowOffset: {
       width: 0,
@@ -659,7 +734,7 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 12,
     position: 'relative' as const,
-    paddingBottom: 20,
+    paddingBottom: 12,
   },
   headerNotchContent: {
     flex: 1,
@@ -1010,34 +1085,88 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl' as const,
   },
   challengesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    paddingHorizontal: 20,
+    flexDirection: 'column',
+    paddingHorizontal: 16,
     paddingTop: 20,
+    paddingBottom: 8,
   },
   challengeGridCard: {
-    width: (width - 64) / 3,
-    backgroundColor: '#171717',
-    borderRadius: 16,
-    padding: 14,
+    width: '100%',
+    marginBottom: 16,
+    backgroundColor: Colors.background,
+    borderRadius: 20,
+    padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#FFD700',
+    borderColor: '#eaeaea',
+    gap: 10,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  challengeGridCardActive: {
+    backgroundColor: '#050505',
+    borderColor: Colors.success,
   },
   challengeGridIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    marginBottom: 8,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    marginVertical: 8,
   },
   challengeGridName: {
-    fontSize: 12,
-    fontWeight: '700' as const,
-    color: '#FFD700',
+    fontSize: 14,
+    fontWeight: '800' as const,
+    color: Colors.text,
     textAlign: 'center',
     writingDirection: 'rtl' as const,
+  },
+  challengeGridNameActive: {
+    color: Colors.background,
+  },
+  challengeGridDescription: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    writingDirection: 'rtl' as const,
+  },
+  challengeGridDescriptionActive: {
+    color: Colors.light,
+  },
+  challengeCTA: {
+    marginTop: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: Colors.primary + '15',
+  },
+  challengeCTAActive: {
+    backgroundColor: Colors.success + '33',
+  },
+  challengeActiveBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: Colors.success,
+  },
+  challengeActiveBadgeText: {
+    fontSize: 11,
+    fontWeight: '800' as const,
+    color: Colors.background,
+    writingDirection: 'rtl' as const,
+  },
+  challengeCTAText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: Colors.primary,
+    writingDirection: 'rtl' as const,
+  },
+  challengeCTATextActive: {
+    color: Colors.success,
   },
   emptyState: {
     flex: 1,
@@ -1059,6 +1188,19 @@ const styles = StyleSheet.create({
     fontWeight: '500' as const,
     color: Colors.textSecondary,
     textAlign: 'center',
+    writingDirection: 'rtl' as const,
+  },
+  emptyActionButton: {
+    marginTop: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 16,
+    backgroundColor: Colors.primary,
+  },
+  emptyActionButtonText: {
+    fontSize: 14,
+    fontWeight: '800' as const,
+    color: Colors.background,
     writingDirection: 'rtl' as const,
   },
   achievementsContainer: {
@@ -1227,5 +1369,126 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: Colors.primary,
     borderRadius: 999,
+  },
+  challengeSheetScroll: {
+    padding: 24,
+  },
+  challengeSheetContent: {
+    alignItems: 'center',
+    gap: 16,
+  },
+  challengeSheetIconWrapper: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  challengeSheetIcon: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+  },
+  challengeSheetTitle: {
+    fontSize: 20,
+    fontWeight: '800' as const,
+    color: Colors.text,
+    textAlign: 'center',
+    writingDirection: 'rtl' as const,
+  },
+  challengeSheetPointsRow: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  challengeSheetPointsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#111',
+    borderWidth: 1,
+    borderColor: '#FFD700',
+  },
+  challengeSheetPointsText: {
+    fontSize: 16,
+    fontWeight: '800' as const,
+    color: '#FFD700',
+  },
+  challengeSheetDescription: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    writingDirection: 'rtl' as const,
+    lineHeight: 20,
+  },
+  challengeSheetStats: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  challengeSheetStatCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  challengeSheetStatLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+  },
+  challengeSheetStatValue: {
+    fontSize: 16,
+    fontWeight: '800' as const,
+    color: Colors.text,
+    marginTop: 4,
+  },
+  challengeSheetSellingBox: {
+    width: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  challengeSheetSellingTitle: {
+    fontSize: 14,
+    fontWeight: '800' as const,
+    color: Colors.text,
+    marginBottom: 8,
+    writingDirection: 'rtl' as const,
+  },
+  challengeSheetSellingBullet: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+    marginBottom: 4,
+    writingDirection: 'rtl' as const,
+  },
+  challengeSheetButton: {
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 16,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  challengeSheetButtonDisabled: {
+    backgroundColor: Colors.border,
+  },
+  challengeSheetButtonText: {
+    fontSize: 16,
+    fontWeight: '800' as const,
+    color: Colors.background,
+    writingDirection: 'rtl' as const,
   },
 });

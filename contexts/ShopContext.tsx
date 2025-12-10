@@ -3,16 +3,76 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { CartItem, SubscriptionPackage, PaymentMethod } from '@/constants/types';
-import { subscriptionPackages } from '@/constants/mockData';
 import { useAuth } from './AuthContext';
+import { supabase } from '@/constants/supabase';
 
 const CART_STORAGE_KEY = '@reelrep_cart';
 
 export const [ShopProvider, useShop] = createContextHook(() => {
   const { user } = useAuth();
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [packages] = useState<SubscriptionPackage[]>(subscriptionPackages);
   const [platesToUse, setPlatesToUse] = useState<number>(0);
+
+  const plansQuery = useQuery({
+    queryKey: ['subscription-plans'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('subscription_plans')
+        .select('id,name,name_hebrew,type,sessions_per_week,description,description_hebrew,"price-3-months","price-6-months"')
+        .eq('is_active', true)
+        .order('type', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const packages: SubscriptionPackage[] = useMemo(() => {
+    if (!plansQuery.data) return [];
+
+    const durations = [
+      { key: 'price-3-months' as const, months: 3 },
+      { key: 'price-6-months' as const, months: 6 },
+    ];
+
+    return plansQuery.data.flatMap(plan => {
+      return durations.flatMap(({ key, months }) => {
+        const priceValue = plan[key];
+        const price = priceValue ? Number(priceValue) : null;
+        if (!price || Number.isNaN(price)) return [];
+
+        const isUnlimited = plan.type === 'unlimited';
+        const highlight = (plan.name_hebrew || plan.name)?.includes('חופשי');
+        const classesPerMonth = plan.sessions_per_week ? plan.sessions_per_week * 4 : 0;
+        const durationLabel = `${months} חודשים`;
+
+        const baseFeatures: string[] = [];
+        if (plan.description_hebrew) baseFeatures.push(plan.description_hebrew);
+        else if (plan.description) baseFeatures.push(plan.description);
+        if (isUnlimited) {
+          baseFeatures.push('אימונים ללא הגבלה');
+        } else if (plan.sessions_per_week) {
+          baseFeatures.push(`${plan.sessions_per_week} אימונים בשבוע (~${classesPerMonth} בחודש)`);
+        }
+
+        return {
+          id: `${plan.id}-${months}`,
+          planId: plan.id,
+          type: plan.type as 'basic' | 'premium' | 'vip' | 'limited' | 'unlimited',
+          planType: plan.type,
+          name: plan.name_hebrew || plan.name,
+          price,
+          currency: '₪',
+          duration: 'monthly',
+          durationLabel,
+          durationMonths: months,
+          features: baseFeatures,
+          classesPerMonth,
+          popular: highlight && months === 6,
+          highlight,
+        } as SubscriptionPackage;
+      });
+    });
+  }, [plansQuery.data]);
 
   const cartQuery = useQuery({
     queryKey: ['cart', user?.id],
@@ -142,7 +202,7 @@ export const [ShopProvider, useShop] = createContextHook(() => {
   return useMemo(() => ({
     cart,
     packages,
-    isLoading: cartQuery.isLoading,
+    isLoading: cartQuery.isLoading || plansQuery.isLoading,
     isProcessing: checkoutMutation.isPending,
     platesToUse,
     totalPlates: user?.plateBalance || 0,
@@ -156,5 +216,5 @@ export const [ShopProvider, useShop] = createContextHook(() => {
     applyPlates,
     resetPlates,
     checkout,
-  }), [cart, packages, cartQuery.isLoading, checkoutMutation.isPending, platesToUse, user?.plateBalance, addToCart, removeFromCart, updateQuantity, clearCart, getTotal, getDiscountedTotal, getMaxPlatesUsable, applyPlates, resetPlates, checkout]);
+  }), [cart, packages, cartQuery.isLoading, plansQuery.isLoading, checkoutMutation.isPending, platesToUse, user?.plateBalance, addToCart, removeFromCart, updateQuantity, clearCart, getTotal, getDiscountedTotal, getMaxPlatesUsable, applyPlates, resetPlates, checkout]);
 });

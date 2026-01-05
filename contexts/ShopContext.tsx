@@ -9,7 +9,7 @@ import { supabase } from '@/constants/supabase';
 const CART_STORAGE_KEY = '@reelrep_cart';
 
 export const [ShopProvider, useShop] = createContextHook(() => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth(); // Destructure refreshUser
   const [cart, setCart] = useState<CartItem[]>([]);
   const [platesToUse, setPlatesToUse] = useState<number>(0);
 
@@ -221,14 +221,76 @@ export const [ShopProvider, useShop] = createContextHook(() => {
     }) => {
       console.log('Processing payment...', paymentData);
 
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      if (!user) throw new Error('User not logged in');
 
+      const timestamp = new Date().toISOString();
+      const errors: any[] = [];
+
+      // Process all items in cart
+      await Promise.all(cart.map(async (item) => {
+        try {
+          if (item.package.type === 'ticket') {
+            // Handle Ticket Plan
+            const daysValid = item.package.expiryDays || 90; // Default to 90 if missing
+            const expiryDate = new Date();
+            expiryDate.setDate(expiryDate.getDate() + daysValid);
+
+            const { error } = await supabase.from('user_tickets').insert({
+              user_id: user.id,
+              plan_id: item.package.planId,
+              total_sessions: item.package.totalClasses || 0,
+              sessions_remaining: item.package.totalClasses || 0,
+              status: 'active',
+              purchase_date: timestamp,
+              expiry_date: expiryDate.toISOString(),
+              payment_method: paymentData.paymentMethod.type,
+              payment_reference: 'PROCESSED_IN_APP', // Placeholder for real payment ref
+            });
+            if (error) throw error;
+
+          } else {
+            // Handle Subscription Plan
+            const months = item.package.durationMonths || 1;
+            const endDate = new Date();
+            endDate.setMonth(endDate.getMonth() + months);
+
+            // console.log('Supabase config:', supabase.supabaseUrl); 
+
+            const { error } = await supabase.from('user_subscriptions').insert({
+              user_id: user.id,
+              plan_id: item.package.planId,
+              status: 'active',
+              start_date: timestamp,
+              end_date: endDate.toISOString(),
+              payment_method: paymentData.paymentMethod.type,
+              payment_reference: 'PROCESSED_IN_APP',
+              sessions_used_this_week: 0,
+            });
+            if (error) throw error;
+          }
+        } catch (err) {
+          console.error('Error processing item:', item, err);
+          errors.push(err);
+        }
+      }));
+
+      if (errors.length > 0) {
+        throw new Error('Some items failed to process');
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Small UX delay
       clearCart();
+
+      // Refresh user data (subscription status) after successful purchase
+      if (refreshUser) {
+        // console.log('Refetching user subscription...');
+        refreshUser();
+      }
 
       return {
         success: true,
         orderId: `ORD-${Date.now()}`,
-        message: 'התשלום בוצע בהצלחה',
+        message: 'התשלום בוצע והמנוי/כרטיסייה הופעלו בהצלחה',
       };
     },
   });

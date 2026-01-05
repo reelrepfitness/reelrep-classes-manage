@@ -152,59 +152,81 @@ export default function HomeScreen() {
 
   return (
 
-    <SafeAreaView className="flex-1 bg-background">
+    <SafeAreaView className="flex-1 bg-background" edges={['left', 'right', 'bottom']}>
       {/* Header: Notch Style (Sticky) */}
-      <LinearGradient
-        colors={['#18181b', '#000000']}
-        className="rounded-b-[32px] px-6 pt-2 pb-8 shadow-sm border-b border-white/5 mb-8 items-center z-50 absolute top-0 w-full"
-      >
-        <SafeAreaView edges={['top']} className="w-full">
-          {/* User Greeting */}
-          <View className="items-center mb-4 mt-2">
-            <Text className="text-gray-400 text-sm font-medium mb-1">היי, בוקר טוב</Text>
-            <Text className="text-3xl font-extrabold text-white">
-              {user?.name?.split(' ')[0] || "אורח"}
-            </Text>
-          </View>
-
-          {/* Subscription Info (Inside Notch) */}
-          {user?.subscription ? (
-            <View className="flex-row items-center justify-center gap-3 bg-white/10 px-4 py-2 rounded-2xl border border-white/10 self-center">
-              {(user.subscription.type.includes('class') || user.subscription.type.includes('-')) && (
-                <View className="bg-white px-2 py-1 rounded-md shadow-sm">
-                  <Text className="text-xs font-bold text-[#09090B]">
-                    {user.subscription.classesPerMonth - user.subscription.classesUsed} שיעורים נותרו
-                  </Text>
-                </View>
-              )}
-
-              <View className="h-4 w-[1px] bg-white/20 mx-1" />
-
-              <Text className="text-sm font-bold text-white">
-                {getSubscriptionTitle()}
+      <View className="w-full z-50 bg-transparent">
+        <LinearGradient
+          colors={['#18181b', '#000000']}
+          className="rounded-b-[32px] px-6 pt-2 pb-6 items-center w-full"
+        >
+          <SafeAreaView edges={['top']} className="w-full">
+            {/* User Greeting */}
+            <View className="items-center mb-4 mt-2">
+              <Text className="text-gray-400 text-sm font-medium mb-1">היי, בוקר טוב</Text>
+              <Text className="text-3xl font-extrabold text-white">
+                {user?.name?.split(' ')[0] || "אורח"}
               </Text>
             </View>
-          ) : (
-            <TouchableOpacity onPress={() => router.push('/shop' as any)} className="bg-primary/20 px-4 py-2 rounded-full self-center">
-              <Text className="text-primary font-bold text-sm">אין מנוי פעיל - רכוש עכשיו</Text>
-            </TouchableOpacity>
-          )}
-        </SafeAreaView>
-      </LinearGradient>
+
+            {/* Subscription Info (Inside Notch) */}
+            {user?.subscription ? (
+              <View className="w-full max-w-[340px] bg-white/5 p-4 rounded-3xl self-center items-center">
+
+                {/* Row 1: Title */}
+                <Text className="text-lg font-black text-white mb-1 tracking-tight text-center">
+                  {getSubscriptionTitle()}
+                </Text>
+
+                {/* Row 2: Date Range */}
+                <View className="flex-row items-center gap-1.5 mb-3">
+                  <Calendar size={12} color="#a1a1aa" />
+                  <Text className="text-xs text-gray-300 font-medium">
+                    {new Date(user.subscription.startDate).toLocaleDateString('en-GB')} - {new Date(user.subscription.endDate).toLocaleDateString('en-GB')}
+                  </Text>
+                </View>
+
+                {/* Row 3: Progress Bar */}
+                <View className="w-full">
+                  <View className="flex-row items-center justify-between mb-1.5 px-0.5">
+                    <Text className="text-[11px] font-bold text-gray-500">
+                      {(user.subscription.type.includes('class') || user.subscription.type.includes('-'))
+                        ? `${user.subscription.classesUsed}/${user.subscription.classesPerMonth} שיעורים`
+                        : `${Math.round(getSubscriptionProgress())}% נוצל`
+                      }
+                    </Text>
+                  </View>
+
+                  <View className="h-2.5 w-full bg-surface-darker/50 bg-black/20 rounded-full overflow-hidden border border-white/5">
+                    <View
+                      className="h-full bg-primary rounded-full shadow-sm"
+                      style={{ width: `${Math.min(100, Math.max(0, getSubscriptionProgress()))}%` }}
+                    />
+                  </View>
+                </View>
+
+              </View>
+            ) : (
+              <TouchableOpacity onPress={() => router.push('/shop' as any)} className="bg-primary/20 px-4 py-2 rounded-full self-center">
+                <Text className="text-primary font-bold text-sm">אין מנוי פעיל - רכוש עכשיו</Text>
+              </TouchableOpacity>
+            )}
+          </SafeAreaView>
+        </LinearGradient>
+      </View>
 
       <ScrollView
-        className="flex-1 pt-[180px]" // Add top padding to account for fixed header
-        contentContainerStyle={{ paddingBottom: 40 }}
+        className="flex-1"
+        contentContainerStyle={{ paddingTop: 24, paddingBottom: 120 }}
         showsVerticalScrollIndicator={false}
       >
 
         {/* Hero Section: Upcoming Workouts Stack */}
-        <View className="px-6 mb-8">
+        <View className="px-6 mb-6">
           <UpcomingWorkoutsStack />
         </View>
 
         {/* Quick Action: Workout Log */}
-        <View className="px-6 mb-8">
+        <View className="px-6 mb-6">
           <TouchableOpacity
             onPress={() => router.push('/workout-log' as any)}
             className="bg-surface p-5 rounded-2xl border border-gray-100 flex-row-reverse items-center active:bg-gray-100"
@@ -217,7 +239,7 @@ export default function HomeScreen() {
         </View>
 
         {/* Achievements Section */}
-        <View className="px-6 mb-8">
+        <View className="px-6 mb-6">
           <View className="flex-row-reverse justify-between items-center mb-4">
             <Text className="text-lg font-bold text-[#09090B]">ההישגים שלי</Text>
             <TouchableOpacity onPress={() => router.push('/achievements' as any)}>
@@ -272,7 +294,7 @@ export default function HomeScreen() {
 
         {/* Today's Available Classes List */}
         {upcomingClasses.length > 0 && (
-          <View className="px-6 mb-10">
+          <View className="px-6 mb-6">
             <Text className="text-lg font-bold text-[#09090B] text-right mb-4">פנוי היום</Text>
             {upcomingClasses.map((classItem: any) => (
               <TouchableOpacity

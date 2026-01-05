@@ -163,7 +163,7 @@ export interface CartItem {
 
 export interface PaymentMethod {
   id: string;
-  type: 'credit_card' | 'paypal' | 'bank_transfer';
+  type: 'credit_card' | 'paypal' | 'bank_transfer' | 'cash';
   last4?: string;
   expiryDate?: string;
   isDefault: boolean;

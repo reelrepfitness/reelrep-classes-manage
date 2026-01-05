@@ -56,7 +56,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch user subscription from database
+  // Fetch user subscription OR Active Ticket from database
   const subscriptionQuery = useQuery({
     queryKey: ['subscription', sessionId],
     queryFn: async () => {
@@ -64,52 +64,51 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         console.log('[Auth] Subscription fetch skipped: No sessionId');
         return null;
       }
-      console.log('[Auth] Fetching subscription (split query) for:', sessionId);
+      console.log('[Auth] Fetching subscription/ticket for:', sessionId);
       try {
         // 1. Fetch Subscription
         const { data: subData, error: subError } = await supabase
           .from('user_subscriptions')
           .select('*')
           .eq('user_id', sessionId)
+          .eq('is_active', true)
           .order('created_at', { ascending: false })
           .limit(1)
           .single();
 
-        if (subError) {
-          if (subError.code === 'PGRST116') {
-            console.log('[Auth] No subscription row found');
-            return null;
-          }
-          console.error('[Auth] Subscription row fetch error:', subError.message);
-          return null;
+        if (subData) {
+          // Found active subscription
+          const { data: planData } = await supabase
+            .from('subscription_plans')
+            .select('name, type, sessions_per_week')
+            .eq('id', subData.plan_id)
+            .single();
+
+          return { ...subData, plan: planData };
         }
 
-        console.log('[Auth] Found subscription row:', subData);
-
-        if (!subData.plan_id) {
-          console.warn('[Auth] Subscription has no plan_id');
-          return null;
-        }
-
-        // 2. Fetch Plan Details
-        const { data: planData, error: planError } = await supabase
-          .from('subscription_plans')
-          .select('name, type, sessions_per_week')
-          .eq('id', subData.plan_id)
+        // 2. If no active subscription, Fetch Active Ticket
+        const { data: ticketData } = await supabase
+          .from('user_tickets')
+          .select('*')
+          .eq('user_id', sessionId)
+          .eq('status', 'active')
+          .gt('expiry_date', new Date().toISOString())
+          .gt('sessions_remaining', 0)
+          .order('purchase_date', { ascending: false })
+          .limit(1)
           .single();
 
-        if (planError) {
-          console.error('[Auth] Plan details fetch error:', planError.message);
-          return null;
+        if (ticketData) {
+          console.log('[Auth] Found active ticket:', ticketData);
+          return {
+            ...ticketData,
+            plan: null, // Tickets don't have a 'plan' relation usually, or we can fetch it
+            type: 'ticket' // Marker
+          };
         }
 
-        // Combine data
-        const combined = {
-          ...subData,
-          plan: planData
-        };
-        console.log('[Auth] Combined subscription data:', combined);
-        return combined;
+        return null;
 
       } catch (err) {
         console.error('[Auth] Subscription fetch exception:', err);
@@ -128,20 +127,27 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
       let userSubscription: User['subscription'] | undefined;
 
-      if (subscription && subscription.plan) {
+      if (subscription) {
+        // Check if it is a plan or a ticket based on returned data structure
+        // We will unify the structure in subscriptionQuery next
         const plan = subscription.plan as any;
         const now = new Date();
-        const endDate = new Date(subscription.end_date);
-        const isActive = subscription.is_active && endDate > now;
+        // If it's a ticket, it might not have 'active' status in the same way, but checking end_date is good
+        const endDate = new Date(subscription.end_date || subscription.expiry_date);
+        const isActive = (subscription.is_active || subscription.status === 'active') && endDate > now;
 
-        userSubscription = {
-          type: plan.type || 'basic',
-          status: isActive ? 'active' : 'expired',
-          startDate: subscription.start_date,
-          endDate: subscription.end_date,
-          classesPerMonth: plan.sessions_per_week ? plan.sessions_per_week * 4 : 0,
-          classesUsed: profile?.classes_used || 0,
-        };
+        if (isActive) {
+          userSubscription = {
+            type: plan?.type || (subscription.total_sessions ? (subscription.total_sessions === 20 ? '20-class' : '10-class') : 'basic'),
+            status: 'active',
+            startDate: subscription.start_date || subscription.purchase_date,
+            endDate: subscription.end_date || subscription.expiry_date,
+            classesPerMonth: plan?.sessions_per_week ? plan.sessions_per_week * 4 : (subscription.total_sessions || 0),
+            classesUsed: subscription.sessions_remaining !== undefined
+              ? (subscription.total_sessions - subscription.sessions_remaining)
+              : (profile?.classes_used || 0),
+          };
+        }
       }
 
       const user: User = {
@@ -263,5 +269,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     resetPassword,
     signOut,
     updateUser,
-  }), [currentUser, session, authQuery.isLoading, profileQuery.isLoading, subscriptionQuery.isLoading, signInWithPassword, signInWithOTP, verifyOTP, resetPassword, signOut, updateUser]);
+    refreshUser: () => {
+      profileQuery.refetch();
+      subscriptionQuery.refetch();
+    },
+  }), [currentUser, session, authQuery.isLoading, profileQuery.isLoading, subscriptionQuery.isLoading, signInWithPassword, signInWithOTP, verifyOTP, resetPassword, signOut, updateUser, profileQuery.refetch, subscriptionQuery.refetch]);
 });

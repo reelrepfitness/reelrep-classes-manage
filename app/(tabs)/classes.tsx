@@ -11,6 +11,7 @@ import { supabase } from '@/constants/supabase';
 import { cn } from '@/lib/utils';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AvatarCircles } from '@/components/ui/AvatarCircles';
+import { ClassRegistrationCard } from '@/components/ui/ClassRegistrationCard';
 
 // --- Logic & Helpers (KEPT 100% INTACT) ---
 
@@ -481,136 +482,38 @@ export default function ClassesScreen() {
         )}
       </ScrollView>
 
-      {/* 3. Modal (Booking & Users) */}
+      {/* 3. Modal (Class Info & Booking) */}
       <Modal
         visible={modalVisible}
         transparent
         animationType="fade"
         onRequestClose={() => setModalVisible(false)}
       >
-        <View className="flex-1 bg-black/50 justify-center items-center p-5">
-          <View className="bg-white rounded-3xl w-full max-w-lg max-h-[85%] overflow-hidden">
-            {/* Close Button */}
-            <View className="flex-row-reverse justify-between items-center p-5 border-b border-gray-100">
-              <TouchableOpacity
-                onPress={() => setModalVisible(false)}
-                className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center"
-              >
-                <X size={20} color="#09090B" />
-              </TouchableOpacity>
-              <Text className="text-lg font-bold text-[#09090B]">פרטי שיעור</Text>
+        <View className="flex-1 bg-black/60 justify-center items-center px-4">
+          {!selectedClass ? (
+            <View className="bg-white rounded-3xl p-8 items-center">
+              <Text className="text-gray-500">טוען פרטי שיעור...</Text>
             </View>
-
-            <ScrollView
-              className="flex-1"
-              contentContainerStyle={{ padding: 20, paddingBottom: 20 }}
-              showsVerticalScrollIndicator={false}
-            >
-              {!selectedClass ? (
-                <View className="items-center justify-center py-10">
-                  <Text className="text-gray-500">טוען פרטי שיעור/שגיאה בטעינה...</Text>
-                </View>
-              ) : (
-                <View>
-                  {/* Header */}
-                  <View className="mb-6">
-                    <Text className="text-3xl font-extrabold text-[#09090B] text-right mb-2">{selectedClass.title}</Text>
-                    <View className="flex-row-reverse items-center gap-2">
-                      <View className="bg-primary/10 px-3 py-1 rounded-full">
-                        <Text className="text-primary font-bold text-xs">{selectedClass.time}</Text>
-                      </View>
-                      <Text className="text-gray-400">•</Text>
-                      <Text className="text-gray-500 font-medium">{selectedClass.instructor}</Text>
-                    </View>
-                  </View>
-
-                  {/* Users List */}
-                  <View className="mb-8">
-                    <View className="flex-row-reverse justify-between items-center mb-4">
-                      <Text className="text-lg font-bold text-[#09090B]">משתתפים</Text>
-                      <Text className="text-sm font-bold text-gray-500">
-                        {enrolledUsers.length}/{selectedClass.capacity}
-                      </Text>
-                    </View>
-
-                    {loadingEnrolled ? (
-                      <Text className="text-center text-gray-400 py-8">טוען משתתפים...</Text>
-                    ) : enrolledUsers.length === 0 ? (
-                      <View className="items-center justify-center py-8 bg-gray-50 rounded-2xl border border-gray-100">
-                        <Text className="text-gray-400 text-sm">עדיין אין נרשמים. היה הראשון!</Text>
-                      </View>
-                    ) : (
-                      <View className="gap-3">
-                        {enrolledUsers.map((booking: any) => {
-                          const userData = booking.profiles;
-                          const userName = userData?.full_name || userData?.name || 'משתמש';
-                          const isAttended = booking.attended_at !== null;
-                          const isNoShow = booking.status === 'no_show';
-
-                          return (
-                            <View key={booking.id} className={cn(
-                              "flex-row-reverse items-center justify-between p-3 rounded-xl border bg-white",
-                              isAttended ? "border-green-200 bg-green-50/50" : isNoShow ? "border-red-200 bg-red-50/50" : "border-gray-100"
-                            )}>
-                              <View className="flex-row-reverse items-center gap-3">
-                                <View className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center overflow-hidden border border-gray-200">
-                                  {userData?.avatar_url ? (
-                                    <Image source={{ uri: userData.avatar_url }} className="w-full h-full" />
-                                  ) : (
-                                    <Text className="text-gray-500 font-bold text-lg">{userName.charAt(0)}</Text>
-                                  )}
-                                </View>
-                                <View>
-                                  <Text className="text-sm font-bold text-[#09090B] text-right">{userName}</Text>
-                                  {isAttended && <Text className="text-[10px] text-green-600 font-bold text-right">נוכח ✅</Text>}
-                                  {isNoShow && <Text className="text-[10px] text-red-600 font-bold text-right">לא הגיע ❌</Text>}
-                                </View>
-                              </View>
-
-                              {isAdmin && (
-                                <View className="flex-row gap-2">
-                                  <TouchableOpacity
-                                    onPress={() => handleMarkAttendance(booking, 'no_show')}
-                                    className={cn("p-2 rounded-lg", isNoShow ? "bg-red-500" : "bg-red-50")}
-                                  >
-                                    <X size={14} color={isNoShow ? "white" : "#ef4444"} />
-                                  </TouchableOpacity>
-                                  <TouchableOpacity
-                                    onPress={() => handleMarkAttendance(booking, 'attended')}
-                                    className={cn("p-2 rounded-lg", isAttended ? "bg-green-500" : "bg-green-50")}
-                                  >
-                                    <Check size={14} color={isAttended ? "white" : "#10b981"} />
-                                  </TouchableOpacity>
-                                </View>
-                              )}
-                            </View>
-                          );
-                        })}
-                      </View>
-                    )}
-                  </View>
-
-                  {/* Main Action Button */}
-                  <TouchableOpacity
-                    onPress={handleConfirmBooking}
-                    disabled={isClassBooked(selectedClass) || (selectedClass.enrolled >= selectedClass.capacity && !isAdmin && !isClassBooked(selectedClass))}
-                    className={cn(
-                      "w-full py-4 rounded-2xl items-center shadow-md shadow-gray-300",
-                      isClassBooked(selectedClass) ? "bg-green-600" :
-                        (selectedClass.enrolled >= selectedClass.capacity && !isAdmin) ? "bg-gray-300" : "bg-[#09090B]"
-                    )}
-                  >
-                    <Text className="text-white text-lg font-bold">
-                      {isClassBooked(selectedClass) ? 'כבר נרשמת לשיעור זה' :
-                        (selectedClass.enrolled >= selectedClass.capacity && !isAdmin) ? 'השיעור מלא' : 'אשר הרשמה'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </ScrollView>
-          </View >
-        </View >
-      </Modal >
+          ) : (
+            <ClassRegistrationCard
+              title={selectedClass.title}
+              date={selectedClass.date}
+              time={selectedClass.time}
+              instructor={selectedClass.instructor}
+              enrolled={selectedClass.enrolled}
+              capacity={selectedClass.capacity}
+              isBooked={isClassBooked(selectedClass)}
+              isAdmin={isAdmin}
+              onRegister={handleConfirmBooking}
+              onCancel={() => {
+                setModalVisible(false);
+                setSelectedClass(null);
+              }}
+              className="w-full"
+            />
+          )}
+        </View>
+      </Modal>
     </View >
   );
 }

@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Users, AlertCircle, DollarSign, Pause, LogOut } from 'lucide-react-native';
+import { Users, AlertCircle, DollarSign, Pause, LogOut, ShoppingCart } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import Colors from '@/constants/colors';
 import { useQuery } from '@tanstack/react-query';
@@ -173,21 +173,22 @@ export default function AdminDashboard() {
       color: '#06b6d4',
       route: '/admin/clients/frozen',
     },
+    {
+      label: 'חנות / רכישה',
+      value: 'חנות', // Or some other label/stat
+      icon: ShoppingCart,
+      color: '#8b5cf6',
+      route: '/admin/store',
+    },
   ];
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-
-
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-
-
-        // ...
-
         {/* Income/Actions Tabs */}
         <View style={styles.chartSection}>
           <AdminActionTabs />

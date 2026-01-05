@@ -1,3 +1,4 @@
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -23,27 +24,27 @@ const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ 
+    <Stack screenOptions={{
       headerBackTitle: "חזור",
       animation: 'slide_from_right',
     }}>
       <Stack.Screen name="auth" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="admin" options={{ headerShown: false }} />
-      <Stack.Screen 
-        name="workout-log" 
-        options={{ 
+      <Stack.Screen
+        name="workout-log"
+        options={{
           presentation: "modal",
           title: "רשום אימון",
-        }} 
+        }}
       />
-      <Stack.Screen 
-        name="achievements" 
-        options={{ 
+      <Stack.Screen
+        name="achievements"
+        options={{
           presentation: "card",
           title: "הישגים",
           headerShown: false,
-        }} 
+        }}
       />
     </Stack>
   );

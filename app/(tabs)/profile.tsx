@@ -1,27 +1,57 @@
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { User, Settings, LogOut, Trophy, Dumbbell, TrendingUp, Shield } from 'lucide-react-native';
-import { ResponsiveWaveBackground } from '@/components/ResponsiveWaveBackground';
+import React from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { User, Settings, LogOut, Trophy, Dumbbell, TrendingUp, Shield, ChevronLeft, CreditCard } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkouts } from '@/contexts/WorkoutContext';
-import Colors from '@/constants/colors';
+import { cn } from '@/lib/utils'; // וודא שזה קיים, אם לא - תמחק את ה-cn ותשתמש בסטרינג רגיל
 import { hebrew } from '@/constants/hebrew';
-import { LinearGradient } from 'expo-linear-gradient';
+import Colors from '@/constants/colors'; // נשמור את זה בשביל צבעי האייקונים
+
+// --- קומפוננטות עזר פנימיות ---
+
+const StatBox = ({ label, value, icon: Icon, color }: any) => (
+  <View className="flex-1 items-center bg-surface p-4 rounded-2xl mx-1 active:opacity-90">
+    <View className="p-3 rounded-full mb-2 bg-white shadow-sm">
+      <Icon size={24} color={color} />
+    </View>
+    <Text className="text-2xl font-bold text-text">{value}</Text>
+    <Text className="text-xs text-muted mt-1 text-center font-medium">{label}</Text>
+  </View>
+);
+
+const MenuItem = ({ icon: Icon, title, subtitle, isDestructive, onPress }: any) => (
+  <TouchableOpacity
+    onPress={onPress}
+    className={cn(
+      "flex-row-reverse items-center justify-between p-4 bg-surface mb-3 rounded-2xl active:scale-[0.98] transition-all shadow-sm",
+      isDestructive && "border border-red-200 bg-red-50"
+    )}
+  >
+    <View className="flex-row-reverse items-center gap-4">
+      <View className={cn("p-2.5 rounded-xl", isDestructive ? "bg-red-100" : "bg-white")}>
+        <Icon size={20} color={isDestructive ? "#ef4444" : Colors.primary} />
+      </View>
+      <View>
+        <Text className={cn("text-base font-bold text-right", isDestructive ? "text-red-500" : "text-text")}>
+          {title}
+        </Text>
+        {subtitle && <Text className="text-xs text-muted text-right mt-0.5">{subtitle}</Text>}
+      </View>
+    </View>
+    <ChevronLeft size={18} color="#71717A" />
+  </TouchableOpacity>
+);
+
+// --- המסך הראשי ---
 
 export default function ProfileScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, signOut, isAdmin, isCoach } = useAuth();
   const { getTotalStats } = useWorkouts();
-  
-  const stats = getTotalStats();
 
-  const profileStats = [
-    { label: hebrew.profile.totalWorkouts, value: stats.workouts.toString(), icon: Dumbbell, color: Colors.primary },
-    { label: hebrew.profile.totalMinutes, value: stats.duration.toString(), icon: TrendingUp, color: Colors.accent },
-    { label: hebrew.home.achievements, value: user?.achievements?.length.toString() || '0', icon: Trophy, color: Colors.success },
-  ];
+  const stats = getTotalStats();
 
   const handleSignOut = () => {
     signOut();
@@ -29,25 +59,22 @@ export default function ProfileScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <ResponsiveWaveBackground variant="profile" />
-      <LinearGradient
-        colors={['#1a1a1a', '#2d2d2d', '#1a1a1a', '#000000']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.headerNotch, { paddingTop: insets.top }]}
-      >
-        <View style={styles.headerNotchContent}>
-          <View style={styles.profileHeader}>
-            <View style={styles.avatar}>
-              <User size={48} color={Colors.primary} />
+    <SafeAreaView className="flex-1 bg-background">
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+
+        {/* Header Section */}
+        <View className="px-5 pt-6 pb-8">
+          <View className="flex-row-reverse items-center gap-4 mb-8">
+            <View className="w-20 h-20 rounded-full bg-surface items-center justify-center border-2 border-white shadow-md">
+              <User size={32} color={Colors.primary} />
             </View>
-            <View style={styles.profileInfo}>
-              <Text style={styles.name}>{user?.name}</Text>
-              <Text style={styles.email}>{user?.email}</Text>
+            <View className="flex-1 items-end">
+              <Text className="text-text text-2xl font-bold mb-1 text-right">{user?.name || 'אורח'}</Text>
+              <Text className="text-muted text-sm mb-2 text-right">{user?.email}</Text>
+
               {user?.subscription?.type && (
-                <View style={[styles.subscriptionBadge, { backgroundColor: Colors.primary + '20' }]}>
-                  <Text style={[styles.subscriptionText, { color: Colors.primary }]}>
+                <View className="bg-primary/20 px-3 py-1 rounded-full self-end border border-primary/30">
+                  <Text className="text-primary text-xs font-bold tracking-wide">
                     {user.subscription.type.toUpperCase()}
                   </Text>
                 </View>
@@ -55,324 +82,112 @@ export default function ProfileScreen() {
             </View>
           </View>
 
+          {/* כרטיס יתרת פלטות - מעוצב מחדש */}
           <TouchableOpacity
-            style={styles.plateBalanceCard}
             onPress={() => router.push('/plates/store')}
+            className="bg-surface rounded-2xl p-4 flex-row-reverse items-center justify-between shadow-sm"
           >
-            <View style={styles.plateBalanceContent}>
+            <View className="flex-row-reverse items-center gap-4">
               <Image
                 source={{ uri: 'https://res.cloudinary.com/diwe4xzro/image/upload/v1762853884/%D7%98%D7%A7%D7%A1%D7%98_%D7%94%D7%A4%D7%A1%D7%A7%D7%94_%D7%A9%D7%9C%D7%9A_2.png_zpdglt.png' }}
-                style={styles.plateIcon}
+                className="w-12 h-12 rounded-full"
               />
               <View>
-                <Text style={styles.plateBalanceLabel}>יתרת פלטות</Text>
-                <Text style={styles.plateBalanceValue}>{user?.plateBalance || 0}</Text>
+                <Text className="text-text text-lg font-bold text-right">{user?.plateBalance || 0}</Text>
+                <Text className="text-muted text-xs text-right">יתרת פלטות זמינה</Text>
               </View>
             </View>
-            <Text style={styles.plateBalanceArrow}>←</Text>
+            <View className="bg-primary px-4 py-2 rounded-full shadow-sm">
+              <Text className="text-white text-xs font-bold">החנות</Text>
+            </View>
           </TouchableOpacity>
         </View>
-      </LinearGradient>
 
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.sectionTitle}>{hebrew.profile.statistics}</Text>
-        <View style={styles.statsGrid}>
-          {profileStats.map((stat, index) => (
-            <View key={index} style={styles.statCard}>
-              <View style={[styles.statIcon, { backgroundColor: stat.color + '20' }]}>
-                <stat.icon size={24} color={stat.color} />
-              </View>
-              <Text style={styles.statValue}>{stat.value}</Text>
-              <Text style={styles.statLabel}>{stat.label}</Text>
-            </View>
-          ))}
+        {/* Stats Grid */}
+        <View className="px-4 mb-8">
+          <Text className="text-text font-bold mb-4 text-right px-1 text-lg">{hebrew.profile.statistics}</Text>
+          <View className="flex-row-reverse gap-3">
+            <StatBox
+              label={hebrew.profile.totalWorkouts}
+              value={stats.workouts.toString()}
+              icon={Dumbbell}
+              color={Colors.primary}
+            />
+            <StatBox
+              label='דקות אימון'
+              value={stats.duration.toString()}
+              icon={TrendingUp}
+              color="#a855f7" // סגול לשינוי
+            />
+            <StatBox
+              label={hebrew.home.achievements}
+              value={user?.achievements?.length.toString() || '0'}
+              icon={Trophy}
+              color="#eab308" // זהב
+            />
+          </View>
         </View>
 
+        {/* Subscription Info */}
         {user?.subscription && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{hebrew.profile.subscription}</Text>
-            <View style={styles.subscriptionCard}>
-              <View style={styles.subscriptionRow}>
-                <Text style={styles.subscriptionLabel}>סוג מנוי:</Text>
-                <Text style={styles.subscriptionValue}>{user.subscription.type?.toUpperCase() || 'לא זמין'}</Text>
-              </View>
-              <View style={styles.subscriptionRow}>
-                <Text style={styles.subscriptionLabel}>שיעורים שנותרו:</Text>
-                <Text style={[styles.subscriptionValue, { color: Colors.primary }]}>
-                  {user.subscription.classesPerMonth - user.subscription.classesUsed}/{user.subscription.classesPerMonth}
+          <View className="px-4 mb-8">
+            <Text className="text-text font-bold mb-4 text-right px-1 text-lg">{hebrew.profile.subscription}</Text>
+            <View className="bg-surface rounded-2xl p-5 shadow-sm">
+              <View className="flex-row-reverse justify-between items-center mb-4">
+                <View className="flex-row-reverse items-center gap-2">
+                  <CreditCard size={18} color={Colors.primary} />
+                  <Text className="text-muted font-medium text-sm">שיעורים החודש</Text>
+                </View>
+                <Text className="text-text font-bold">
+                  <Text className="text-primary text-lg">{user.subscription.classesPerMonth - user.subscription.classesUsed}</Text>
+                  <Text className="text-muted text-sm"> / {user.subscription.classesPerMonth}</Text>
                 </Text>
               </View>
-              <View style={styles.subscriptionRow}>
-                <Text style={styles.subscriptionLabel}>תוקף:</Text>
-                <Text style={styles.subscriptionValue}>
-                  {new Date(user.subscription.endDate).toLocaleDateString('he-IL')}
-                </Text>
+
+              {/* Progress Bar Visual */}
+              <View className="h-2 bg-white rounded-full overflow-hidden mb-4">
+                <View
+                  className="h-full bg-primary rounded-full"
+                  style={{ width: `${((user.subscription.classesPerMonth - user.subscription.classesUsed) / user.subscription.classesPerMonth) * 100}%` }}
+                />
+              </View>
+
+              <View className="flex-row-reverse justify-between">
+                <Text className="text-muted text-xs">בתוקף עד</Text>
+                <Text className="text-text text-xs font-medium">{new Date(user.subscription.endDate).toLocaleDateString('he-IL')}</Text>
               </View>
             </View>
           </View>
         )}
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{hebrew.profile.settings}</Text>
+        {/* Menu Actions */}
+        <View className="px-4">
+          <Text className="text-text font-bold mb-4 text-right px-1 text-lg">{hebrew.profile.settings}</Text>
 
           {(isAdmin || isCoach) && (
-            <TouchableOpacity 
-              style={[styles.menuItem, { backgroundColor: Colors.primary + '10' }]} 
+            <MenuItem
+              icon={Shield}
+              title="לוח ניהול"
+              subtitle="גישת צוות ומנהלים"
               onPress={() => router.push('/admin/' as any)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.menuItemLeft}>
-                <Shield size={20} color={Colors.primary} />
-                <Text style={[styles.menuItemText, { color: Colors.primary }]}>לוח ניהול</Text>
-              </View>
-            </TouchableOpacity>
+            />
           )}
-          
-          <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
-            <View style={styles.menuItemLeft}>
-              <Settings size={20} color={Colors.primary} />
-              <Text style={styles.menuItemText}>{hebrew.profile.settings}</Text>
-            </View>
-          </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.menuItem, styles.menuItemDanger]} 
+          <MenuItem
+            icon={Settings}
+            title={hebrew.profile.settings}
+            onPress={() => console.log('Settings Pressed')} // תוסיף פה ניווט אם צריך
+          />
+
+          <MenuItem
+            icon={LogOut}
+            title={hebrew.profile.logout}
+            isDestructive
             onPress={handleSignOut}
-            activeOpacity={0.7}
-          >
-            <View style={styles.menuItemLeft}>
-              <LogOut size={20} color={Colors.error} />
-              <Text style={[styles.menuItemText, { color: Colors.error }]}>{hebrew.profile.logout}</Text>
-            </View>
-          </TouchableOpacity>
+          />
         </View>
 
-        <View style={{ height: 40 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  headerNotch: {
-    width: '100%',
-    minHeight: 260,
-    borderBottomLeftRadius: 50,
-    borderBottomRightRadius: 50,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 10,
-    marginBottom: 16,
-  },
-  headerNotchContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    gap: 18,
-  },
-  profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.primary + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 16,
-  },
-  profileInfo: {
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-  name: {
-    fontSize: 24,
-    fontWeight: '800' as const,
-    color: Colors.text,
-    textAlign: 'right',
-    writingDirection: 'rtl' as const,
-    marginBottom: 4,
-  },
-  email: {
-    fontSize: 14,
-    fontWeight: '500' as const,
-    color: Colors.textSecondary,
-    textAlign: 'right',
-    writingDirection: 'rtl' as const,
-    marginBottom: 8,
-  },
-  subscriptionBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  subscriptionText: {
-    fontSize: 12,
-    fontWeight: '700' as const,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 20,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: Colors.text,
-    textAlign: 'right',
-    writingDirection: 'rtl' as const,
-    marginBottom: 16,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  statIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: '800' as const,
-    color: Colors.text,
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    writingDirection: 'rtl' as const,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  subscriptionCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 20,
-    gap: 16,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  subscriptionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  subscriptionLabel: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: Colors.textSecondary,
-    writingDirection: 'rtl' as const,
-  },
-  subscriptionValue: {
-    fontSize: 16,
-    fontWeight: '700' as const,
-    color: Colors.text,
-    writingDirection: 'rtl' as const,
-  },
-  menuItem: {
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  menuItemDanger: {
-    backgroundColor: Colors.error + '10',
-  },
-  menuItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  menuItemText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    flex: 1,
-    textAlign: 'right',
-    writingDirection: 'rtl' as const,
-  },
-  plateBalanceCard: {
-    backgroundColor: '#171717',
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 16,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  plateBalanceContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  plateBalanceArrow: {
-    fontSize: 20,
-    color: Colors.primary,
-    fontWeight: '700' as const,
-  },
-  plateIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-  },
-  plateBalanceLabel: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: '#ffffff80',
-    textAlign: 'right',
-    writingDirection: 'rtl' as const,
-    marginBottom: 4,
-  },
-  plateBalanceValue: {
-    fontSize: 28,
-    fontWeight: '800' as const,
-    color: '#ffffff',
-    textAlign: 'right',
-    writingDirection: 'rtl' as const,
-  },
-});

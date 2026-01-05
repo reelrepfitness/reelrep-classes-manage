@@ -16,38 +16,58 @@ export const [ShopProvider, useShop] = createContextHook(() => {
   const plansQuery = useQuery({
     queryKey: ['subscription-plans'],
     queryFn: async () => {
+      console.log('[Shop] Fetching subscription plans...');
       const { data, error } = await supabase
         .from('subscription_plans')
-        .select('id,name,name_hebrew,type,sessions_per_week,description,description_hebrew,"price-3-months","price-6-months"')
+        .select('id,name,type,sessions_per_week,description,"price-3-months","price-6-months"')
         .eq('is_active', true)
         .order('type', { ascending: true });
-      if (error) throw error;
+      if (error) {
+        console.error('[Shop] Error fetching subscription plans:', error);
+        throw error;
+      }
+      console.log('[Shop] Subscription plans:', data);
+      return data || [];
+    },
+  });
+
+  const ticketPlansQuery = useQuery({
+    queryKey: ['ticket-plans'],
+    queryFn: async () => {
+      console.log('[Shop] Fetching ticket plans...');
+      const { data, error } = await supabase
+        .from('ticket_plans')
+        .select('*')
+        .eq('is_active', true)
+        .order('total_sessions', { ascending: true });
+      if (error) {
+        console.error('[Shop] Error fetching ticket plans:', error);
+        throw error;
+      }
+      console.log('[Shop] Ticket plans:', data);
       return data || [];
     },
   });
 
   const packages: SubscriptionPackage[] = useMemo(() => {
-    if (!plansQuery.data) return [];
+    const subscriptions = !plansQuery.data ? [] : plansQuery.data.flatMap(plan => {
+      const durations = [
+        { key: 'price-3-months' as const, months: 3 },
+        { key: 'price-6-months' as const, months: 6 },
+      ];
 
-    const durations = [
-      { key: 'price-3-months' as const, months: 3 },
-      { key: 'price-6-months' as const, months: 6 },
-    ];
-
-    return plansQuery.data.flatMap(plan => {
       return durations.flatMap(({ key, months }) => {
         const priceValue = plan[key];
         const price = priceValue ? Number(priceValue) : null;
         if (!price || Number.isNaN(price)) return [];
 
         const isUnlimited = plan.type === 'unlimited';
-        const highlight = (plan.name_hebrew || plan.name)?.includes('חופשי');
+        const highlight = plan.name?.includes('חופשי');
         const classesPerMonth = plan.sessions_per_week ? plan.sessions_per_week * 4 : 0;
         const durationLabel = `${months} חודשים`;
 
         const baseFeatures: string[] = [];
-        if (plan.description_hebrew) baseFeatures.push(plan.description_hebrew);
-        else if (plan.description) baseFeatures.push(plan.description);
+        if (plan.description) baseFeatures.push(plan.description);
         if (isUnlimited) {
           baseFeatures.push('אימונים ללא הגבלה');
         } else if (plan.sessions_per_week) {
@@ -59,7 +79,7 @@ export const [ShopProvider, useShop] = createContextHook(() => {
           planId: plan.id,
           type: plan.type as 'basic' | 'premium' | 'vip' | 'limited' | 'unlimited',
           planType: plan.type,
-          name: plan.name_hebrew || plan.name,
+          name: plan.name,
           price,
           currency: '₪',
           duration: 'monthly',
@@ -72,7 +92,30 @@ export const [ShopProvider, useShop] = createContextHook(() => {
         } as SubscriptionPackage;
       });
     });
-  }, [plansQuery.data]);
+
+    const tickets = !ticketPlansQuery.data ? [] : ticketPlansQuery.data.map(plan => ({
+      id: plan.id,
+      planId: plan.id,
+      type: 'ticket' as const,
+      planType: 'ticket',
+      name: plan.name,
+      price: Number(plan.price),
+      currency: '₪',
+      duration: 'one-time',
+      durationLabel: `${plan.total_sessions} אימונים`,
+      durationMonths: 0,
+      features: [
+        plan.description || '',
+        `תקף ל-${plan.validity_days} יום`,
+      ].filter(Boolean),
+      classesPerMonth: plan.total_sessions,
+      totalClasses: plan.total_sessions,
+      expiryDays: plan.validity_days,
+      popular: plan.total_sessions === 20,
+    } as SubscriptionPackage));
+
+    return [...subscriptions, ...tickets];
+  }, [plansQuery.data, ticketPlansQuery.data]);
 
   const cartQuery = useQuery({
     queryKey: ['cart', user?.id],
@@ -102,7 +145,7 @@ export const [ShopProvider, useShop] = createContextHook(() => {
 
   const addToCart = useCallback((pkg: SubscriptionPackage) => {
     const existing = cart.find(item => item.package.id === pkg.id);
-    
+
     if (existing) {
       const updated = cart.map(item =>
         item.package.id === pkg.id
@@ -134,7 +177,7 @@ export const [ShopProvider, useShop] = createContextHook(() => {
       removeFromCart(itemId);
       return;
     }
-    
+
     const updated = cart.map(item =>
       item.id === itemId ? { ...item, quantity } : item
     );
@@ -177,11 +220,11 @@ export const [ShopProvider, useShop] = createContextHook(() => {
       billingAddress?: string;
     }) => {
       console.log('Processing payment...', paymentData);
-      
+
       await new Promise(resolve => setTimeout(resolve, 2000));
-      
+
       clearCart();
-      
+
       return {
         success: true,
         orderId: `ORD-${Date.now()}`,
@@ -202,7 +245,7 @@ export const [ShopProvider, useShop] = createContextHook(() => {
   return useMemo(() => ({
     cart,
     packages,
-    isLoading: cartQuery.isLoading || plansQuery.isLoading,
+    isLoading: cartQuery.isLoading || plansQuery.isLoading || ticketPlansQuery.isLoading,
     isProcessing: checkoutMutation.isPending,
     platesToUse,
     totalPlates: user?.plateBalance || 0,
@@ -216,5 +259,5 @@ export const [ShopProvider, useShop] = createContextHook(() => {
     applyPlates,
     resetPlates,
     checkout,
-  }), [cart, packages, cartQuery.isLoading, plansQuery.isLoading, checkoutMutation.isPending, platesToUse, user?.plateBalance, addToCart, removeFromCart, updateQuantity, clearCart, getTotal, getDiscountedTotal, getMaxPlatesUsable, applyPlates, resetPlates, checkout]);
+  }), [cart, packages, cartQuery.isLoading, plansQuery.isLoading, ticketPlansQuery.isLoading, checkoutMutation.isPending, platesToUse, user?.plateBalance, addToCart, removeFromCart, updateQuantity, clearCart, getTotal, getDiscountedTotal, getMaxPlatesUsable, applyPlates, resetPlates, checkout]);
 });

@@ -122,27 +122,27 @@ export const [AchievementsProvider, useAchievements] = createContextHook(() => {
 
   const getActiveAchievements = useCallback((): UserAchievement[] => {
     if (!userAchievementsQuery.data || !achievementsQuery.data) return [];
-    
+
     const classAttendance = getClassAttendanceCount();
     const attendanceAchievements = achievementsQuery.data
       .filter(a => a.task_type === 'classes_attended')
       .sort((a, b) => a.task_requirement - b.task_requirement);
-    
+
     const userAttendanceIds = new Set(
       userAchievementsQuery.data
         .filter(ua => ua.achievement.task_type === 'classes_attended')
         .map(ua => ua.achievement.id)
     );
-    
+
     const visibleAttendanceAchievements: UserAchievement[] = [];
     let lastUnlockedIndex = -1;
-    
+
     for (let i = 0; i < attendanceAchievements.length; i++) {
       const achievement = attendanceAchievements[i];
-      
+
       if (classAttendance >= achievement.task_requirement) {
         lastUnlockedIndex = i;
-        
+
         if (!userAttendanceIds.has(achievement.id)) {
           const newUserAchievement: UserAchievement = {
             id: achievement.id + '-temp',
@@ -164,7 +164,7 @@ export const [AchievementsProvider, useAchievements] = createContextHook(() => {
         }
       }
     }
-    
+
     if (lastUnlockedIndex < attendanceAchievements.length - 1) {
       const nextAchievement = attendanceAchievements[lastUnlockedIndex + 1];
       if (!userAttendanceIds.has(nextAchievement.id)) {
@@ -186,14 +186,14 @@ export const [AchievementsProvider, useAchievements] = createContextHook(() => {
         }
       }
     }
-    
+
     const nonAttendanceAchievements = userAchievementsQuery.data
       .filter(ua => !ua.completed && ua.achievement.task_type !== 'classes_attended')
       .map(ua => ({
         ...ua,
         progress: calculateProgress(ua.achievement),
       }));
-    
+
     const active = [...visibleAttendanceAchievements, ...nonAttendanceAchievements]
       .sort((a, b) => {
         if (a.isChallenge && !b.isChallenge) return -1;
@@ -244,6 +244,12 @@ export const [AchievementsProvider, useAchievements] = createContextHook(() => {
       .reduce((total, ua) => total + ua.achievement.points, 0);
   }, [userAchievementsQuery.data]);
 
+  const updateProgress = useCallback(async (userId: string, type: string, value: number) => {
+    // Invalidate queries to refresh derived progress
+    await queryClient.invalidateQueries({ queryKey: ['userAchievements', userId] });
+    await queryClient.invalidateQueries({ queryKey: ['achievements'] });
+  }, [queryClient]);
+
   return {
     achievements: achievementsQuery.data || [],
     userAchievements: userAchievementsQuery.data || [],
@@ -257,5 +263,6 @@ export const [AchievementsProvider, useAchievements] = createContextHook(() => {
     isLoading: achievementsQuery.isLoading || userAchievementsQuery.isLoading,
     acceptChallenge,
     calculateProgress,
+    updateProgress,
   };
 });

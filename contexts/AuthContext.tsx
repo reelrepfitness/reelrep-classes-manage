@@ -33,7 +33,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('id, name, full_name, avatar_url, is_admin, is_coach, plate_balance')
+          .select('id, name, full_name, avatar_url, is_admin, is_coach, plate_balance, classes_used, total_workouts')
           .eq('id', sessionId)
           .single();
         if (error) {
@@ -60,35 +60,57 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const subscriptionQuery = useQuery({
     queryKey: ['subscription', sessionId],
     queryFn: async () => {
-      if (!sessionId) return null;
+      if (!sessionId) {
+        console.log('[Auth] Subscription fetch skipped: No sessionId');
+        return null;
+      }
+      console.log('[Auth] Fetching subscription (split query) for:', sessionId);
       try {
-        const { data, error } = await supabase
+        // 1. Fetch Subscription
+        const { data: subData, error: subError } = await supabase
           .from('user_subscriptions')
-          .select(`
-            *,
-            plan:subscription_plans!user_subscriptions_plan_id_fkey(
-              name,
-              type,
-              sessions_per_week
-            )
-          `)
+          .select('*')
           .eq('user_id', sessionId)
-          .eq('status', 'active')
           .order('created_at', { ascending: false })
           .limit(1)
           .single();
 
-        if (error) {
-          if (error.code === 'PGRST116') {
-            // No active subscription found
-            console.log('[Auth] No active subscription found');
+        if (subError) {
+          if (subError.code === 'PGRST116') {
+            console.log('[Auth] No subscription row found');
             return null;
           }
-          console.error('[Auth] Subscription fetch error:', error.message);
+          console.error('[Auth] Subscription row fetch error:', subError.message);
           return null;
         }
-        console.log('[Auth] Subscription data:', data);
-        return data;
+
+        console.log('[Auth] Found subscription row:', subData);
+
+        if (!subData.plan_id) {
+          console.warn('[Auth] Subscription has no plan_id');
+          return null;
+        }
+
+        // 2. Fetch Plan Details
+        const { data: planData, error: planError } = await supabase
+          .from('subscription_plans')
+          .select('name, type, sessions_per_week')
+          .eq('id', subData.plan_id)
+          .single();
+
+        if (planError) {
+          console.error('[Auth] Plan details fetch error:', planError.message);
+          return null;
+        }
+
+        // Combine data
+        const combined = {
+          ...subData,
+          plan: planData
+        };
+        console.log('[Auth] Combined subscription data:', combined);
+        return combined;
+
       } catch (err) {
         console.error('[Auth] Subscription fetch exception:', err);
         return null;

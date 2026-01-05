@@ -1,8 +1,8 @@
-import { NativeTabs, Icon, Label } from 'expo-router/unstable-native-tabs';
+import { Tabs } from 'expo-router';
 import React, { useEffect } from "react";
 import { useRouter } from "expo-router";
-import { hebrew } from "@/constants/hebrew";
 import { useAuth } from "@/contexts/AuthContext";
+import { SimpleTabBar } from "@/components/SimpleTabBar";
 
 export default function TabLayout() {
   const router = useRouter();
@@ -15,23 +15,15 @@ export default function TabLayout() {
   }, [isAuthenticated, router]);
 
   return (
-    <NativeTabs>
-      <NativeTabs.Trigger name="index">
-        <Label>{hebrew.tabs.home}</Label>
-        <Icon sf="house.fill" drawable="ic_home" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="classes">
-        <Label>{hebrew.tabs.classes}</Label>
-        <Icon sf="calendar" drawable="ic_calendar" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="shop">
-        <Label>{hebrew.tabs.shop}</Label>
-        <Icon sf="bag.fill" drawable="ic_shop" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="profile">
-        <Label>{hebrew.tabs.profile}</Label>
-        <Icon sf="person.fill" drawable="ic_profile" />
-      </NativeTabs.Trigger>
-    </NativeTabs>
+    <Tabs
+      tabBar={(props) => <SimpleTabBar {...props} />}
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
+      <Tabs.Screen name="index" />
+      <Tabs.Screen name="classes" />
+      <Tabs.Screen name="profile" />
+    </Tabs>
   );
 }

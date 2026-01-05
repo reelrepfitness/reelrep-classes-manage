@@ -1,130 +1,286 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Users, Calendar, TrendingUp, LogOut, FileText, DollarSign, UserCog } from 'lucide-react-native';
+import { Users, AlertCircle, DollarSign, Pause, LogOut } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import { useWorkouts } from '@/contexts/WorkoutContext';
-import { useClasses } from '@/contexts/ClassesContext';
 import Colors from '@/constants/colors';
-import { hebrew } from '@/constants/hebrew';
-import { mockUsers } from '@/constants/mockData';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/constants/supabase';
+import { AdminActionTabs } from '@/components/admin/AdminActionTabs';
+import { useClasses } from '@/contexts/ClassesContext';
+import { Calendar, Clock, ChevronLeft } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useState } from 'react';
+import AdminClassModal from '@/components/admin/AdminClassModal';
 
 export default function AdminDashboard() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
-  const { workouts } = useWorkouts();
   const { classes } = useClasses();
+
+  const [selectedClass, setSelectedClass] = useState<any>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+
+  // Filter Today's Classes
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayString = today.toLocaleDateString('en-CA'); // Matches YYYY-MM-DD format used in context
+
+  const todaysClasses = classes
+    .filter(c => c.date === todayString)
+    .sort((a, b) => a.time.localeCompare(b.time));
+
+  const getProgressColor = (percentage: number) => {
+    if (percentage < 30) return Colors.error; // Red
+    if (percentage < 80) return '#eab308'; // Yellow
+    return '#22c55e'; // Green
+  };
+
+  const handleClassPress = (classItem: any) => {
+    setSelectedClass(classItem);
+    setModalVisible(true);
+  };
+
+  // Fetch active subscriptions count
+  const { data: activeSubscriptions = 0 } = useQuery({
+    queryKey: ['admin-active-subscriptions'],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from('user_subscriptions')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true);
+      return count || 0;
+    },
+  });
+
+  // Fetch clients needing attention (expiring soon or last workout)
+  const { data: needsAttention = 0 } = useQuery({
+    queryKey: ['admin-needs-attention'],
+    queryFn: async () => {
+      const threeDaysFromNow = new Date();
+      threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
+
+      const { count } = await supabase
+        .from('user_subscriptions')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true)
+        .lte('end_date', threeDaysFromNow.toISOString());
+
+      return count || 0;
+    },
+  });
+
+  // Fetch debts (clients who owe money)
+  const { data: debtsData } = useQuery({
+    queryKey: ['admin-debts'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('user_subscriptions')
+        .select('outstanding_balance')
+        .gt('outstanding_balance', 0);
+
+      const totalDebt = data?.reduce((sum, item) => sum + (item.outstanding_balance || 0), 0) || 0;
+      const count = data?.length || 0;
+      return { count, totalDebt };
+    },
+  });
+
+  // Fetch frozen plans count
+  const { data: frozenPlans = 0 } = useQuery({
+    queryKey: ['admin-frozen-plans'],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from('user_subscriptions')
+        .select('*', { count: 'exact', head: true })
+        .eq('plan_status', 'frozen');
+
+      return count || 0;
+    },
+  });
+
+
+
+  // ... inside component
+  const [trend, setTrend] = useState<'up' | 'down' | 'neutral'>('neutral');
+
+  // ... 
+
+  // Handle Trend Logic
+  React.useEffect(() => {
+    const checkTrend = async () => {
+      try {
+        const todayStr = new Date().toLocaleDateString('en-CA');
+        const storedDate = await AsyncStorage.getItem('admin_trend_date');
+        const storedBaseline = await AsyncStorage.getItem('admin_trend_baseline');
+
+        if (storedDate !== todayStr || storedBaseline === null) {
+          // New day or first run: set baseline
+          await AsyncStorage.setItem('admin_trend_date', todayStr);
+          await AsyncStorage.setItem('admin_trend_baseline', needsAttention.toString());
+          setTrend('neutral');
+        } else {
+          // Same day: compare
+          const baseline = parseInt(storedBaseline, 10);
+          if (needsAttention > baseline) {
+            setTrend('up');
+          } else if (needsAttention < baseline) {
+            setTrend('down');
+          } else {
+            setTrend('neutral');
+          }
+        }
+      } catch (e) {
+        console.error('Failed to update trend', e);
+      }
+    };
+    checkTrend();
+  }, [needsAttention]);
 
   const handleSignOut = () => {
     signOut();
     router.replace('/auth');
   };
 
-  const stats = [
-    { label: hebrew.admin.totalUsers, value: mockUsers.length.toString(), icon: Users, color: Colors.primary },
-    { label: hebrew.admin.todayClasses, value: classes.length.toString(), icon: Calendar, color: Colors.accent },
-    { label: 'סך אימונים', value: workouts.length.toString(), icon: TrendingUp, color: Colors.success },
+  const actionCards = [
+    {
+      label: 'מנויים פעילים',
+      value: activeSubscriptions.toString(),
+      icon: Users,
+      color: Colors.primary,
+      route: '/admin/clients/active',
+    },
+    {
+      label: 'דורשים טיפול',
+      value: needsAttention.toString(),
+      icon: AlertCircle,
+      color: '#f59e0b',
+      route: '/admin/clients/needs-attention',
+      borderColor: trend === 'up' ? Colors.error : trend === 'down' ? '#22c55e' : undefined,
+    },
+    {
+      label: 'חייבים',
+      value: (debtsData?.count || 0).toString(),
+      subtitle: debtsData?.totalDebt ? `₪${debtsData.totalDebt.toFixed(0)}` : undefined,
+      icon: DollarSign,
+      color: '#ef4444',
+      route: '/admin/clients/debts',
+    },
+    {
+      label: 'הקפאות',
+      value: frozenPlans.toString(),
+      icon: Pause,
+      color: '#06b6d4',
+      route: '/admin/clients/frozen',
+    },
   ];
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleSignOut} style={styles.logoutButton}>
-          <LogOut size={20} color={Colors.error} />
-        </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={styles.title}>{hebrew.admin.dashboard}</Text>
-          <Text style={styles.subtitle}>{user?.name}</Text>
-        </View>
-      </View>
 
-      <ScrollView 
+
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.statsGrid}>
-          {stats.map((stat, index) => (
-            <View key={index} style={styles.statCard}>
-              <View style={[styles.statIcon, { backgroundColor: stat.color + '20' }]}>
-                <stat.icon size={24} color={stat.color} />
-              </View>
-              <Text style={styles.statValue}>{stat.value}</Text>
-              <Text style={styles.statLabel}>{stat.label}</Text>
-            </View>
-          ))}
+
+
+        // ...
+
+        {/* Income/Actions Tabs */}
+        <View style={styles.chartSection}>
+          <AdminActionTabs />
         </View>
 
-        {/* Financial Dashboard Button */}
-        <TouchableOpacity
-          style={styles.greenInvoiceButton}
-          onPress={() => router.push('/admin/financial')}
-        >
-          <View style={styles.greenInvoiceIcon}>
-            <DollarSign size={24} color={Colors.primary} />
-          </View>
-          <View style={styles.greenInvoiceContent}>
-            <Text style={styles.greenInvoiceTitle}>💰 לוח ניהול פיננסי</Text>
-            <Text style={styles.greenInvoiceSubtitle}>הכנסות, חשבוניות וגרפים</Text>
-          </View>
-          <Text style={styles.greenInvoiceArrow}>←</Text>
-        </TouchableOpacity>
-
-        {/* Client Management Button */}
-        <TouchableOpacity
-          style={styles.greenInvoiceButton}
-          onPress={() => router.push('/admin/clients')}
-        >
-          <View style={styles.greenInvoiceIcon}>
-            <UserCog size={24} color={Colors.accent} />
-          </View>
-          <View style={styles.greenInvoiceContent}>
-            <Text style={styles.greenInvoiceTitle}>👥 ניהול לקוחות</Text>
-            <Text style={styles.greenInvoiceSubtitle}>עריכת פרטים, מנויים וחסימות</Text>
-          </View>
-          <Text style={styles.greenInvoiceArrow}>←</Text>
-        </TouchableOpacity>
-
-        {/* Green Invoice Button */}
-        <TouchableOpacity
-          style={styles.greenInvoiceButton}
-          onPress={() => router.push('/admin/green-invoice-test')}
-        >
-          <View style={styles.greenInvoiceIcon}>
-            <FileText size={24} color={Colors.success} />
-          </View>
-          <View style={styles.greenInvoiceContent}>
-            <Text style={styles.greenInvoiceTitle}>🧾 Green Invoice</Text>
-            <Text style={styles.greenInvoiceSubtitle}>ניהול פיננסי ובדיקות מערכת</Text>
-          </View>
-          <Text style={styles.greenInvoiceArrow}>←</Text>
-        </TouchableOpacity>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{hebrew.admin.users}</Text>
-          {mockUsers.map((userItem) => (
-            <View key={userItem.id} style={styles.userCard}>
-              <View style={styles.userInfo}>
-                <Text style={styles.userName}>{userItem.name}</Text>
-                <Text style={styles.userEmail}>{userItem.email}</Text>
-                <Text style={styles.userStats}>
-                  {userItem.totalWorkouts} {hebrew.home.workouts} • {userItem.currentStreak} {hebrew.home.days} {hebrew.home.streak}
-                </Text>
+        {/* Action Cards Grid */}
+        <View style={styles.cardsGrid}>
+          {actionCards.map((card, index) => (
+            <TouchableOpacity
+              key={index}
+              style={[
+                styles.actionCard,
+                (card as any).borderColor && { borderColor: (card as any).borderColor, borderWidth: 2 }
+              ]}
+              onPress={() => router.push(card.route as any)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.cardIcon, { backgroundColor: card.color + '20' }]}>
+                <card.icon size={24} color={card.color} />
               </View>
-              {userItem.subscription && (
-                <View style={[styles.badge, { backgroundColor: Colors.primary + '20' }]}>
-                  <Text style={[styles.badgeText, { color: Colors.primary }]}>
-                    {userItem.subscription.type.toUpperCase()}
-                  </Text>
-                </View>
+              <Text style={styles.cardValue}>{card.value}</Text>
+              {card.subtitle && (
+                <Text style={styles.cardSubtitle}>{card.subtitle}</Text>
               )}
-            </View>
+              <Text style={styles.cardLabel}>{card.label}</Text>
+            </TouchableOpacity>
           ))}
         </View>
+
+        {/* Today's Classes Section */}
+        {todaysClasses.length > 0 && (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>שיעורים היום</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 20 }}
+            >
+              {todaysClasses.map((classItem) => {
+                const percentage = Math.min(100, (classItem.enrolled / classItem.capacity) * 100);
+                const progressColor = getProgressColor(percentage);
+
+                return (
+                  <TouchableOpacity
+                    key={classItem.id}
+                    style={styles.classCard}
+                    onPress={() => handleClassPress(classItem)}
+                    activeOpacity={0.7}
+                  >
+                    {/* Top: Info */}
+                    <View style={{ alignItems: 'flex-end', width: '100%' }}>
+                      <Text style={styles.className} numberOfLines={2}>{classItem.title}</Text>
+                      <View style={styles.classTimeRow}>
+                        <Clock size={12} color={Colors.textSecondary} />
+                        <Text style={styles.classTime}>{classItem.time}</Text>
+                      </View>
+                    </View>
+
+                    {/* Bottom: Stats */}
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: 12 }}>
+                      {/* Stats Text */}
+                      <Text style={styles.capacityText}>
+                        {classItem.enrolled}/{classItem.capacity}
+                      </Text>
+
+                      {/* Vertical Progress Bar */}
+                      <View style={styles.progressBarContainer}>
+                        <View
+                          style={[
+                            styles.progressBarFill,
+                            {
+                              height: `${percentage}%`,
+                              backgroundColor: progressColor
+                            }
+                          ]}
+                        />
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      <AdminClassModal
+        visible={modalVisible}
+        classItem={selectedClass}
+        onClose={() => setModalVisible(false)}
+      />
     </View>
   );
 }
@@ -151,17 +307,17 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: '800' as const,
+    fontWeight: '800',
     color: Colors.text,
     textAlign: 'right',
-    writingDirection: 'rtl' as const,
+    writingDirection: 'rtl',
   },
   subtitle: {
     fontSize: 14,
-    fontWeight: '500' as const,
+    fontWeight: '500',
     color: Colors.textSecondary,
     textAlign: 'right',
-    writingDirection: 'rtl' as const,
+    writingDirection: 'rtl',
   },
   scrollView: {
     flex: 1,
@@ -169,24 +325,32 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 20,
   },
-  statsGrid: {
-    flexDirection: 'row',
-    gap: 12,
+  chartSection: {
     marginBottom: 24,
   },
-  statCard: {
-    flex: 1,
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+  cardsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
   },
-  statIcon: {
+  actionCard: {
+    width: '48%',
+    backgroundColor: Colors.card,
+    borderRadius: 20, // Slightly rounder
+    padding: 24, // More breathing room
+    alignItems: 'center',
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.03)',
+  },
+  cardIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -194,126 +358,89 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 12,
   },
-  statValue: {
-    fontSize: 24,
-    fontWeight: '800' as const,
+  cardValue: {
+    fontSize: 28,
+    fontWeight: '800',
     color: Colors.text,
+    marginBottom: 2,
+  },
+  cardSubtitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textSecondary,
     marginBottom: 4,
   },
-  statLabel: {
-    fontSize: 12,
-    fontWeight: '600' as const,
+  cardLabel: {
+    fontSize: 13,
+    fontWeight: '600',
     color: Colors.textSecondary,
     textAlign: 'center',
-    writingDirection: 'rtl' as const,
+    writingDirection: 'rtl',
   },
-  // Green Invoice Button Styles - NEW!
-  greenInvoiceButton: {
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-    borderWidth: 2,
-    borderColor: Colors.primary + '40',
-  },
-  greenInvoiceIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: Colors.primary + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 16,
-  },
-  greenInvoiceContent: {
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-  greenInvoiceTitle: {
-    fontSize: 18,
-    fontWeight: '700' as const,
-    color: Colors.text,
-    textAlign: 'right',
-    writingDirection: 'rtl' as const,
-    marginBottom: 4,
-  },
-  greenInvoiceSubtitle: {
-    fontSize: 14,
-    fontWeight: '500' as const,
-    color: Colors.textSecondary,
-    textAlign: 'right',
-    writingDirection: 'rtl' as const,
-  },
-  greenInvoiceArrow: {
-    fontSize: 24,
-    color: Colors.primary,
-    marginRight: 12,
-  },
-  section: {
-    marginBottom: 24,
+  sectionContainer: {
+    marginTop: 24,
+    marginBottom: 8,
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: '700' as const,
+    fontWeight: '800',
     color: Colors.text,
     textAlign: 'right',
-    writingDirection: 'rtl' as const,
     marginBottom: 16,
+    writingDirection: 'rtl',
   },
-  userCard: {
+  classCard: {
+    width: 150,
+    aspectRatio: 1,
     backgroundColor: Colors.card,
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 16,
-    marginBottom: 12,
+    marginRight: 12,
+    justifyContent: 'space-between',
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.03)',
+  },
+  className: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: 4,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  classTimeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    gap: 4,
   },
-  userInfo: {
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-  userName: {
-    fontSize: 16,
-    fontWeight: '700' as const,
-    color: Colors.text,
-    textAlign: 'right',
-    writingDirection: 'rtl' as const,
-    marginBottom: 4,
-  },
-  userEmail: {
-    fontSize: 14,
-    fontWeight: '500' as const,
+  classTime: {
+    fontSize: 13,
     color: Colors.textSecondary,
-    textAlign: 'right',
-    marginBottom: 4,
+    fontWeight: '500',
   },
-  userStats: {
-    fontSize: 12,
-    fontWeight: '500' as const,
-    color: Colors.textLight,
-    textAlign: 'right',
-    writingDirection: 'rtl' as const,
+  capacityText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.text,
   },
-  badge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    marginRight: 12,
+  progressBarContainer: {
+    width: 6,
+    height: 35,
+    backgroundColor: '#f4f4f5',
+    borderRadius: 10,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
   },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '700' as const,
+  progressBarFill: {
+    width: '100%',
+    borderRadius: 10,
   },
 });

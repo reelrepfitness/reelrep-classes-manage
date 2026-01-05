@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DollarSign, Calendar, TrendingUp, FileText, ChevronLeft } from 'lucide-react-native';
 import { supabase } from '@/constants/supabase';
 import Colors from '@/constants/colors';
+import { MonthlyComparisonChart } from '@/components/charts/MonthlyComparisonChart';
 
 interface FinancialStats {
   todayRevenue: number;
@@ -175,6 +176,11 @@ export default function FinancialDashboard() {
               <Text style={styles.statLabel}>{stat.label}</Text>
             </View>
           ))}
+        </View>
+
+        {/* Monthly Comparison Chart */}
+        <View style={{ marginBottom: 24 }}>
+          <MonthlyComparisonChart />
         </View>
 
         {/* Menu Items */}

@@ -57,21 +57,27 @@ export default function AllInvoices() {
 
       const { data, error } = await supabase
         .from('green_invoice_documents')
-        .select(`
-          *,
-          profiles:user_id (
-            full_name
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(100);
 
       if (error) throw error;
 
-      const invoicesWithNames = data?.map((inv) => ({
-        ...inv,
-        user_name: inv.profiles?.full_name || 'משתמש לא ידוע',
-      })) || [];
+      // Fetch user names separately
+      const invoicesWithNames = await Promise.all(
+        (data || []).map(async (inv) => {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', inv.user_id)
+            .single();
+
+          return {
+            ...inv,
+            user_name: profile?.full_name || 'משתמש לא ידוע',
+          };
+        })
+      );
 
       setInvoices(invoicesWithNames);
     } catch (error) {
@@ -217,10 +223,10 @@ export default function AllInvoices() {
                     {status === 'all'
                       ? 'הכל'
                       : status === 'paid'
-                      ? 'שולם'
-                      : status === 'pending'
-                      ? 'ממתין'
-                      : 'בוטל'}
+                        ? 'שולם'
+                        : status === 'pending'
+                          ? 'ממתין'
+                          : 'בוטל'}
                   </Text>
                 </TouchableOpacity>
               ))}

@@ -1,6 +1,6 @@
 export type UserRole = 'user' | 'coach' | 'admin';
 
-export type SubscriptionType = 'basic' | 'premium' | 'vip' | 'unlimited' | 'limited';
+export type SubscriptionType = 'basic' | 'premium' | 'vip' | 'unlimited' | 'limited' | 'ticket';
 
 export type SubscriptionStatus = 'active' | 'expired' | 'cancelled';
 
@@ -97,6 +97,7 @@ export interface Class {
   difficulty: 'beginner' | 'intermediate' | 'advanced';
   location: string;
   requiredSubscription: SubscriptionType[];
+  enrolledAvatars?: string[];
 }
 
 export interface ClassBooking {
@@ -104,7 +105,7 @@ export interface ClassBooking {
   userId: string;
   classId: string;
   bookingDate: string;
-  status: 'confirmed' | 'cancelled' | 'completed';
+  status: 'confirmed' | 'cancelled' | 'completed' | 'waiting_list' | 'no_show';
   scheduleId?: string | null;
   classDate?: string | null;
   attendedAt?: string | null;
@@ -141,7 +142,7 @@ export interface SubscriptionPackage {
   name: string;
   price: number;
   currency: string;
-  duration: 'monthly' | 'quarterly' | 'yearly';
+  duration: 'monthly' | 'quarterly' | 'yearly' | 'one-time';
   features: string[];
   classesPerMonth: number;
   popular?: boolean;
@@ -150,6 +151,8 @@ export interface SubscriptionPackage {
   planId?: string;
   highlight?: boolean;
   planType?: string;
+  totalClasses?: number;
+  expiryDays?: number;
 }
 
 export interface CartItem {

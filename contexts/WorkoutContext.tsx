@@ -2,7 +2,6 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { Workout } from '@/constants/types';
-import { mockHealthMetrics } from '@/constants/mockData';
 import { useAuth } from './AuthContext';
 import { supabase } from '@/constants/supabase';
 
@@ -268,7 +267,7 @@ export const [WorkoutProvider, useWorkouts] = createContextHook(() => {
 
   return useMemo(() => ({
     workouts: workoutsQuery.data || [],
-    healthMetrics: mockHealthMetrics,
+    healthMetrics: [], // TODO: Fetch from user_health_data table
     isLoading: workoutsQuery.isLoading,
     addWorkout,
     updateWorkout,

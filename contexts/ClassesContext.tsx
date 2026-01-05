@@ -40,7 +40,7 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
 
           const dateKey = formatDateKey(classDate);
           classes.push({
-            id: schedule.id, // Use schedule UUID directly
+            id: `${schedule.id}_${dateKey}`, // Unique ID for each class instance
             scheduleId: schedule.id,
             classDate: classDate.toISOString(),
             title: schedule.name,
@@ -78,7 +78,7 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('class_bookings')
-        .select('class_id, status, classes:class_id(schedule_id, class_date)')
+        .select('class_id, status, classes:class_id(schedule_id, class_date), profiles:user_id(avatar_url)')
         .eq('status', 'confirmed');
 
       if (error) {
@@ -96,7 +96,7 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
     if (classes.length > 0 && allBookingsQuery.data) {
       const updatedClasses = classes.map(classItem => {
         // Count bookings that match this schedule and date
-        const enrolledCount = allBookingsQuery.data.filter((b: any) => {
+        const classBookings = allBookingsQuery.data.filter((b: any) => {
           if (!b.classes) return false;
 
           // Match by schedule_id
@@ -108,11 +108,17 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
           const matchesDate = bookingDate === classDate;
 
           return matchesSchedule && matchesDate;
-        }).length;
+        });
+
+        const enrolledCount = classBookings.length;
+        const enrolledAvatars = classBookings
+          .map((b: any) => b.profiles?.avatar_url as string | undefined)
+          .filter((url): url is string => !!url);
 
         return {
           ...classItem,
           enrolled: enrolledCount,
+          enrolledAvatars,
         };
       });
 
@@ -176,6 +182,10 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
   }, [bookingsQuery.data]);
 
   const bookClass = useCallback(async (classId: string) => {
+    if (!user) {
+      throw new Error('יש להתחבר כדי להירשם לשיעור');
+    }
+
     // Admins bypass all subscription checks
     if (!isAdmin) {
       if (!user?.subscription) {
@@ -285,7 +295,96 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
     bookingsQuery.refetch();
 
     return newBooking;
+    return newBooking;
   }, [user, isAdmin, classes, bookings, syncBookings, allBookingsQuery, bookingsQuery]);
+
+  const adminBookClass = useCallback(async (userId: string, classId: string) => {
+    // 1. Get class details
+    const classItem = classes.find(c => c.id === classId);
+    if (!classItem) throw new Error('Class not found');
+
+    const classDateTime = new Date(`${classItem.date}T${classItem.time}`);
+
+    // 2. Ensure class instance exists
+    const { data: existingClass } = await supabase
+      .from('classes')
+      .select('id')
+      .eq('schedule_id', classItem.scheduleId)
+      .eq('class_date', classDateTime.toISOString())
+      .single();
+
+    let actualClassId = existingClass?.id;
+
+    if (!existingClass) {
+      const { data: newClass, error: createError } = await supabase
+        .from('classes')
+        .insert({
+          name: classItem.title,
+          name_hebrew: classItem.title,
+          coach_name: classItem.instructor,
+          class_date: classDateTime.toISOString(),
+          duration_minutes: classItem.duration,
+          max_participants: classItem.capacity,
+          current_participants: 0,
+          required_subscription_level: 1, // Default to premium for now or derive
+          location: classItem.location,
+          location_hebrew: classItem.location,
+          class_type: 'general',
+          schedule_id: classItem.scheduleId,
+        })
+        .select('id')
+        .single();
+
+      if (createError) throw new Error('Failed to create class instance');
+      actualClassId = newClass.id;
+    }
+
+    // 3. Insert Booking
+    const { error } = await supabase
+      .from('class_bookings')
+      .insert({
+        user_id: userId,
+        class_id: actualClassId,
+        status: 'confirmed',
+      });
+
+    if (error) throw error;
+
+    // Refresh
+    allBookingsQuery.refetch();
+  }, [classes, allBookingsQuery]);
+
+  const adminCancelBooking = useCallback(async (bookingId: string) => {
+    const { error } = await supabase
+      .from('class_bookings')
+      .delete() // Actually remove it or just cancel? User asked to "remove clients manually". Delete is cleaner for "Force Remove".
+      .eq('id', bookingId);
+
+    if (error) throw error;
+    allBookingsQuery.refetch();
+  }, [allBookingsQuery]);
+
+  const markAttendance = useCallback(async (bookingId: string, status: 'attended' | 'no_show') => {
+    const { error } = await supabase
+      .from('class_bookings')
+      .update({
+        status: status === 'attended' ? 'completed' : 'no_show',
+        attended_at: status === 'attended' ? new Date().toISOString() : null
+      })
+      .eq('id', bookingId);
+
+    if (error) throw error;
+  }, []);
+
+  const approveWaitingList = useCallback(async (bookingId: string) => {
+    const { error } = await supabase
+      .from('class_bookings')
+      .update({ status: 'confirmed' })
+      .eq('id', bookingId);
+
+    if (error) throw error;
+    allBookingsQuery.refetch();
+  }, [allBookingsQuery]);
 
   const cancelBooking = useCallback((bookingId: string) => {
     const updated = bookings.map(b =>
@@ -372,16 +471,16 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
         .single();
 
       if (classError || !classInstance) {
-        console.log('No class instance found yet (no bookings)');
+        // No class instance yet - return empty array silently
         return [];
       }
 
       // Now get the bookings with profile data using the actual class instance ID
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('class_bookings')
-        .select('*, profiles:user_id(id, name, email, avatar_url, full_name)')
+        .select('*, profiles:user_id(id, name, email, avatar_url, full_name, phone)')
         .eq('class_id', classInstance.id)
-        .in('status', ['confirmed', 'completed', 'no_show']);
+        .in('status', ['confirmed', 'completed', 'no_show', 'waiting_list']);
 
       if (bookingsError) {
         console.error('Error fetching class bookings:', bookingsError);
@@ -441,5 +540,9 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
     getClassBooking,
     getClassAttendanceCount,
     getClassBookings,
-  }), [classes, bookings, bookingsQuery.isLoading, schedulesQuery.isLoading, bookClass, cancelBooking, getMyClasses, getUpcomingClasses, isClassBooked, getClassBooking, getClassAttendanceCount, getClassBookings]);
+    adminBookClass,
+    adminCancelBooking,
+    markAttendance,
+    approveWaitingList,
+  }), [classes, bookings, bookingsQuery.isLoading, schedulesQuery.isLoading, bookClass, cancelBooking, getMyClasses, getUpcomingClasses, isClassBooked, getClassBooking, getClassAttendanceCount, getClassBookings, adminBookClass, adminCancelBooking, markAttendance, approveWaitingList]);
 });

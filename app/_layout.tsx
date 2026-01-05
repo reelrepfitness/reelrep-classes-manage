@@ -52,7 +52,9 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   useEffect(() => {
-    SplashScreen.hideAsync();
+    SplashScreen.hideAsync().catch(() => {
+      // Ignore - splash screen may not be registered in Expo Go
+    });
   }, []);
 
   return (

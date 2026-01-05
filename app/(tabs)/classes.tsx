@@ -502,12 +502,21 @@ export default function ClassesScreen() {
               instructor={selectedClass.instructor}
               enrolled={selectedClass.enrolled}
               capacity={selectedClass.capacity}
+              enrolledAvatars={selectedClass.enrolledAvatars || []}
               isBooked={isClassBooked(selectedClass)}
               isAdmin={isAdmin}
               onRegister={handleConfirmBooking}
               onCancel={() => {
                 setModalVisible(false);
                 setSelectedClass(null);
+              }}
+              onCancelClass={() => {
+                setModalVisible(false);
+                handleCancelClass(selectedClass);
+              }}
+              onSwitch={() => {
+                setModalVisible(false);
+                handleSwitchClass(selectedClass);
               }}
               className="w-full"
             />

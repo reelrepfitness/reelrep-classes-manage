@@ -96,6 +96,15 @@ export default function HomeScreen() {
 
   // --- Helper Functions (Logic) ---
 
+  // Dynamic greeting based on time of day
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour >= 6 && hour < 12) return 'בוקר טוב';
+    if (hour >= 12 && hour < 15) return 'צהריים טובים';
+    if (hour >= 15 && hour < 18) return 'אחר הצהריים טובים';
+    if (hour >= 18 && hour <= 23) return 'ערב טוב';
+    return 'מי ער בשעות האלה';
+  };
 
   // --- Subscription Card Helpers ---
   const getSubscriptionProgress = () => {
@@ -162,7 +171,7 @@ export default function HomeScreen() {
           <SafeAreaView edges={['top']} className="w-full">
             {/* User Greeting */}
             <View className="items-center mb-4 mt-2">
-              <Text className="text-gray-400 text-sm font-medium mb-1">היי, בוקר טוב</Text>
+              <Text className="text-gray-400 text-sm font-medium mb-1">{getGreeting()}</Text>
               <Text className="text-3xl font-extrabold text-white">
                 {user?.name?.split(' ')[0] || "אורח"}
               </Text>
@@ -185,23 +194,21 @@ export default function HomeScreen() {
                   </Text>
                 </View>
 
-                {/* Row 3: Progress Bar */}
+                {/* Row 3: Progress Bar + Session Count */}
                 <View className="w-full">
-                  <View className="flex-row items-center justify-between mb-1.5 px-0.5">
-                    <Text className="text-[11px] font-bold text-gray-500">
-                      {(user.subscription.type.includes('class') || user.subscription.type.includes('-'))
-                        ? `${user.subscription.classesUsed}/${user.subscription.classesPerMonth} שיעורים`
-                        : `${Math.round(getSubscriptionProgress())}% נוצל`
-                      }
-                    </Text>
-                  </View>
-
                   <View className="h-2.5 w-full bg-surface-darker/50 bg-black/20 rounded-full overflow-hidden border border-white/5">
                     <View
                       className="h-full bg-primary rounded-full shadow-sm"
                       style={{ width: `${Math.min(100, Math.max(0, getSubscriptionProgress()))}%` }}
                     />
                   </View>
+
+                  {/* Session Count - Below Progress Bar, Centered */}
+                  {(user.subscription.type.includes('class') || user.subscription.type.includes('-')) && (
+                    <Text className="text-white font-bold text-lg text-center mt-3">
+                      {user.subscription.classesPerMonth - user.subscription.classesUsed}/{user.subscription.classesPerMonth}
+                    </Text>
+                  )}
                 </View>
 
               </View>

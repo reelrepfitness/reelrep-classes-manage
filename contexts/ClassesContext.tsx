@@ -10,7 +10,7 @@ const BOOKINGS_STORAGE_KEY = '@reelrep_bookings';
 const formatDateKey = (date: Date) => date.toLocaleDateString('en-CA');
 
 export const [ClassesProvider, useClasses] = createContextHook(() => {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, refreshUser } = useAuth();
   const [classes, setClasses] = useState<Class[]>([]);
   const [bookings, setBookings] = useState<ClassBooking[]>([]);
 
@@ -286,6 +286,27 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
       attendedAt: null,
     };
 
+    // Decrement ticket sessions if user has an active ticket plan
+    if (!isAdmin) {
+      const { data: activeTicket } = await supabase
+        .from('user_tickets')
+        .select('id, sessions_remaining')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .gt('sessions_remaining', 0)
+        .single();
+
+      if (activeTicket) {
+        await supabase
+          .from('user_tickets')
+          .update({ sessions_remaining: activeTicket.sessions_remaining - 1 })
+          .eq('id', activeTicket.id);
+
+        // Refresh user data to update UI (home screen header, profile)
+        refreshUser();
+      }
+    }
+
     const updated = [...bookings, newBooking];
     setBookings(updated);
     syncBookings(updated);
@@ -295,8 +316,7 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
     bookingsQuery.refetch();
 
     return newBooking;
-    return newBooking;
-  }, [user, isAdmin, classes, bookings, syncBookings, allBookingsQuery, bookingsQuery]);
+  }, [user, isAdmin, classes, bookings, syncBookings, allBookingsQuery, bookingsQuery, refreshUser]);
 
   const adminBookClass = useCallback(async (userId: string, classId: string) => {
     // 1. Get class details
@@ -478,7 +498,7 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
       // Now get the bookings with profile data using the actual class instance ID
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('class_bookings')
-        .select('*, profiles:user_id(id, name, email, avatar_url, full_name, phone)')
+        .select('*, profiles:user_id(id, name, email, avatar_url, full_name)')
         .eq('class_id', classInstance.id)
         .in('status', ['confirmed', 'completed', 'no_show', 'waiting_list']);
 

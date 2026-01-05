@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, Image, TouchableOpacity, Animated } from 'react-native';
-import { Calendar, Clock, Users, MapPin, Trophy } from 'lucide-react-native';
+import { Calendar, Clock, Users, MapPin, Trophy, XCircle, ArrowLeftRight } from 'lucide-react-native';
 import { cn } from '@/lib/utils';
 import Colors from '@/constants/colors';
+import { AvatarCircles } from '@/components/ui/AvatarCircles';
 
 interface ClassRegistrationCardProps {
     title: string;
@@ -11,10 +12,13 @@ interface ClassRegistrationCardProps {
     instructor: string;
     enrolled: number;
     capacity: number;
+    enrolledAvatars?: string[];
     isBooked?: boolean;
     isAdmin?: boolean;
     onRegister?: () => void;
     onCancel?: () => void;
+    onCancelClass?: () => void;
+    onSwitch?: () => void;
     className?: string;
 }
 
@@ -25,10 +29,13 @@ export function ClassRegistrationCard({
     instructor,
     enrolled,
     capacity,
+    enrolledAvatars = [],
     isBooked = false,
     isAdmin = false,
     onRegister,
     onCancel,
+    onCancelClass,
+    onSwitch,
     className,
 }: ClassRegistrationCardProps) {
     const [timeLeft, setTimeLeft] = useState(0);
@@ -109,8 +116,13 @@ export function ClassRegistrationCard({
         >
             {/* Header with Title */}
             <View className="p-6 pb-4">
-                <View className="flex-row-reverse items-center justify-between mb-2">
-                    <Text className="text-2xl font-extrabold text-[#09090B]">{title}</Text>
+                <View className="flex-row-reverse items-start justify-between mb-2">
+                    <View className="items-end flex-1">
+                        <Text className="text-2xl font-extrabold text-[#09090B]">{title}</Text>
+                        <Text className="text-sm text-gray-500 mt-1">
+                            {formatDate(date)} • {time}
+                        </Text>
+                    </View>
                     {isBooked && (
                         <View className="bg-green-100 px-3 py-1 rounded-full">
                             <Text className="text-green-600 text-xs font-bold">רשום ✓</Text>
@@ -125,7 +137,7 @@ export function ClassRegistrationCard({
 
                 {/* Urgency Badge */}
                 {isUrgent && !isBooked && !isFull && (
-                    <View className="bg-orange-100 px-3 py-1 rounded-full self-end mb-2">
+                    <View className="bg-orange-100 px-3 py-1 rounded-full self-end">
                         <Text className="text-orange-600 text-xs font-bold">מתחיל בקרוב!</Text>
                     </View>
                 )}
@@ -133,23 +145,6 @@ export function ClassRegistrationCard({
 
             {/* Info Cards */}
             <View className="px-6 pb-4">
-                {/* Date & Time - Single Card */}
-                <View className="flex-row-reverse items-center gap-3 mb-3">
-                    <View className="w-10 h-10 bg-primary/10 rounded-full items-center justify-center">
-                        <Clock size={18} color={Colors.primary} />
-                    </View>
-                    <View className="flex-1 flex-row-reverse items-center justify-end gap-4">
-                        <View className="items-end">
-                            <Text className="text-xs text-gray-400 font-medium">שעה</Text>
-                            <Text className="text-base font-bold text-[#09090B]">{time}</Text>
-                        </View>
-                        <View className="w-[1px] h-8 bg-gray-200" />
-                        <View className="items-end">
-                            <Text className="text-xs text-gray-400 font-medium">תאריך</Text>
-                            <Text className="text-base font-bold text-[#09090B]">{formatDate(date)}</Text>
-                        </View>
-                    </View>
-                </View>
 
                 {/* Instructor */}
                 <View className="flex-row-reverse items-center gap-3 mb-3">
@@ -174,6 +169,16 @@ export function ClassRegistrationCard({
                         </Text>
                     </View>
                 </View>
+
+                {/* Avatar Group */}
+                {enrolledAvatars.length > 0 && (
+                    <View className="mt-3 flex-row-reverse justify-end">
+                        <AvatarCircles
+                            avatarUrls={enrolledAvatars.slice(0, 4)}
+                            numPeople={Math.max(0, enrolled - 4)}
+                        />
+                    </View>
+                )}
 
                 {/* Progress Bar */}
                 <View className="mt-3">
@@ -232,36 +237,66 @@ export function ClassRegistrationCard({
             )}
 
             {/* Action Buttons */}
-            <View className="flex-row-reverse gap-3 p-6 pt-4 border-t border-gray-100">
-                {/* Cancel/Close Button */}
-                <TouchableOpacity
-                    onPress={onCancel}
-                    className="flex-1 py-3.5 rounded-xl items-center border border-gray-200 bg-gray-50 active:bg-gray-100"
-                >
-                    <Text className="text-gray-700 text-base font-bold">ביטול</Text>
-                </TouchableOpacity>
+            {isBooked ? (
+                // Already registered - show cancel/switch options
+                <View className="p-6 pt-4 border-t border-gray-100">
+                    {/* Row 1: Cancel Class + Switch */}
+                    <View className="flex-row-reverse gap-3 mb-3">
+                        <TouchableOpacity
+                            onPress={onCancelClass}
+                            className="flex-1 flex-row-reverse py-3.5 rounded-xl items-center justify-center gap-2 border border-red-200 bg-red-50 active:bg-red-100"
+                        >
+                            <XCircle size={18} color="#dc2626" />
+                            <Text className="text-red-600 text-base font-bold">ביטול שיעור</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={onSwitch}
+                            className="flex-1 flex-row-reverse py-3.5 rounded-xl items-center justify-center gap-2 border border-gray-200 bg-gray-50 active:bg-gray-100"
+                        >
+                            <ArrowLeftRight size={18} color="#374151" />
+                            <Text className="text-gray-700 text-base font-bold">החלפה</Text>
+                        </TouchableOpacity>
+                    </View>
+                    {/* Row 2: Close */}
+                    <TouchableOpacity
+                        onPress={onCancel}
+                        className="w-full py-3.5 rounded-xl items-center bg-[#09090B] active:bg-gray-800"
+                    >
+                        <Text className="text-white text-base font-bold">סגור</Text>
+                    </TouchableOpacity>
+                </View>
+            ) : (
+                // Not registered - show register/cancel options
+                <View className="flex-row-reverse gap-3 p-6 pt-4 border-t border-gray-100">
+                    {/* Cancel/Close Button */}
+                    <TouchableOpacity
+                        onPress={onCancel}
+                        className="flex-1 py-3.5 rounded-xl items-center border border-gray-200 bg-gray-50 active:bg-gray-100"
+                    >
+                        <Text className="text-gray-700 text-base font-bold">ביטול</Text>
+                    </TouchableOpacity>
 
-                {/* Register Button */}
-                <TouchableOpacity
-                    onPress={onRegister}
-                    disabled={isBooked || (isFull && !isAdmin)}
-                    className={cn(
-                        "flex-1 py-3.5 rounded-xl items-center",
-                        isBooked ? "bg-green-600" :
+                    {/* Register Button */}
+                    <TouchableOpacity
+                        onPress={onRegister}
+                        disabled={isFull && !isAdmin}
+                        className={cn(
+                            "flex-1 py-3.5 rounded-xl items-center",
                             isFull && !isAdmin ? "bg-gray-300" : "bg-primary"
-                    )}
-                    style={!isBooked && !isFull ? {
-                        shadowColor: Colors.primary,
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.3,
-                        shadowRadius: 8,
-                    } : {}}
-                >
-                    <Text className="text-white text-base font-bold">
-                        {isBooked ? 'רשום ✓' : isFull && !isAdmin ? 'מלא' : 'הירשם'}
-                    </Text>
-                </TouchableOpacity>
-            </View>
+                        )}
+                        style={!isFull ? {
+                            shadowColor: Colors.primary,
+                            shadowOffset: { width: 0, height: 4 },
+                            shadowOpacity: 0.3,
+                            shadowRadius: 8,
+                        } : {}}
+                    >
+                        <Text className="text-white text-base font-bold">
+                            {isFull && !isAdmin ? 'מלא' : 'הירשם'}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            )}
         </Animated.View>
     );
 }

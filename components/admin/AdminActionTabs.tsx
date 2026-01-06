@@ -7,16 +7,24 @@ import {
     useTabsContext,
 } from '@/components/ui/tabs';
 import { IncomeSlide } from './slides/IncomeSlide';
+import { ClassesSlide } from './slides/ClassesSlide';
 import { RetentionSlide } from './slides/RetentionSlide';
 import { BirthdaySlide } from './slides/BirthdaySlide';
-import { Wallet, Users, Cake } from 'lucide-react-native';
+import { Wallet, Dumbbell, Users, Cake } from 'lucide-react-native';
 import Animated, {
     useAnimatedStyle,
     withTiming,
     useSharedValue,
+    FadeInRight,
+    FadeOutLeft,
+    FadeInLeft,
+    FadeOutRight,
 } from 'react-native-reanimated';
 import { Text } from '@/components/ui/text';
 import { useColor } from '@/hooks/useColor';
+
+// Tab order for direction detection
+const TAB_ORDER = ['income', 'classes', 'retention', 'birthdays'];
 
 // Custom Animated Trigger Component
 const AnimatedTabTrigger = ({ value, label, icon: Icon }: { value: string, label: string, icon: any }) => {
@@ -54,6 +62,7 @@ const AnimatedTabTrigger = ({ value, label, icon: Icon }: { value: string, label
     // Dynamic styles based on active tab
     const getActiveBg = () => {
         if (value === 'income') return '#18181b';
+        if (value === 'classes') return '#18181b';
         if (value === 'birthdays') return primaryColor;
         return '#fff';
     };
@@ -107,14 +116,44 @@ const AnimatedTabTrigger = ({ value, label, icon: Icon }: { value: string, label
     );
 };
 
+// Animated slide wrapper for content
+const AnimatedSlide = ({ children, tabValue, activeTab, prevTab }: {
+    children: React.ReactNode;
+    tabValue: string;
+    activeTab: string;
+    prevTab: string;
+}) => {
+    if (activeTab !== tabValue) return null;
+
+    // Determine animation direction based on tab order
+    const prevIndex = TAB_ORDER.indexOf(prevTab);
+    const currentIndex = TAB_ORDER.indexOf(activeTab);
+    const goingForward = currentIndex > prevIndex;
+
+    return (
+        <Animated.View
+            entering={goingForward ? FadeInRight.duration(250) : FadeInLeft.duration(250)}
+            exiting={goingForward ? FadeOutLeft.duration(200) : FadeOutRight.duration(200)}
+        >
+            {children}
+        </Animated.View>
+    );
+};
+
 export const AdminActionTabs = () => {
     const [activeTab, setActiveTab] = useState('income');
+    const [prevTab, setPrevTab] = useState('income');
+
+    const handleTabChange = (newTab: string) => {
+        setPrevTab(activeTab);
+        setActiveTab(newTab);
+    };
 
     return (
         <View className="w-full mb-4">
             <Tabs
                 value={activeTab}
-                onValueChange={setActiveTab}
+                onValueChange={handleTabChange}
                 style={{ width: '100%' }}
                 enableSwipe={false}
             >
@@ -127,21 +166,25 @@ export const AdminActionTabs = () => {
                     }}
                 >
                     <AnimatedTabTrigger value="income" label="הכנסות" icon={Wallet} />
+                    <AnimatedTabTrigger value="classes" label="שיעורים" icon={Dumbbell} />
                     <AnimatedTabTrigger value="retention" label="שימור לקוחות" icon={Users} />
                     <AnimatedTabTrigger value="birthdays" label="ימי הולדת" icon={Cake} />
                 </TabsList>
 
-                <TabsContent value="income">
-                    <IncomeSlide />
-                </TabsContent>
-
-                <TabsContent value="retention">
-                    <RetentionSlide />
-                </TabsContent>
-
-                <TabsContent value="birthdays">
-                    <BirthdaySlide />
-                </TabsContent>
+                <View style={{ overflow: 'hidden' }}>
+                    <AnimatedSlide tabValue="income" activeTab={activeTab} prevTab={prevTab}>
+                        <IncomeSlide />
+                    </AnimatedSlide>
+                    <AnimatedSlide tabValue="classes" activeTab={activeTab} prevTab={prevTab}>
+                        <ClassesSlide />
+                    </AnimatedSlide>
+                    <AnimatedSlide tabValue="retention" activeTab={activeTab} prevTab={prevTab}>
+                        <RetentionSlide />
+                    </AnimatedSlide>
+                    <AnimatedSlide tabValue="birthdays" activeTab={activeTab} prevTab={prevTab}>
+                        <BirthdaySlide />
+                    </AnimatedSlide>
+                </View>
             </Tabs>
         </View>
     );

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Modal, TouchableOpacity, ScrollView, Image, ActivityIndicator, Alert, Linking, ActionSheetIOS, Platform } from 'react-native';
-import { X, Check, Trash2, Plus, MessageCircle, MoreVertical, User as UserIcon, Calendar, Clock, MapPin } from 'lucide-react-native';
+import { X, Check, Trash2, Plus, MessageCircle, MoreVertical, User as UserIcon, Calendar, Clock, MapPin, AlarmClock } from 'lucide-react-native';
 import { useClasses } from '@/contexts/ClassesContext';
 import Colors from '@/constants/colors';
 import UserPicker from './UserPicker';
@@ -83,11 +83,28 @@ export default function AdminClassModal({ visible, classItem, onClose }: AdminCl
         );
     };
 
-    const handleAttendance = async (bookingId: string, status: 'attended' | 'no_show') => {
+    const handleAttendance = async (bookingId: string, currentStatus: string, newStatus: 'attended' | 'no_show' | 'late') => {
+        // Toggle logic: if already in this status, reset to confirmed
+        const mappedStatus = newStatus === 'attended' ? 'completed' : newStatus;
+        const finalDbStatus = currentStatus === mappedStatus ? 'confirmed' : mappedStatus;
+
+        // Optimistic update - update UI immediately without waiting for server
+        setBookings(prev => prev.map(b =>
+            b.id === bookingId
+                ? { ...b, status: finalDbStatus, attended_at: finalDbStatus === 'completed' || finalDbStatus === 'late' ? new Date().toISOString() : null }
+                : b
+        ));
+
         try {
-            await markAttendance(bookingId, status);
-            await fetchBookings();
+            const finalStatus = currentStatus === mappedStatus ? 'reset' : newStatus;
+            await markAttendance(bookingId, finalStatus);
+            // Silent background refresh to sync with server (don't await to avoid flicker)
+            fetchBookings();
         } catch (error) {
+            // Revert on error
+            setBookings(prev => prev.map(b =>
+                b.id === bookingId ? { ...b, status: currentStatus } : b
+            ));
             Alert.alert('שגיאה', 'לא ניתן לעדכן נוכחות');
         }
     };
@@ -144,7 +161,7 @@ export default function AdminClassModal({ visible, classItem, onClose }: AdminCl
         }
     };
 
-    const enrolledList = bookings.filter(b => b.status === 'confirmed' || b.status === 'completed' || b.status === 'no_show');
+    const enrolledList = bookings.filter(b => b.status === 'confirmed' || b.status === 'completed' || b.status === 'no_show' || b.status === 'late');
     const waitingList = bookings.filter(b => b.status === 'waiting_list');
 
     const displayList = activeTab === 'enrolled' ? enrolledList : waitingList;
@@ -270,7 +287,7 @@ export default function AdminClassModal({ visible, classItem, onClose }: AdminCl
                                             {booking.profiles?.full_name || booking.profiles?.name || 'Unknown'}
                                         </Text>
                                         <Text style={{ fontSize: 12, color: '#A1A1AA', textAlign: 'right' }}>
-                                            {booking.attended_at ? 'נכח בשיעור' : booking.status === 'no_show' ? 'לא הגיע' : booking.status === 'waiting_list' ? 'בהמתנה' : 'רשום'}
+                                            {booking.status === 'completed' ? 'נכח בשיעור' : booking.status === 'late' ? 'הגיע באיחור' : booking.status === 'no_show' ? 'לא הגיע' : booking.status === 'waiting_list' ? 'בהמתנה' : 'רשום'}
                                         </Text>
                                     </View>
                                 </View>
@@ -280,16 +297,25 @@ export default function AdminClassModal({ visible, classItem, onClose }: AdminCl
                                     {activeTab === 'enrolled' && (
                                         <>
                                             <TouchableOpacity
-                                                onPress={() => handleAttendance(booking.id, 'no_show')}
+                                                onPress={() => handleAttendance(booking.id, booking.status, 'no_show')}
                                                 style={{ padding: 8, backgroundColor: booking.status === 'no_show' ? '#FEE2E2' : '#F4F4F5', borderRadius: 8 }}
                                             >
                                                 <X size={16} color={booking.status === 'no_show' ? '#EF4444' : '#A1A1AA'} />
                                             </TouchableOpacity>
                                             <TouchableOpacity
-                                                onPress={() => handleAttendance(booking.id, 'attended')}
-                                                style={{ padding: 8, backgroundColor: booking.attended_at ? '#DCFCE7' : '#F4F4F5', borderRadius: 8 }}
+                                                onPress={() => handleAttendance(booking.id, booking.status, 'late')}
+                                                style={{ padding: 8, backgroundColor: booking.status === 'late' ? '#FEF3C7' : '#F4F4F5', borderRadius: 8 }}
                                             >
-                                                <Check size={16} color={booking.attended_at ? '#22C55E' : '#A1A1AA'} />
+                                                <Image
+                                                    source={require('@/assets/images/late.webp')}
+                                                    style={{ width: 16, height: 16, tintColor: booking.status === 'late' ? '#F59E0B' : '#A1A1AA' }}
+                                                />
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                onPress={() => handleAttendance(booking.id, booking.status, 'attended')}
+                                                style={{ padding: 8, backgroundColor: booking.status === 'completed' ? '#DCFCE7' : '#F4F4F5', borderRadius: 8 }}
+                                            >
+                                                <Check size={16} color={booking.status === 'completed' ? '#22C55E' : '#A1A1AA'} />
                                             </TouchableOpacity>
                                             <View style={{ width: 1, height: 20, backgroundColor: '#E4E4E7', marginHorizontal: 4 }} />
                                         </>

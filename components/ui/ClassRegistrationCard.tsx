@@ -147,24 +147,17 @@ export function ClassRegistrationCard({
             <View className="px-6 pb-4">
 
                 {/* Instructor */}
-                <View className="flex-row-reverse items-center gap-3 mb-3">
-                    <View className="w-10 h-10 bg-orange-100 rounded-full items-center justify-center">
-                        <Users size={18} color="#f97316" />
+                <View className="flex-row-reverse gap-3 mb-4">
+                    {/* Coach Card */}
+                    <View className="flex-1 bg-gray-50 rounded-xl py-3 items-center justify-center gap-2 border border-gray-100">
+                        <Image source={require('@/assets/images/coach.webp')} style={{ width: 40, height: 40, tintColor: '#09090B' }} resizeMode="contain" />
+                        <Text className="text-sm font-bold text-[#09090B] text-center" numberOfLines={1}>{instructor}</Text>
                     </View>
-                    <View className="flex-1 items-end">
-                        <Text className="text-xs text-gray-400 font-medium">מאמן</Text>
-                        <Text className="text-base font-bold text-[#09090B]">{instructor}</Text>
-                    </View>
-                </View>
 
-                {/* Capacity with Progress Bar */}
-                <View className="flex-row-reverse items-center gap-3">
-                    <View className="w-10 h-10 bg-blue-100 rounded-full items-center justify-center">
-                        <Trophy size={18} color="#3b82f6" />
-                    </View>
-                    <View className="flex-1 items-end">
-                        <Text className="text-xs text-gray-400 font-medium">תפוסה</Text>
-                        <Text className="text-base font-bold text-[#09090B]">
+                    {/* Capacity Card */}
+                    <View className="flex-1 bg-gray-50 rounded-xl py-3 items-center justify-center gap-2 border border-gray-100">
+                        <Image source={require('@/assets/images/group-session.webp')} style={{ width: 40, height: 40, tintColor: '#3b82f6' }} resizeMode="contain" />
+                        <Text className="text-sm font-bold text-[#09090B] text-center">
                             {enrolled}/{capacity}
                         </Text>
                     </View>
@@ -193,7 +186,7 @@ export function ClassRegistrationCard({
                         />
                     </View>
                     <Text className="text-[10px] text-gray-400 text-center mt-1">
-                        {capacityPercent}% תפוסה
+                        {capacityPercent}% רשומים
                     </Text>
                 </View>
             </View>
@@ -246,14 +239,14 @@ export function ClassRegistrationCard({
                             onPress={onCancelClass}
                             className="flex-1 flex-row-reverse py-3.5 rounded-xl items-center justify-center gap-2 border border-red-200 bg-red-50 active:bg-red-100"
                         >
-                            <XCircle size={18} color="#dc2626" />
+                            <Image source={require('@/assets/images/cancel.webp')} style={{ width: 20, height: 20, tintColor: '#dc2626' }} resizeMode="contain" />
                             <Text className="text-red-600 text-base font-bold">ביטול שיעור</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             onPress={onSwitch}
                             className="flex-1 flex-row-reverse py-3.5 rounded-xl items-center justify-center gap-2 border border-gray-200 bg-gray-50 active:bg-gray-100"
                         >
-                            <ArrowLeftRight size={18} color="#374151" />
+                            <Image source={require('@/assets/images/replace.webp')} style={{ width: 20, height: 20, tintColor: '#374151' }} resizeMode="contain" />
                             <Text className="text-gray-700 text-base font-bold">החלפה</Text>
                         </TouchableOpacity>
                     </View>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, Dimensions, ActivityIndicator, Image } from 'react-native';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -14,6 +14,9 @@ import { supabase } from '@/constants/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { AvatarCircles } from '@/components/ui/AvatarCircles';
+import { ClassRegistrationCard } from '@/components/ui/ClassRegistrationCard';
+import { useClasses } from '@/contexts/ClassesContext';
+import { Modal, Alert } from 'react-native';
 
 // Gradient color schemes for cards (black + gentle accent)
 const CARD_GRADIENTS = [
@@ -50,17 +53,19 @@ const SWIPE_THRESHOLD = 80;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export const UpcomingWorkoutsStack = () => {
-    const { user } = useAuth();
+    const { user, updateUser } = useAuth();
+    const { cancelBooking } = useClasses();
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+    const [modalVisible, setModalVisible] = useState(false);
 
     const fetchBookings = useCallback(async () => {
         if (!user) return;
 
         try {
-            const now = new global.Date().toISOString();
-
+            // Use server-side NOW() for timezone consistency
             const { data, error } = await supabase
                 .from('class_bookings')
                 .select(`
@@ -77,15 +82,21 @@ export const UpcomingWorkoutsStack = () => {
           )
         `)
                 .eq('user_id', user.id)
-                .eq('status', 'confirmed')
-                .gt('classes.class_date', now)
+                .in('status', ['confirmed', 'completed', 'no_show', 'late']) // Include all active statuses
                 .order('class_date', { foreignTable: 'classes', ascending: true });
 
             if (error) throw error;
 
+            // Filter for future classes using local time
+            const now = new Date();
+            const futureBookings = (data || []).filter((booking: any) => {
+                const classDate = new Date(booking.classes.class_date);
+                return classDate > now;
+            });
+
             // Fetch enrollment data for each class
             const bookingsWithEnrollment = await Promise.all(
-                (data || []).map(async (booking: any) => {
+                futureBookings.map(async (booking: any) => {
                     const { data: enrollmentData } = await supabase
                         .from('class_bookings')
                         .select('profiles:user_id(avatar_url)')
@@ -105,7 +116,14 @@ export const UpcomingWorkoutsStack = () => {
                 })
             );
 
-            setBookings(bookingsWithEnrollment);
+            // Sort by class_date (closest date first)
+            const sortedBookings = bookingsWithEnrollment.sort((a, b) => {
+                const dateA = new Date(a.classes.class_date).getTime();
+                const dateB = new Date(b.classes.class_date).getTime();
+                return dateA - dateB;
+            });
+
+            setBookings(sortedBookings);
         } catch (err) {
             console.error('Error fetching bookings:', err);
         } finally {
@@ -115,6 +133,10 @@ export const UpcomingWorkoutsStack = () => {
 
     useEffect(() => {
         fetchBookings();
+
+        // Refresh every minute to auto-remove cards when class time arrives
+        const interval = setInterval(fetchBookings, 60000);
+        return () => clearInterval(interval);
     }, [fetchBookings]);
 
     const handleNextCard = useCallback(() => {
@@ -144,46 +166,171 @@ export const UpcomingWorkoutsStack = () => {
         );
     }
 
+    const handleCardPress = (booking: Booking) => {
+        setSelectedBooking(booking);
+        setModalVisible(true);
+    };
+
+    const handleCancelPress = (booking: Booking) => {
+        if (!booking) return;
+
+        // Check if class is within 6 hours (Late Cancel)
+        const classDate = new Date(booking.classes.class_date); // Note: assuming class_date includes time or logic needs both
+        // Existing logic in classes.tsx uses item.date + item.time, but here we have ISO string
+        const now = new Date();
+        const diffHours = (classDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+        const canCancel = diffHours >= 6;
+        const lateCancellations = user?.lateCancellations || 0;
+
+        // Logic copied/adapted from classes.tsx
+        if (canCancel) {
+            Alert.alert('ביטול שיעור', 'מבטלים בוודאות?', [
+                { text: 'לא', style: 'cancel' },
+                {
+                    text: 'כן, בטל',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await cancelBooking(booking.id);
+                            setModalVisible(false);
+                            fetchBookings(); // Refresh local list
+                            Alert.alert('בוטל', 'השיעור בוטל בהצלחה.');
+                        } catch (e) {
+                            Alert.alert('שגיאה', 'אירעה שגיאה בביטול השיעור');
+                        }
+                    }
+                }
+            ]);
+        } else {
+            // Late Cancel
+            Alert.alert(
+                'ביטול מאוחר',
+                user?.ticket ? 'האימון ינוקב מהכרטיסייה.' : `לא ניתן לבטל פחות מ-6 שעות לפני. ביטול יגרור חיוב. (${lateCancellations}/3)`,
+                [
+                    { text: 'ביטול', style: 'cancel' },
+                    {
+                        text: 'אשר ביטול',
+                        style: 'destructive',
+                        onPress: async () => {
+                            try {
+                                const newLate = lateCancellations + 1;
+                                // We rely on context's cancelBooking or custom logic? 
+                                // classes.tsx calls cancelBooking AND updateUser manually for late cancels if not ticket.
+                                // But context's cancelBooking might handle just the DB delete.
+                                // We should replicate the logic fully if we want consistent behavior.
+
+                                await cancelBooking(booking.id);
+
+                                if (!user?.ticket) {
+                                    if (newLate >= 3) {
+                                        const blockEnd = new Date();
+                                        blockEnd.setDate(blockEnd.getDate() + 3);
+                                        await updateUser({ lateCancellations: newLate, blockEndDate: blockEnd.toISOString() });
+                                        Alert.alert('חשבון חסום', 'ביטלת 3 שיעורים באיחור. החשבון שלך חסום ל-3 ימים.');
+                                    } else {
+                                        await updateUser({ lateCancellations: newLate });
+                                        Alert.alert('בוטל', `השיעור בוטל. חשבונך יחויב. ביטולים מאוחרים: ${newLate}/3`);
+                                    }
+                                } else {
+                                    Alert.alert('בוטל', 'השיעור בוטל. האימון נוקב מהכרטיסייה שלך.');
+                                }
+
+                                setModalVisible(false);
+                                fetchBookings();
+                            } catch (e) {
+                                Alert.alert('שגיאה', 'אירעה שגיאה בביטול השיעור');
+                            }
+                        }
+                    }
+                ]
+            );
+        }
+    };
+
+    const handleSwitchPress = () => {
+        // Simple alert for now as navigation logic is complex or needs tab switch
+        Alert.alert('החלף שיעור', 'אנא בטל את השיעור הנוכחי והירשם לשיעור אחר.');
+    };
+
     return (
-        <View className="relative h-48 w-full items-center justify-center px-4">
-            {bookings.map((booking, idx) => {
-                // Calculate relative position from current index (circular)
-                let relativeIndex = idx - currentIndex;
-                if (relativeIndex < 0) relativeIndex += bookings.length;
+        <>
+            <View className="relative h-52 w-full items-center justify-center px-4">
+                {bookings.map((booking, idx) => {
+                    // Calculate relative position from current index (circular)
+                    let relativeIndex = idx - currentIndex;
+                    if (relativeIndex < 0) relativeIndex += bookings.length;
 
-                // Only render top 3 visible cards
-                const isVisible = relativeIndex < 3;
-                if (!isVisible && bookings.length > 3) return null;
+                    // Only render top 3 visible cards
+                    const isVisible = relativeIndex < 3;
+                    if (!isVisible && bookings.length > 3) return null;
 
-                return (
-                    <Card
-                        key={booking.id}
-                        booking={booking}
-                        index={relativeIndex}
-                        total={bookings.length}
-                        onSwipeLeft={handleNextCard}
-                        onSwipeRight={handlePrevCard}
-                        isFirst={relativeIndex === 0}
-                        cardIndex={idx}
-                    />
-                );
-            })}
-
-            {/* Page indicators */}
-            {bookings.length > 1 && (
-                <View className="absolute bottom-0 flex-row gap-1.5 items-center">
-                    {bookings.map((_, idx) => (
-                        <View
-                            key={idx}
-                            className={cn(
-                                "w-2 h-2 rounded-full",
-                                idx === currentIndex ? "bg-primary" : "bg-gray-300"
-                            )}
+                    return (
+                        <Card
+                            key={booking.id}
+                            booking={booking}
+                            index={relativeIndex}
+                            total={bookings.length}
+                            onSwipeLeft={handleNextCard}
+                            onSwipeRight={handlePrevCard}
+                            isFirst={relativeIndex === 0}
+                            cardIndex={idx}
+                            onPress={() => handleCardPress(booking)}
                         />
-                    ))}
+                    );
+                })}
+
+                {/* Page indicators */}
+                {bookings.length > 1 && (
+                    <View className="absolute bottom-0 flex-row gap-2 items-center">
+                        {bookings.map((_, idx) => (
+                            <View
+                                key={idx}
+                                className={cn(
+                                    "w-5 h-5 rounded-full items-center justify-center",
+                                    idx === currentIndex ? "bg-primary" : "bg-gray-200"
+                                )}
+                            >
+                                <Text className={cn(
+                                    "text-[10px] font-bold",
+                                    idx === currentIndex ? "text-white" : "text-gray-500"
+                                )}>
+                                    {idx + 1}
+                                </Text>
+                            </View>
+                        ))}
+                    </View>
+                )}
+            </View>
+
+            {/* Registration Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={modalVisible}
+                onRequestClose={() => setModalVisible(false)}
+            >
+                <View className="flex-1 justify-end bg-black/50">
+                    <View className="bg-white rounded-t-3xl h-[85%]">
+                        {selectedBooking && (
+                            <ClassRegistrationCard
+                                title={selectedBooking.classes.name_hebrew}
+                                date={selectedBooking.classes.class_date.split('T')[0]}
+                                time={new Date(selectedBooking.classes.class_date).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+                                instructor={selectedBooking.classes.coach_name}
+                                enrolled={selectedBooking.enrolled || 0}
+                                capacity={selectedBooking.capacity || 8}
+                                enrolledAvatars={selectedBooking.enrolledAvatars}
+                                isBooked={true}
+                                onCancel={() => setModalVisible(false)} // Close button
+                                onCancelClass={() => handleCancelPress(selectedBooking)} // Actual Cancel action
+                                onSwitch={handleSwitchPress}
+                                className="h-full shadow-none border-0"
+                            />
+                        )}
+                    </View>
                 </View>
-            )}
-        </View>
+            </Modal>
+        </>
     );
 };
 
@@ -194,6 +341,7 @@ const Card = ({
     onSwipeRight,
     isFirst,
     cardIndex,
+    onPress,
 }: {
     booking: Booking;
     index: number;
@@ -202,15 +350,48 @@ const Card = ({
     onSwipeRight: () => void;
     isFirst: boolean;
     cardIndex: number;
+    onPress: () => void;
 }) => {
-    // Get gradient colors based on card position
-    const gradientColors = CARD_GRADIENTS[cardIndex % CARD_GRADIENTS.length] as [string, string];
+    // Shared transition values
     const translateX = useSharedValue(0);
 
-    // Format date
+    // Date Logic
     const dateObj = new Date(booking.classes.class_date);
-    const dayStr = dateObj.toLocaleDateString('he-IL', { weekday: 'long' });
+    const dayStr = dateObj.toLocaleDateString('he-IL', { weekday: 'long' }).replace('יום ', '');
     const timeStr = dateObj.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+
+    // Calculate days difference for dynamic styling
+    const now = new Date();
+    dateObj.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffTime = dateObj.getTime() - today.getTime();
+    const daysDiff = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    // Dynamic Label
+    let dateLabel = dayStr;
+    let isSpecialDate = false;
+    if (daysDiff === 0) {
+        dateLabel = "היום!";
+        isSpecialDate = true;
+    } else if (daysDiff === 1) {
+        dateLabel = "מחר";
+        isSpecialDate = true;
+    }
+
+    // Dynamic Gradient Logic
+    // Today: Black to Brand Pink (40% Black, 60% Pink coverage)
+    // Others: Black / Dark Gray
+    const isToday = daysDiff === 0;
+
+    const gradientColors = isToday
+        ? ['#000000', '#D81B60'] as const
+        : ['#18181b', '#000000'] as const;
+
+    const gradientLocations = isToday
+        ? [0.4, 1] as const
+        : [0, 1] as const;
+
 
     const enrolled = booking.enrolled || 0;
     const capacity = booking.capacity || 8;
@@ -243,6 +424,16 @@ const Card = ({
             }
         });
 
+    // Create a Tap gesture
+    const tap = Gesture.Tap()
+        .enabled(isFirst) // Only clickable if it's the top card
+        .onEnd(() => {
+            runOnJS(onPress)();
+        });
+
+    // Combine gestures: Race allows both but pan wins if movement detected
+    const composedGesture = Gesture.Race(gesture, tap);
+
     const animatedStyle = useAnimatedStyle(() => {
         const targetScale = 1 - index * SCALE_FACTOR;
         const targetTop = index * -CARD_OFFSET;
@@ -260,13 +451,14 @@ const Card = ({
     });
 
     return (
-        <GestureDetector gesture={gesture}>
+        <GestureDetector gesture={composedGesture}>
             <Animated.View
                 className="absolute w-full h-44 rounded-3xl overflow-hidden shadow-xl shadow-black/20"
                 style={[animatedStyle]}
             >
                 <LinearGradient
                     colors={gradientColors}
+                    locations={gradientLocations}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     className="flex-1 p-5 flex-col justify-between"
@@ -277,19 +469,26 @@ const Card = ({
                             <Text className="text-xl font-black text-right text-white">
                                 {booking.classes.name_hebrew}
                             </Text>
-                            <Text className="text-gray-400 text-xs mt-1">{booking.classes.coach_name}</Text>
+                            <View className="flex-row items-center gap-1 mt-1 justify-end">
+                                <Text className="text-white text-xs">{booking.classes.coach_name}</Text>
+                                <Image
+                                    source={require('@/assets/images/coach.webp')}
+                                    style={{ width: 24, height: 24, tintColor: '#FFFFFF' }}
+                                    resizeMode="contain"
+                                />
+                            </View>
                         </View>
-                        <View className="bg-white/10 px-2.5 py-1 rounded">
-                            <Text className="text-base font-bold text-white">{timeStr}</Text>
+                        <View className="items-center">
+                            <View className="bg-white/10 px-2.5 py-1 rounded mb-1">
+                                <Text className="text-base font-bold text-white">{timeStr}</Text>
+                            </View>
+                            <Text className={cn(
+                                "text-base font-bold",
+                                isSpecialDate ? "text-white text-2xl" : "text-gray-300"
+                            )}>
+                                {dateLabel}
+                            </Text>
                         </View>
-                    </View>
-
-                    {/* Day Row */}
-                    <View className="flex-row-reverse items-center gap-2 mt-1">
-                        <Calendar size={14} color="#9CA3AF" />
-                        <Text className="text-gray-300 font-medium text-xs">
-                            {dayStr}
-                        </Text>
                     </View>
 
                     {/* Attendance Section */}
@@ -297,7 +496,11 @@ const Card = ({
                         {/* Capacity Count + Avatar Group */}
                         <View className="flex-row-reverse items-center justify-between mb-2">
                             <View className="flex-row-reverse items-center gap-2">
-                                <Users size={14} color="#9CA3AF" />
+                                <Image
+                                    source={require('@/assets/images/group-session.webp')}
+                                    style={{ width: 24, height: 24, tintColor: '#FFFFFF' }}
+                                    resizeMode="contain"
+                                />
                                 <Text className="text-sm font-bold text-white">
                                     {enrolled}/{capacity}
                                 </Text>

@@ -39,7 +39,7 @@ export const RetentionSlide = () => {
             // 1. Get active subscriptions/users
             const { data: subs, error: subsError } = await supabase
                 .from('user_subscriptions')
-                .select('user_id, profiles!inner(id, name, full_name, phone)')
+                .select('user_id, profiles!inner(id, name, full_name, phone_number)')
                 .eq('is_active', true);
 
             if (subsError) throw subsError;
@@ -79,7 +79,7 @@ export const RetentionSlide = () => {
                 // @ts-ignore
                 const userName = sub.profiles?.full_name || sub.profiles?.name || 'User';
                 // @ts-ignore
-                const userPhone = sub.profiles?.phone;
+                const userPhone = sub.profiles?.phone_number;
 
                 const lastDateStr = userLastLog[userId];
 
@@ -181,7 +181,7 @@ export const RetentionSlide = () => {
     };
 
     return (
-        <Card className="h-[340px] border-none" style={{ backgroundColor: 'white', borderWidth: 0 }}>
+        <Card className="h-[340px] border-none rounded-[40px]" style={{ backgroundColor: 'white', borderWidth: 0 }}>
             <CardContent className="h-full flex-1 p-4">
                 {/* Tabs & Select All Header */}
                 <View className="flex-row-reverse justify-between items-center border-b border-gray-100 mb-2 pb-2">

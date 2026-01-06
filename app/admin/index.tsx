@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Users, AlertCircle, DollarSign, Pause, LogOut, ShoppingCart } from 'lucide-react-native';
@@ -146,30 +146,34 @@ export default function AdminDashboard() {
     {
       label: 'מנויים פעילים',
       value: activeSubscriptions.toString(),
-      icon: Users,
+      icon: null, // Custom image
+      customIcon: require('@/assets/images/active-users.webp'),
       color: Colors.primary,
       route: '/admin/clients/active',
     },
     {
       label: 'דורשים טיפול',
       value: needsAttention.toString(),
-      icon: AlertCircle,
+      icon: null, // Custom image
+      customIcon: require('@/assets/images/octagon-exclamation.webp'),
       color: '#f59e0b',
       route: '/admin/clients/needs-attention',
       borderColor: trend === 'up' ? Colors.error : trend === 'down' ? '#22c55e' : undefined,
     },
     {
       label: 'חייבים',
-      value: (debtsData?.count || 0).toString(),
-      subtitle: debtsData?.totalDebt ? `₪${debtsData.totalDebt.toFixed(0)}` : undefined,
-      icon: DollarSign,
+      value: debtsData?.totalDebt ? `₪${debtsData.totalDebt.toFixed(0)}` : '₪0',
+      subtitle: (debtsData?.count || 0) > 0 ? `${debtsData?.count} לקוחות` : undefined,
+      icon: null, // Custom image
+      customIcon: require('@/assets/images/debt.webp'),
       color: '#ef4444',
       route: '/admin/clients/debts',
     },
     {
       label: 'הקפאות',
       value: frozenPlans.toString(),
-      icon: Pause,
+      icon: null, // Custom image
+      customIcon: require('@/assets/images/snowflake.webp'),
       color: '#06b6d4',
       route: '/admin/clients/frozen',
     },
@@ -206,8 +210,12 @@ export default function AdminDashboard() {
               onPress={() => router.push(card.route as any)}
               activeOpacity={0.7}
             >
-              <View style={[styles.cardIcon, { backgroundColor: card.color + '20' }]}>
-                <card.icon size={24} color={card.color} />
+              <View style={styles.cardIcon}>
+                {card.customIcon ? (
+                  <Image source={card.customIcon} style={{ width: 48, height: 48, tintColor: card.color }} resizeMode="contain" />
+                ) : (
+                  <card.icon size={24} color={card.color} />
+                )}
               </View>
               <Text style={styles.cardValue}>{card.value}</Text>
               {card.subtitle && (
@@ -218,61 +226,7 @@ export default function AdminDashboard() {
           ))}
         </View>
 
-        {/* Today's Classes Section */}
-        {todaysClasses.length > 0 && (
-          <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>שיעורים היום</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 20 }}
-            >
-              {todaysClasses.map((classItem) => {
-                const percentage = Math.min(100, (classItem.enrolled / classItem.capacity) * 100);
-                const progressColor = getProgressColor(percentage);
 
-                return (
-                  <TouchableOpacity
-                    key={classItem.id}
-                    style={styles.classCard}
-                    onPress={() => handleClassPress(classItem)}
-                    activeOpacity={0.7}
-                  >
-                    {/* Top: Info */}
-                    <View style={{ alignItems: 'flex-end', width: '100%' }}>
-                      <Text style={styles.className} numberOfLines={2}>{classItem.title}</Text>
-                      <View style={styles.classTimeRow}>
-                        <Clock size={12} color={Colors.textSecondary} />
-                        <Text style={styles.classTime}>{classItem.time}</Text>
-                      </View>
-                    </View>
-
-                    {/* Bottom: Stats */}
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: 12 }}>
-                      {/* Stats Text */}
-                      <Text style={styles.capacityText}>
-                        {classItem.enrolled}/{classItem.capacity}
-                      </Text>
-
-                      {/* Vertical Progress Bar */}
-                      <View style={styles.progressBarContainer}>
-                        <View
-                          style={[
-                            styles.progressBarFill,
-                            {
-                              height: `${percentage}%`,
-                              backgroundColor: progressColor
-                            }
-                          ]}
-                        />
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>

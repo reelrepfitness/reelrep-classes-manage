@@ -11,10 +11,14 @@ import Colors from '@/constants/colors'; // נשמור את זה בשביל צב
 
 // --- קומפוננטות עזר פנימיות ---
 
-const StatBox = ({ label, value, icon: Icon, color }: any) => (
+const StatBox = ({ label, value, icon: Icon, image, color }: any) => (
   <View className="flex-1 items-center bg-surface p-4 rounded-2xl mx-1 active:opacity-90">
     <View className="p-3 rounded-full mb-2 bg-white shadow-sm">
-      <Icon size={24} color={color} />
+      {image ? (
+        <Image source={image} style={{ width: 24, height: 24 }} resizeMode="contain" />
+      ) : (
+        <Icon size={24} color={color} />
+      )}
     </View>
     <Text className="text-2xl font-bold text-text">{value}</Text>
     <Text className="text-xs text-muted mt-1 text-center font-medium">{label}</Text>
@@ -122,7 +126,7 @@ export default function ProfileScreen() {
             <StatBox
               label={hebrew.home.achievements}
               value={user?.achievements?.length.toString() || '0'}
-              icon={Trophy}
+              image={require('@/assets/images/trophy.webp')}
               color="#eab308" // זהב
             />
           </View>

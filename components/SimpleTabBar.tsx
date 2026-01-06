@@ -158,11 +158,25 @@ export const SimpleTabBar: React.FC<TabBarProps> = ({ state, descriptors, naviga
                             onPress={onPress}
                             style={styles.tab}
                         >
-                            <IconComponent
-                                size={28}
-                                color={isFocused ? activeColor : inactiveColor}
-                                strokeWidth={isFocused ? 2.5 : 2}
-                            />
+                            {route.name === 'index' ? (
+                                <Image
+                                    source={require('../assets/images/home-screen.webp')}
+                                    style={{ width: 28, height: 28, tintColor: isFocused ? activeColor : inactiveColor }}
+                                    contentFit="contain"
+                                />
+                            ) : route.name === 'profile' ? (
+                                <Image
+                                    source={require('../assets/images/profile-screen.webp')}
+                                    style={{ width: 28, height: 28, tintColor: isFocused ? activeColor : inactiveColor }}
+                                    contentFit="contain"
+                                />
+                            ) : (
+                                <IconComponent
+                                    size={28}
+                                    color={isFocused ? activeColor : inactiveColor}
+                                    strokeWidth={isFocused ? 2.5 : 2}
+                                />
+                            )}
                         </TouchableOpacity>
                     );
                 })}

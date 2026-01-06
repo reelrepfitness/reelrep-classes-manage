@@ -79,7 +79,7 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
       const { data, error } = await supabase
         .from('class_bookings')
         .select('class_id, status, classes:class_id(schedule_id, class_date), profiles:user_id(avatar_url)')
-        .eq('status', 'confirmed');
+        .in('status', ['confirmed', 'completed', 'no_show']);
 
       if (error) {
         console.error('Error fetching all bookings:', error);
@@ -210,9 +210,13 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
       throw new Error('מיצית את מכסת השיעורים החודשית');
     }
 
-    const existingBooking = bookings.find(
-      b => b.classId === classId && b.status === 'confirmed'
-    );
+    // Check if already booked using schedule and date (consistent with isClassBooked)
+    const existingBooking = bookings.find((b: any) => {
+      const matchesSchedule = b.scheduleId === classItem.scheduleId;
+      const bookingDate = b.classDate ? formatDateKey(new Date(b.classDate)) : null;
+      const matchesDate = bookingDate === classItem.date;
+      return matchesSchedule && matchesDate && b.status === 'confirmed';
+    });
 
     if (!isAdmin && existingBooking) {
       throw new Error('כבר נרשמת לשיעור זה');
@@ -384,13 +388,27 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
     allBookingsQuery.refetch();
   }, [allBookingsQuery]);
 
-  const markAttendance = useCallback(async (bookingId: string, status: 'attended' | 'no_show') => {
+  const markAttendance = useCallback(async (bookingId: string, status: 'attended' | 'no_show' | 'late' | 'reset') => {
+    let updateData: { status: string; attended_at: string | null };
+
+    switch (status) {
+      case 'attended':
+        updateData = { status: 'completed', attended_at: new Date().toISOString() };
+        break;
+      case 'no_show':
+        updateData = { status: 'no_show', attended_at: null };
+        break;
+      case 'late':
+        updateData = { status: 'late', attended_at: new Date().toISOString() };
+        break;
+      case 'reset':
+        updateData = { status: 'confirmed', attended_at: null };
+        break;
+    }
+
     const { error } = await supabase
       .from('class_bookings')
-      .update({
-        status: status === 'attended' ? 'completed' : 'no_show',
-        attended_at: status === 'attended' ? new Date().toISOString() : null
-      })
+      .update(updateData)
       .eq('id', bookingId);
 
     if (error) throw error;
@@ -500,7 +518,7 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
         .from('class_bookings')
         .select('*, profiles:user_id(id, name, email, avatar_url, full_name)')
         .eq('class_id', classInstance.id)
-        .in('status', ['confirmed', 'completed', 'no_show', 'waiting_list']);
+        .in('status', ['confirmed', 'completed', 'no_show', 'late', 'waiting_list']);
 
       if (bookingsError) {
         console.error('Error fetching class bookings:', bookingsError);

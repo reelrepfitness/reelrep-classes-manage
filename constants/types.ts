@@ -10,6 +10,7 @@ export interface User {
   email: string;
   role: UserRole;
   profileImage?: string;
+  gender?: 'male' | 'female';
   subscription?: UserSubscription;
   ticket?: UserTicket;
   achievements?: Achievement[];

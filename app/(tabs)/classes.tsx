@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert, Image, Dimensions, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert, Image, Dimensions, Modal, PanResponder } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Calendar as CalendarIcon, Users, Trophy, Lock, Check, X, Clock, ChevronLeft, MapPin } from 'lucide-react-native';
+import { Calendar as CalendarIcon, Users, Trophy, Lock, Check, X, Clock, ChevronLeft, ChevronRight, MapPin } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useClasses } from '@/contexts/ClassesContext';
 import { useAchievements } from '@/contexts/AchievementsContext';
@@ -28,6 +28,31 @@ function getNextThursdayNoon(): Date {
   nextThursday.setDate(now.getDate() + daysUntilThursday);
   nextThursday.setHours(12, 0, 0, 0);
   return nextThursday;
+}
+
+function getNextWednesdayNoon(): Date {
+  const now = new Date();
+  const currentDay = now.getDay();
+  const currentHour = now.getHours();
+  let daysUntilWednesday = (3 - currentDay + 7) % 7;
+  if (currentDay === 3 && currentHour >= 12) daysUntilWednesday = 7;
+  else if (currentDay === 3 && currentHour < 12) daysUntilWednesday = 0;
+  const nextWednesday = new Date(now);
+  nextWednesday.setDate(now.getDate() + daysUntilWednesday);
+  nextWednesday.setHours(12, 0, 0, 0);
+  return nextWednesday;
+}
+
+function getUnlockTime(subscriptionType?: string): Date {
+  // reel.ONE and reel.ELITE are 'unlimited' type - get early Wednesday unlock
+  const isPremiumUser = subscriptionType === 'unlimited';
+  return isPremiumUser ? getNextWednesdayNoon() : getNextThursdayNoon();
+}
+
+function isNextWeekUnlocked(subscriptionType?: string): boolean {
+  const now = new Date();
+  const unlockTime = getUnlockTime(subscriptionType);
+  return now >= unlockTime;
 }
 
 function getWeekRange(date: Date): { start: Date; end: Date } {
@@ -87,21 +112,26 @@ export default function ClassesScreen() {
 
   const [modalVisible, setModalVisible] = useState(false);
   const [countdown, setCountdown] = useState<string>('');
+  const [weekOffset, setWeekOffset] = useState(0); // 0 = current week, 1 = next week
 
   // --- Effects & Logic ---
+
+  // Subscription-aware unlock time countdown
+  const subscriptionType = user?.subscription?.type;
+  const isWeekLocked = weekOffset === 1 && !isNextWeekUnlocked(subscriptionType);
 
   useEffect(() => {
     const updateCountdown = () => {
       const now = new Date();
-      const nextThursday = getNextThursdayNoon();
-      const diff = nextThursday.getTime() - now.getTime();
+      const unlockTime = getUnlockTime(subscriptionType);
+      const diff = unlockTime.getTime() - now.getTime();
       if (diff > 0) setCountdown(formatCountdown(diff));
       else setCountdown('');
     };
     updateCountdown();
     const interval = setInterval(updateCountdown, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [subscriptionType]);
 
   const handleBookClass = async (classId: string) => {
     console.log('[Classes] Opening modal for classId:', classId);
@@ -258,34 +288,34 @@ export default function ClassesScreen() {
     return groups;
   }, {} as Record<string, typeof classes>);
 
-  const generateCalendarDays = () => {
+  // Generate static Sun-Sat week based on weekOffset
+  const generateWeekDays = (offset: number) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const days = [];
-    const { start: currentWeekStart } = getWeekRange(today);
-    const nextWeekStart = new Date(currentWeekStart);
-    nextWeekStart.setDate(currentWeekStart.getDate() + 7);
-    nextWeekStart.setHours(0, 0, 0, 0);
 
-    for (let offset = 0; days.length < 7; offset++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + offset);
-      const dayOfWeek = date.getDay();
-      if (dayOfWeek === 6) continue; // Skip Saturday if needed
-      const isFutureWeek = date >= nextWeekStart;
-      const isLocked = isFutureWeek && !isRegistrationOpen();
+    // Get Sunday of the current week
+    const currentSunday = new Date(today);
+    currentSunday.setDate(today.getDate() - today.getDay());
+
+    // Apply week offset (0 = current week, 1 = next week)
+    const targetSunday = new Date(currentSunday);
+    targetSunday.setDate(currentSunday.getDate() + (offset * 7));
+
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(targetSunday);
+      date.setDate(targetSunday.getDate() + i);
       days.push({
-        dayOfWeek,
+        dayOfWeek: i,
         date: date.toISOString(),
         dateKey: formatDateKey(date),
         dayNumber: date.getDate(),
-        isLocked,
       });
     }
     return days;
   };
 
-  const calendarDays = generateCalendarDays();
+  const calendarDays = generateWeekDays(weekOffset);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -315,53 +345,77 @@ export default function ClassesScreen() {
   return (
     <View className="flex-1 bg-background">
 
-      {/* 1. Header Section (Clean, No Notch) */}
+      {/* 1. Header Section */}
       <View style={{ paddingTop: insets.top }} className="bg-background pb-2 rounded-b-[32px] border-b border-gray-100 shadow-sm z-10">
-        <View className="px-5 pt-2 mb-4 flex-row-reverse justify-between items-center">
+        <View className="px-5 pt-2 mb-3 flex-row-reverse justify-center items-center">
           <Text className="text-3xl font-extrabold text-[#09090B]">לוח שיעורים</Text>
-          {countdown ? (
-            <View className="bg-orange-100 px-3 py-1 rounded-full border border-orange-200">
-              <Text className="text-orange-700 text-xs font-bold">{countdown}</Text>
-            </View>
-          ) : null}
         </View>
 
-        {/* Calendar Strip */}
-        <View className="flex-row-reverse justify-between px-4 pb-2">
-          {calendarDays.map((day, index) => {
-            const isSelected = selectedDate === day.dateKey;
-            const isToday = day.dateKey === formatDateKey(today);
+        {/* Calendar Strip with Arrows and Swipe */}
+        <View
+          className="relative"
+          {...PanResponder.create({
+            onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > 20,
+            onPanResponderRelease: (_, gestureState) => {
+              if (gestureState.dx < -50 && weekOffset === 0) {
+                setWeekOffset(1);
+              } else if (gestureState.dx > 50 && weekOffset === 1) {
+                setWeekOffset(0);
+                setSelectedDate(formatDateKey(today));
+              }
+            },
+          }).panHandlers}
+        >
+          <View className="flex-row items-center justify-between px-2 pb-2">
+            {/* Left Arrow (Next Week) */}
+            <TouchableOpacity
+              onPress={() => setWeekOffset(1)}
+              disabled={weekOffset === 1}
+              className={cn("p-2 rounded-full", weekOffset === 1 ? "opacity-30" : "bg-gray-100")}
+            >
+              <ChevronLeft size={20} color="#09090B" />
+            </TouchableOpacity>
 
-            return (
-              <TouchableOpacity
-                key={index}
-                onPress={() => {
-                  if (day.isLocked) { Alert.alert('מוקדם מדי', NEXT_WEEK_LOCK_MESSAGE); return; }
-                  setSelectedDate(day.dateKey);
-                }}
-                disabled={false}
-                className={cn(
-                  "items-center justify-center w-[13%] py-3 rounded-2xl transition-all",
-                  isSelected ? "bg-[#09090B] shadow-md shadow-gray-400" : "bg-transparent",
-                  isToday && !isSelected ? "border border-gray-200 bg-gray-50" : "",
-                  day.isLocked && "opacity-40"
-                )}
-              >
-                <Text className={cn("text-xs font-bold mb-1", isSelected ? "text-gray-300" : "text-gray-400")}>
-                  {DAYS_OF_WEEK[day.dayOfWeek]}
-                </Text>
-                <Text className={cn("text-lg font-extrabold", isSelected ? "text-white" : "text-[#09090B]")}>
-                  {day.dayNumber}
-                </Text>
-                {day.isLocked && (
-                  <View className="absolute top-1 right-1">
-                    <Lock size={8} color={isSelected ? "white" : "black"} />
-                  </View>
-                )}
-                {/* Dot indicator for classes? Optional */}
-              </TouchableOpacity>
-            );
-          })}
+            {/* Days Strip */}
+            <View className={cn("flex-1 flex-row-reverse justify-between px-2", isWeekLocked && "opacity-40")}>
+              {calendarDays.map((day, index) => {
+                const isSelected = selectedDate === day.dateKey;
+                const isToday = day.dateKey === formatDateKey(today);
+
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    onPress={() => {
+                      if (isWeekLocked) { Alert.alert('מוקדם מדי', NEXT_WEEK_LOCK_MESSAGE); return; }
+                      setSelectedDate(day.dateKey);
+                    }}
+                    disabled={isWeekLocked}
+                    className={cn(
+                      "items-center justify-center w-[12%] py-2.5 rounded-xl transition-all",
+                      isSelected && !isWeekLocked ? "bg-[#09090B] shadow-md shadow-gray-400" : "bg-transparent",
+                      isToday && !isSelected ? "border border-gray-200 bg-gray-50" : ""
+                    )}
+                  >
+                    <Text className={cn("text-[10px] font-bold mb-0.5", isSelected && !isWeekLocked ? "text-gray-300" : "text-gray-400")}>
+                      {DAYS_OF_WEEK[day.dayOfWeek]}
+                    </Text>
+                    <Text className={cn("text-base font-extrabold", isSelected && !isWeekLocked ? "text-white" : "text-[#09090B]")}>
+                      {day.dayNumber}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Right Arrow (Previous - Current Week) */}
+            <TouchableOpacity
+              onPress={() => { setWeekOffset(0); setSelectedDate(formatDateKey(today)); }}
+              disabled={weekOffset === 0}
+              className={cn("p-2 rounded-full", weekOffset === 0 ? "opacity-30" : "bg-gray-100")}
+            >
+              <ChevronRight size={20} color="#09090B" />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -415,7 +469,10 @@ export default function ClassesScreen() {
                         <Text className="text-gray-500 font-medium">{classItem.time}</Text>
                       </View>
                       <View className="w-[1px] h-3 bg-gray-300" />
-                      <Text className="text-gray-500 font-medium">מאמן: {classItem.instructor}</Text>
+                      <View className="flex-row-reverse items-center gap-1">
+                        <Image source={require('@/assets/images/coach.webp')} style={{ width: 24, height: 24, tintColor: '#6B7280' }} resizeMode="contain" />
+                        <Text className="text-gray-500 font-medium">{classItem.instructor}</Text>
+                      </View>
                     </View>
                   </View>
 
@@ -433,7 +490,7 @@ export default function ClassesScreen() {
                 {/* Progress Bar */}
                 <View className="mt-4">
                   <View className="flex-row-reverse justify-between mb-1">
-                    <Text className="text-[10px] text-gray-400 font-bold">תפוסה</Text>
+                    <Text className="text-[10px] text-gray-400 font-bold">רשומים</Text>
                     <Text className="text-[10px] text-gray-400 font-bold">{classItem.enrolled}/{classItem.capacity}</Text>
                   </View>
                   <View className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden mb-3">
@@ -461,7 +518,10 @@ export default function ClassesScreen() {
                       onPress={(e) => { e.stopPropagation(); handleSwitchClass(classItem); }}
                       className="flex-1 bg-gray-50 py-2 rounded-lg items-center border border-gray-200"
                     >
-                      <Text className="text-xs font-bold text-gray-700">החלפה</Text>
+                      <View className="flex-row items-center justify-center gap-1.5">
+                        <Text className="text-xs font-bold text-gray-700">החלפה</Text>
+                        <Image source={require('@/assets/images/replace.webp')} style={{ width: 14, height: 14, tintColor: '#374151' }} resizeMode="contain" />
+                      </View>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={(e) => { e.stopPropagation(); handleCancelClass(classItem); }}
@@ -470,9 +530,20 @@ export default function ClassesScreen() {
                         !canCancelClass(classItem) ? "bg-red-50 border-red-200" : "bg-white border-gray-200"
                       )}
                     >
-                      <Text className={cn("text-xs font-bold", !canCancelClass(classItem) ? "text-red-600" : "text-gray-700")}>
-                        {canCancelClass(classItem) ? 'ביטול' : 'ביטול מאוחר'}
-                      </Text>
+                      <View className="flex-row items-center justify-center gap-1.5">
+                        <Text className={cn("text-xs font-bold", !canCancelClass(classItem) ? "text-red-600" : "text-gray-700")}>
+                          {canCancelClass(classItem) ? 'ביטול' : 'ביטול מאוחר'}
+                        </Text>
+                        <Image
+                          source={require('@/assets/images/cancel.webp')}
+                          style={{
+                            width: 14,
+                            height: 14,
+                            tintColor: !canCancelClass(classItem) ? '#dc2626' : '#374151'
+                          }}
+                          resizeMode="contain"
+                        />
+                      </View>
                     </TouchableOpacity>
                   </View>
                 )}

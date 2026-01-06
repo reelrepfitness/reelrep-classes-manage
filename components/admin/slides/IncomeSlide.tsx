@@ -57,7 +57,7 @@ export function IncomeSlide() {
 
             // Get current month and 3 months back
             const months = [];
-            for (let i = 3; i >= 0; i--) {
+            for (let i = 2; i >= 0; i--) {
                 const date = new Date(currentYear, currentMonth - i, 1);
                 months.push({
                     month: date.toLocaleDateString('he-IL', { month: 'short' }),
@@ -138,7 +138,7 @@ export function IncomeSlide() {
 
     return (
         <>
-            <Card className="h-[340px] border-none p-0 overflow-hidden" style={{ borderWidth: 0 }}>
+            <Card className="h-[340px] border-none p-0 overflow-hidden rounded-[40px]" style={{ borderWidth: 0 }}>
                 <LinearGradient
                     colors={['#18181b', '#09090b']}
                     style={{ flex: 1, padding: 16 }}
@@ -175,7 +175,7 @@ export function IncomeSlide() {
                                 <BarChart
                                     data={chartData}
                                     config={{
-                                        height: 180,
+                                        height: 210,
                                         showLabels: true,
                                         animated: true,
                                         duration: 800,
@@ -184,9 +184,7 @@ export function IncomeSlide() {
                                     }}
                                 />
                             )}
-                            <View style={[styles.tapHint, { backgroundColor: 'rgba(255, 255, 255, 0.05)' }]}>
-                                <Text style={[styles.tapHintText, { color: '#A1A1AA' }]}>לחץ לצפייה שנתית</Text>
-                            </View>
+
                         </View>
                     </TouchableOpacity>
                 </LinearGradient>

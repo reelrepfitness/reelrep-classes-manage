@@ -5,6 +5,7 @@ import { supabase } from '@/constants/supabase';
 import { TrendingUp, TrendingDown, Minus, DollarSign, Award, ChevronLeft } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { cn } from '@/lib/utils';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 // --- Types ---
 interface FinancialData {
@@ -95,35 +96,60 @@ export function FinancialCards() {
   return (
     <View className="gap-4 mb-6">
 
-      {/* Row 1: Quick Stats */}
-      <View className="flex-row gap-3">
-
+      {/* Row 1: Stats Grid (4 Cards) */}
+      <View className="flex-row flex-wrap gap-3">
         {/* Card 1: Today's Income */}
-        <View className="flex-1 bg-surface p-4 rounded-2xl border border-gray-200 shadow-sm">
-          <View className="flex-row-reverse justify-between items-start mb-2">
-            <View className="bg-green-100 p-2 rounded-full">
-              <DollarSign size={18} color="#15803d" />
-            </View>
-            <Text className="text-xs font-bold text-gray-500">היום</Text>
-          </View>
-          <Text className="text-2xl font-extrabold text-[#09090B] text-right">
-            {formatCurrency(data.todayIncome)}
-          </Text>
-        </View>
+        <Card className="flex-1 min-w-[45%]">
+          <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">הכנסות היום</CardTitle>
+            <DollarSign size={16} color="#6b7280" />
+          </CardHeader>
+          <CardContent>
+            <Text className="text-2xl font-bold">{formatCurrency(data.todayIncome)}</Text>
+            <Text className="text-xs text-muted">+0% מהאתמול</Text>
+          </CardContent>
+        </Card>
 
-        {/* Card 2: Current Month Income */}
-        <View className="flex-1 bg-surface p-4 rounded-2xl border border-gray-200 shadow-sm">
-          <View className="flex-row-reverse justify-between items-start mb-2">
-            <View className="bg-blue-100 p-2 rounded-full">
-              <TrendingUp size={18} color="#1d4ed8" />
-            </View>
-            <Text className="text-xs font-bold text-gray-500">החודש</Text>
-          </View>
-          <Text className="text-2xl font-extrabold text-[#09090B] text-right">
-            {formatCurrency(data.currentMonthIncome)}
-          </Text>
-        </View>
+        {/* Card 2: Current Month */}
+        <Card className="flex-1 min-w-[45%]">
+          <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">הכנסות החודש</CardTitle>
+            <TrendingUp size={16} color="#6b7280" />
+          </CardHeader>
+          <CardContent>
+            <Text className="text-2xl font-bold">{formatCurrency(data.currentMonthIncome)}</Text>
+            <Text className="text-xs text-muted">
+              {data.currentMonthIncome > data.lastMonthIncome ? '+' : ''}
+              {data.lastMonthIncome > 0 ? Math.round(((data.currentMonthIncome - data.lastMonthIncome) / data.lastMonthIncome) * 100) : 0}% מחודש שעבר
+            </Text>
+          </CardContent>
+        </Card>
 
+        {/* Card 3: Last Month */}
+        <Card className="flex-1 min-w-[45%]">
+          <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">חודש שעבר</CardTitle>
+            <DollarSign size={16} color="#6b7280" />
+          </CardHeader>
+          <CardContent>
+            <Text className="text-2xl font-bold">{formatCurrency(data.lastMonthIncome)}</Text>
+            <Text className="text-xs text-muted">הכנסות סופיות</Text>
+          </CardContent>
+        </Card>
+
+        {/* Card 4: Growth / Status */}
+        <Card className="flex-1 min-w-[45%]">
+          <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">צמיחה</CardTitle>
+            <TrendingUp size={16} color="#6b7280" />
+          </CardHeader>
+          <CardContent>
+            <Text className="text-2xl font-bold">
+              {data.lastMonthIncome > 0 ? Math.round(((data.currentMonthIncome - data.lastMonthIncome) / data.lastMonthIncome) * 100) : 0}%
+            </Text>
+            <Text className="text-xs text-muted">בהשוואה לחודש שעבר</Text>
+          </CardContent>
+        </Card>
       </View>
 
       {/* Row 2: Chart Comparison */}

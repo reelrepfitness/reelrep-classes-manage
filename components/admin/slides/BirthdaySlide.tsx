@@ -92,7 +92,7 @@ export const BirthdaySlide = () => {
     const upcomingList = users.filter(u => !u.isToday);
 
     return (
-        <Card className="h-[340px] border-none p-0 overflow-hidden" style={{ borderWidth: 0 }}>
+        <Card className="h-[340px] border-none p-0 overflow-hidden rounded-[40px]" style={{ borderWidth: 0 }}>
             <LinearGradient
                 colors={[Colors.primary, '#be185d']}
                 style={{ flex: 1, padding: 16 }}

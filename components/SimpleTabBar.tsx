@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, useWindowDimensions, Platform } from 'react-native';
 import {
     Home,
     Plus,
@@ -188,7 +188,7 @@ export const SimpleTabBar: React.FC<TabBarProps> = ({ state, descriptors, naviga
 const styles = StyleSheet.create({
     containerWrapper: {
         position: 'absolute',
-        bottom: 24,
+        bottom: Platform.OS === 'android' ? 50 : 24,
         left: 0,
         right: 0,
         alignItems: 'center',

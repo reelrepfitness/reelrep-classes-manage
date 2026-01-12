@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, Dimensions, StyleSheet } from "react-native";
 import { Image } from 'expo-image';
-import { TrendingUp, Clock, Users, Plus, Award, Target, ChevronLeft, Calendar } from 'lucide-react-native';
+import { TrendingUp, Clock, Users, Plus, Award, Target, ChevronLeft, Calendar, ClipboardList } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -284,15 +284,22 @@ export default function HomeScreen() {
           {/* Workout Log Card */}
           <TouchableOpacity
             onPress={() => router.push('/workout-log' as any)}
-            className="flex-1 aspect-square bg-surface rounded-2xl border border-gray-100 items-center justify-center active:bg-gray-100 relative"
+            className="flex-1 aspect-square bg-surface rounded-2xl border border-gray-100 p-4 justify-between active:bg-gray-100 relative overflow-hidden"
           >
-            <Image
-              source={require('@/assets/images/checklist.webp')}
-              className="w-[50%] h-[50%] -mt-4"
-              contentFit="contain"
-            />
-            <View className="absolute bottom-0 w-full h-[25%] items-center justify-center">
-              <Text className="font-bold text-[#09090B] text-base text-center">יומן ביצועים</Text>
+            {/* Title - Top Right, 2 Rows, Tight Spacing */}
+            <View className="items-end w-full mt-2 mr-1">
+              <Text className="font-extrabold text-[#09090B] text-2xl leading-6 text-right">יומן</Text>
+              <Text className="font-extrabold text-[#09090B] text-2xl leading-6 text-right">ביצועים</Text>
+            </View>
+
+            {/* Icon - Bottom Left, Smaller, with Tint */}
+            <View className="items-start w-full mb-0 ml-0">
+              <Image
+                source={require('@/assets/images/checklist.webp')}
+                className="w-16 h-16"
+                contentFit="contain"
+                tintColor={Colors.primary}
+              />
             </View>
           </TouchableOpacity>
 

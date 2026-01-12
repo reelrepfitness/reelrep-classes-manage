@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, Dimensions, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, Dimensions, StyleSheet, Linking } from "react-native";
 import { Image } from 'expo-image';
 import { TrendingUp, Clock, Users, Plus, Award, Target, ChevronLeft, Calendar, ClipboardList } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -287,13 +287,13 @@ export default function HomeScreen() {
             className="flex-1 aspect-square bg-surface rounded-2xl border border-gray-100 p-4 justify-between active:bg-gray-100 relative overflow-hidden"
           >
             {/* Title - Top Right, 2 Rows, Tight Spacing */}
-            <View className="items-end w-full mt-2 mr-1">
+            <View className="items-start w-full mt-2 mr-1">
               <Text className="font-extrabold text-[#09090B] text-2xl leading-6 text-right">יומן</Text>
               <Text className="font-extrabold text-[#09090B] text-2xl leading-6 text-right">ביצועים</Text>
             </View>
 
             {/* Icon - Bottom Left, Smaller, with Tint */}
-            <View className="items-start w-full mb-0 ml-0">
+            <View className="items-end w-full mb-0 ml-0">
               <Image
                 source={require('@/assets/images/checklist.webp')}
                 className="w-16 h-16"
@@ -303,27 +303,41 @@ export default function HomeScreen() {
             </View>
           </TouchableOpacity>
 
-          {/* Empty Placeholder Card */}
-          <View className="flex-1 aspect-square bg-surface rounded-2xl border border-gray-100 items-center justify-center relative">
-            <View className="w-16 h-16 bg-gray-100 rounded-full items-center justify-center -mt-4">
-              <Plus size={24} color="#9CA3AF" />
+          {/* Second App Link Card */}
+          <TouchableOpacity
+            onPress={() => Linking.openURL('https://apps.apple.com/us/app/YOUR-APP-ID')} // TODO: Replace with your Second App URL or Deep Link
+            className="flex-1 aspect-square bg-surface rounded-3xl border border-gray-100 items-center justify-between p-4 active:scale-[0.98] active:bg-gray-50/80 transition-all shadow-sm"
+          >
+            {/* App Icon Container */}
+            <View className="w-[88px] h-[88px] bg-white rounded-[22px] items-center justify-center shadow-sm border border-gray-100 mt-1">
+              <Image
+                source={require('@/assets/images/reel-rep-plus.png')}
+                className="w-full h-full rounded-[22px]"
+                contentFit="contain"
+              />
             </View>
-            <View className="absolute bottom-0 w-full h-[25%] items-center justify-center">
-              <Text className="font-bold text-gray-400 text-base text-center">בקרוב</Text>
+
+            {/* Logo Label */}
+            <View className="w-full items-center justify-center mb-0">
+              <Image
+                source={require('@/assets/images/logo-reelrep-plus-black.png')}
+                className="w-24 h-7 opacity-90"
+                contentFit="contain"
+              />
             </View>
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Achievements Section */}
         <View className="px-6 mb-6">
-          <View className="flex-row-reverse justify-between items-center mb-4">
+          <View className="flex-row justify-between items-center mb-4">
             <Text className="text-lg font-bold text-[#09090B]">ההישגים שלי</Text>
             <TouchableOpacity onPress={() => router.push('/achievements' as any)}>
               <Text className="text-sm font-medium text-primary">הכל</Text>
             </TouchableOpacity>
           </View>
 
-          <View className="bg-surface rounded-2xl p-4 border border-gray-100 flex-row-reverse items-center">
+          <View className="bg-surface rounded-2xl p-4 border border-gray-100 flex-row items-center">
             {/* Left side (Challenge Info) */}
             <TouchableOpacity
               className="flex-1 items-end pl-4"
@@ -359,7 +373,7 @@ export default function HomeScreen() {
                   />
                 ))
               ) : (
-                <View className="flex-row-reverse items-center">
+                <View className="flex-row items-center">
                   <View className="w-10 h-10 bg-gray-200 rounded-full items-center justify-center ml-2">
                     <Award size={18} color="#999" />
                   </View>
@@ -377,17 +391,17 @@ export default function HomeScreen() {
               <TouchableOpacity
                 key={classItem.id}
                 onPress={() => router.push('/classes' as any)}
-                className="bg-surface mb-3 p-4 rounded-2xl flex-row-reverse justify-between items-center border border-gray-100 active:scale-[0.99]"
+                className="bg-surface mb-3 p-4 rounded-2xl flex-row justify-between items-center border border-gray-100 active:scale-[0.99]"
               >
                 <View className="items-end">
                   <Text className="font-bold text-[#09090B] text-base">{classItem.title}</Text>
-                  <View className="flex-row-reverse items-center mt-1">
+                  <View className="flex-row items-center mt-1">
                     <Clock size={12} color="#71717A" />
                     <Text className="text-muted text-xs mr-1">{classItem.time}</Text>
                   </View>
                 </View>
 
-                <View className="flex-row-reverse items-center gap-2">
+                <View className="flex-row items-center gap-2">
                   <View className="bg-white px-2 py-1 rounded-md border border-gray-100">
                     <Text className="text-xs font-bold text-gray-500">
                       {classItem.enrolled}/{classItem.capacity}

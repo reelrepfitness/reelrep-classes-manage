@@ -116,9 +116,9 @@ export function ClassRegistrationCard({
         >
             {/* Header with Title */}
             <View className="p-6 pb-4">
-                <View className="flex-row-reverse items-start justify-between mb-2">
+                <View className="flex-row items-start justify-between mb-2">
                     <View className="items-end flex-1">
-                        <Text className="text-2xl font-extrabold text-[#09090B]">{title}</Text>
+                        <Text className="text-2xl font-extrabold text-[#09090B] text-right">{title}</Text>
                         <Text className="text-sm text-gray-500 mt-1">
                             {formatDate(date)} • {time}
                         </Text>
@@ -147,7 +147,7 @@ export function ClassRegistrationCard({
             <View className="px-6 pb-4">
 
                 {/* Instructor */}
-                <View className="flex-row-reverse gap-3 mb-4">
+                <View className="flex-row gap-3 mb-4">
                     {/* Coach Card */}
                     <View className="flex-1 bg-gray-50 rounded-xl py-3 items-center justify-center gap-2 border border-gray-100">
                         <Image source={require('@/assets/images/coach.webp')} style={{ width: 40, height: 40, tintColor: '#09090B' }} resizeMode="contain" />
@@ -165,7 +165,7 @@ export function ClassRegistrationCard({
 
                 {/* Avatar Group */}
                 {enrolledAvatars.length > 0 && (
-                    <View className="mt-3 flex-row-reverse justify-end">
+                    <View className="mt-3 flex-row justify-end">
                         <AvatarCircles
                             avatarUrls={enrolledAvatars.slice(0, 4)}
                             numPeople={Math.max(0, enrolled - 4)}
@@ -194,7 +194,7 @@ export function ClassRegistrationCard({
             {/* Countdown Display */}
             {timeLeft > 0 && (
                 <View className="px-6 pb-4">
-                    <View className="flex-row-reverse items-center gap-1 mb-3">
+                    <View className="flex-row items-center gap-1 mb-3">
                         <Clock size={14} color="#71717A" />
                         <Text className="text-sm font-medium text-gray-500">מתחיל בעוד:</Text>
                     </View>
@@ -234,17 +234,17 @@ export function ClassRegistrationCard({
                 // Already registered - show cancel/switch options
                 <View className="p-6 pt-4 border-t border-gray-100">
                     {/* Row 1: Cancel Class + Switch */}
-                    <View className="flex-row-reverse gap-3 mb-3">
+                    <View className="flex-row gap-3 mb-3">
                         <TouchableOpacity
                             onPress={onCancelClass}
-                            className="flex-1 flex-row-reverse py-3.5 rounded-xl items-center justify-center gap-2 border border-red-200 bg-red-50 active:bg-red-100"
+                            className="flex-1 flex-row py-3.5 rounded-xl items-center justify-center gap-2 border border-red-200 bg-red-50 active:bg-red-100"
                         >
                             <Image source={require('@/assets/images/cancel.webp')} style={{ width: 20, height: 20, tintColor: '#dc2626' }} resizeMode="contain" />
                             <Text className="text-red-600 text-base font-bold">ביטול שיעור</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             onPress={onSwitch}
-                            className="flex-1 flex-row-reverse py-3.5 rounded-xl items-center justify-center gap-2 border border-gray-200 bg-gray-50 active:bg-gray-100"
+                            className="flex-1 flex-row py-3.5 rounded-xl items-center justify-center gap-2 border border-gray-200 bg-gray-50 active:bg-gray-100"
                         >
                             <Image source={require('@/assets/images/replace.webp')} style={{ width: 20, height: 20, tintColor: '#374151' }} resizeMode="contain" />
                             <Text className="text-gray-700 text-base font-bold">החלפה</Text>
@@ -260,7 +260,7 @@ export function ClassRegistrationCard({
                 </View>
             ) : (
                 // Not registered - show register/cancel options
-                <View className="flex-row-reverse gap-3 p-6 pt-4 border-t border-gray-100">
+                <View className="flex-row gap-3 p-6 pt-4 border-t border-gray-100">
                     {/* Cancel/Close Button */}
                     <TouchableOpacity
                         onPress={onCancel}

@@ -70,16 +70,16 @@ export default function AdminStoreScreen() {
             {/* Header Section */}
             <View style={{ paddingTop: insets.top }} className="bg-background pb-4 border-b border-gray-100 shadow-sm">
                 <View className="px-5 pt-2 mb-4">
-                    <View className="flex-row-reverse justify-between items-center mb-2">
+                    <View className="flex-row justify-between items-center mb-2">
                         <View className="flex-row items-center gap-3">
-                            <Text className="text-3xl font-extrabold text-[#09090B]">חנות מנהלים</Text>
+                            <Text className="text-3xl font-extrabold text-[#09090B] text-right">חנות מנהלים</Text>
                             <TouchableOpacity onPress={() => router.back()} className="p-2">
                                 <ArrowRight size={24} color="#000" />
                             </TouchableOpacity>
                         </View>
 
                         {cart.length > 0 && (
-                            <View className="flex-row-reverse items-center bg-primary px-3 py-1.5 rounded-full gap-1">
+                            <View className="flex-row items-center bg-primary px-3 py-1.5 rounded-full gap-1">
                                 <ShoppingCart size={18} color="#FFFFFF" />
                                 <Text className="text-white text-sm font-bold">{cart.length}</Text>
                             </View>
@@ -89,7 +89,7 @@ export default function AdminStoreScreen() {
                 </View>
 
                 {/* Category Tabs */}
-                <View className="flex-row-reverse gap-2 px-5">
+                <View className="flex-row gap-2 px-5">
                     {shopTabs.map(tab => (
                         <TouchableOpacity
                             key={tab.key}
@@ -140,7 +140,7 @@ export default function AdminStoreScreen() {
                             >
                                 {/* Package Header */}
                                 <View className="mb-5">
-                                    <View className="flex-row-reverse justify-between items-center mb-2">
+                                    <View className="flex-row justify-between items-center mb-2">
                                         <Text className="text-2xl font-extrabold text-[#09090B] text-right">{pkg.name}</Text>
                                         <View className="bg-primary/10 px-3 py-1 rounded-full">
                                             <Text className="text-xs font-bold text-primary">{pkg.durationLabel}</Text>
@@ -148,8 +148,8 @@ export default function AdminStoreScreen() {
                                     </View>
 
                                     {/* Price */}
-                                    <View className="flex-row-reverse items-baseline mb-2">
-                                        <Text className="text-4xl font-extrabold text-primary">{pkg.price.toFixed(0)}</Text>
+                                    <View className="flex-row items-baseline mb-2">
+                                        <Text className="text-4xl font-extrabold text-primary text-right">{pkg.price.toFixed(0)}</Text>
                                         <Text className="text-lg font-bold text-primary mr-1">{pkg.currency}</Text>
                                         {!isTicket && (
                                             <Text className="text-base text-gray-500 mr-1">/{hebrew.shop.month}</Text>
@@ -168,7 +168,7 @@ export default function AdminStoreScreen() {
                                 {/* Features */}
                                 <View className="gap-3 mb-5">
                                     {pkg.features.map((feature, index) => (
-                                        <View key={index} className="flex-row-reverse items-center gap-3">
+                                        <View key={index} className="flex-row items-center gap-3">
                                             <Check size={16} color="#10b981" />
                                             <Text className="text-sm text-[#09090B] flex-1 text-right">{feature}</Text>
                                         </View>
@@ -211,7 +211,7 @@ export default function AdminStoreScreen() {
 
                         {/* Items List */}
                         {cart.map(item => (
-                            <View key={item.id} className="flex-row-reverse justify-between items-center mb-2 border-b border-gray-100 pb-2">
+                            <View key={item.id} className="flex-row justify-between items-center mb-2 border-b border-gray-100 pb-2">
                                 <Text className="text-right flex-1">{item.package.name} ({item.package.durationLabel})</Text>
                                 <TouchableOpacity onPress={() => removeFromCart(item.id)}>
                                     <Minus size={16} color="red" />
@@ -220,11 +220,11 @@ export default function AdminStoreScreen() {
                         ))}
 
                         {/* Total */}
-                        <View className="flex-row-reverse justify-between items-center mb-4 mt-4">
+                        <View className="flex-row justify-between items-center mb-4 mt-4">
                             <Text className="text-lg font-semibold text-[#09090B]">
                                 {hebrew.shop.total}:
                             </Text>
-                            <Text className="text-2xl font-extrabold text-primary">
+                            <Text className="text-2xl font-extrabold text-primary text-right">
                                 {getTotal()} ₪
                             </Text>
                         </View>

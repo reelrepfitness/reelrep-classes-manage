@@ -45,7 +45,7 @@ export function ClassesSlide() {
             <Card className="h-[340px] border border-gray-200 rounded-[40px] overflow-hidden" style={{ backgroundColor: 'white' }}>
                 <CardContent className="h-full flex-1 p-4">
                     {/* Header */}
-                    <View className="flex-row-reverse justify-between items-center mb-4">
+                    <View className="flex-row justify-between items-center mb-4">
                         <Text className="text-lg font-bold text-[#09090B]">שיעורים היום</Text>
                         <Text className="text-sm text-gray-500">{todaysClasses.length} שיעורים</Text>
                     </View>
@@ -72,7 +72,7 @@ export function ClassesSlide() {
                                         className="bg-gray-50 rounded-2xl p-4 mb-3 border border-gray-200"
                                     >
                                         {/* Top Row: Title + Time */}
-                                        <View className="flex-row-reverse justify-between items-start mb-3">
+                                        <View className="flex-row justify-between items-start mb-3">
                                             <View className="flex-1 pr-2">
                                                 <Text className="text-base font-bold text-[#09090B] text-right" numberOfLines={1}>
                                                     {classItem.title}
@@ -81,7 +81,7 @@ export function ClassesSlide() {
                                                     {classItem.time}
                                                 </Text>
                                             </View>
-                                            <View className="bg-white px-3 py-1 rounded-full border border-gray-200 flex-row-reverse items-center gap-1">
+                                            <View className="bg-white px-3 py-1 rounded-full border border-gray-200 flex-row items-center gap-1">
                                                 <Image
                                                     source={require('@/assets/images/group-session.webp')}
                                                     style={{ width: 14, height: 14 }}

@@ -46,6 +46,9 @@ function RootLayoutNav() {
           headerShown: false,
         }}
       />
+      <Stack.Screen name="admin-alerts" options={{ headerShown: false }} />
+      <Stack.Screen name="admin/alerts-menu" options={{ headerShown: false }} />
+      <Stack.Screen name="admin/push-automation" options={{ headerShown: false }} />
     </Stack>
   );
 }

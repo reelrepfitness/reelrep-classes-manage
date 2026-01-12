@@ -1,236 +1,236 @@
-// app/settings/notifications.tsx
-// Push Notification Settings Screen
-
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Switch,
-  Alert,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Bell, Trophy, Calendar, AlertCircle, CheckCircle } from 'lucide-react-native';
-import { useNotifications } from '@/lib/hooks/useNotifications';
-import { useAuth } from '@/contexts/AuthContext';
-import { PushNotificationService } from '@/lib/services/push-notifications';
+import { View, Text, ScrollView, Switch, Platform, Alert, ActivityIndicator, TouchableOpacity, StyleSheet } from 'react-native';
+import { Stack, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '@/constants/supabase';
 import Colors from '@/constants/colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-export default function NotificationsSettings() {
-  const router = useRouter();
+// --- Types ---
+type UserNotificationSettings = {
+  id?: string;
+  user_id?: string;
+  // Section 1: Payments & Account
+  notify_payment_failed: boolean;
+  notify_payment_success: boolean;
+  notify_new_purchase: boolean;
+  notify_payment_updated: boolean;
+  notify_sub_expiring: boolean;
+
+  // Section 2: Classes & Schedule
+  notify_class_cancelled_by_studio: boolean;
+  notify_waiting_list_entered: boolean;
+  notify_waiting_list_spot: boolean;
+  notify_ticket_finished: boolean;
+  notify_last_punch: boolean;
+
+  // Section 3: General
+  notify_birthday_wish: boolean;
+  notify_sub_frozen: boolean; // Assuming this column exists or mapping to general sub alerts
+};
+
+// --- Mappings ---
+type SettingConfig = {
+  key: keyof UserNotificationSettings;
+  label: string;
+  iconIOS: keyof typeof Ionicons.glyphMap;
+  iconAndroid: keyof typeof Ionicons.glyphMap;
+  color: string;
+};
+
+const SECTIONS: { title: string; data: SettingConfig[] }[] = [
+  {
+    title: "תשלומים וחשבון",
+    data: [
+      { key: 'notify_payment_failed', label: "חיוב ה.קבע נכשל", iconIOS: "card", iconAndroid: "card", color: "#EF4444" },
+      { key: 'notify_payment_success', label: "חיוב ה.קבע הצליח", iconIOS: "checkmark-circle", iconAndroid: "checkmark-circle", color: "#10B981" },
+      { key: 'notify_new_purchase', label: "רכישת מנוי חדש", iconIOS: "receipt", iconAndroid: "receipt", color: "#3B82F6" },
+      { key: 'notify_payment_updated', label: "אמצעי התשלום עודכן בהצלחה", iconIOS: "wallet", iconAndroid: "wallet", color: "#8B5CF6" },
+      { key: 'notify_sub_expiring', label: "תוקף המנוי עומד להסתיים", iconIOS: "hourglass", iconAndroid: "hourglass", color: "#F59E0B" },
+    ]
+  },
+  {
+    title: "שיעורים וסטודיו",
+    data: [
+      { key: 'notify_class_cancelled_by_studio', label: "ביטול שיעור באמצעות הסטודיו", iconIOS: "calendar", iconAndroid: "calendar", color: "#EF4444" },
+      { key: 'notify_waiting_list_entered', label: "שיבוץ מרשימת המתנה", iconIOS: "play-skip-forward-circle", iconAndroid: "play-skip-forward-circle", color: "#3B82F6" }, // Approximation for Ticket/Checkmark logic
+      { key: 'notify_waiting_list_spot', label: "התפנה מקום ברשימת המתנה", iconIOS: "flash", iconAndroid: "flash", color: "#F59E0B" },
+      { key: 'notify_ticket_finished', label: "כרטיסיה הסתיימה", iconIOS: "file-tray-full", iconAndroid: "file-tray-full", color: "#F97316" },
+      { key: 'notify_last_punch', label: "ניקוב אחרון בכרטיסיה", iconIOS: "alert-circle", iconAndroid: "alert-circle", color: "#EF4444" },
+    ]
+  },
+  {
+    title: "כללי",
+    data: [
+      { key: 'notify_birthday_wish', label: "הודעת יום הולדת", iconIOS: "gift", iconAndroid: "gift", color: "#EC4899" },
+      { key: 'notify_sub_frozen', label: "מנוי הוקפא / הופשר", iconIOS: "snow", iconAndroid: "snow", color: "#3B82F6" },
+    ]
+  }
+];
+
+export default function UserNotificationSettingsScreen() {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
-  const { permissionStatus, requestPermission, sendTestNotification } = useNotifications();
-
-  const [preferences, setPreferences] = useState({
-    plates_earned: true,
-    achievements: true,
-    class_reminders: true,
-    subscription_alerts: true,
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [settings, setSettings] = useState<UserNotificationSettings>({
+    notify_payment_failed: true,
+    notify_payment_success: true,
+    notify_new_purchase: true,
+    notify_payment_updated: true,
+    notify_sub_expiring: true,
+    notify_class_cancelled_by_studio: true,
+    notify_waiting_list_entered: true,
+    notify_waiting_list_spot: true,
+    notify_ticket_finished: true,
+    notify_last_punch: true,
+    notify_birthday_wish: true,
+    notify_sub_frozen: true,
   });
 
-  const [loading, setLoading] = useState(true);
-
   useEffect(() => {
-    loadPreferences();
-  }, [user?.id]);
+    fetchSettings();
+  }, []);
 
-  const loadPreferences = async () => {
-    if (!user?.id) return;
-
+  const fetchSettings = async () => {
     try {
-      const prefs = await PushNotificationService.getNotificationPreferences(user.id);
-      setPreferences(prefs);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error("No user logged in");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('user_notification_preferences')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setSettings(data);
+      } else {
+        // Create default if missing
+        const newSettings = { ...settings, user_id: user.id };
+        // Ensure we don't send ID if it's undefined or mocked
+        delete (newSettings as any).id;
+
+        const { data: newData, error: insertError } = await supabase
+          .from('user_notification_preferences')
+          .insert([newSettings])
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('Error creating default settings:', insertError);
+        } else if (newData) {
+          setSettings(newData);
+        }
+      }
     } catch (error) {
-      console.error('Error loading preferences:', error);
+      console.error('Error fetching settings:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRequestPermission = async () => {
-    const granted = await requestPermission();
-    if (granted) {
-      Alert.alert('✅ הצלחה!', 'התראות הופעלו בהצלחה');
-    } else {
-      Alert.alert(
-        'הרשאות נדרשות',
-        'כדי לקבל התראות, נא לאשר הרשאות בהגדרות המכשיר',
-        [
-          { text: 'בטל', style: 'cancel' },
-          {
-            text: 'פתח הגדרות',
-            onPress: () => {
-              // Open settings
-              // Linking.openSettings(); // You can add this
-            },
-          },
-        ]
-      );
+  const toggleSetting = async (key: keyof UserNotificationSettings) => {
+    const previousValue = settings[key];
+    const newValue = !previousValue;
+
+    // Optimistic UI
+    setSettings(prev => ({ ...prev, [key]: newValue }));
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("No user");
+
+      const { error } = await supabase
+        .from('user_notification_preferences')
+        .update({ [key]: newValue })
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error("Update failed", error);
+        throw error;
+      }
+
+    } catch (error) {
+      console.error('Error updating setting:', error);
+      // Revert
+      setSettings(prev => ({ ...prev, [key]: previousValue }));
+      Alert.alert('שגיאה', 'עדכון ההגדרה נכשל');
     }
   };
 
-  const handleTogglePreference = async (key: string, value: boolean) => {
-    if (!user?.id) return;
-
-    const newPreferences = { ...preferences, [key]: value };
-    setPreferences(newPreferences);
-
-    await PushNotificationService.updateNotificationPreferences(user.id, newPreferences);
-  };
-
-  const handleTestNotification = async () => {
-    await sendTestNotification();
-    Alert.alert('✅ נשלח!', 'התראת בדיקה נשלחה בהצלחה');
-  };
-
-  const notificationTypes = [
-    {
-      key: 'plates_earned',
-      icon: Trophy,
-      title: 'פלטות הורווחו',
-      description: 'התראה כשאתה מרוויח פלטות',
-      color: Colors.primary,
-    },
-    {
-      key: 'achievements',
-      icon: Trophy,
-      title: 'הישגים',
-      description: 'התראה כשאתה משיג הישג חדש',
-      color: Colors.success,
-    },
-    {
-      key: 'class_reminders',
-      icon: Calendar,
-      title: 'תזכורות לשיעורים',
-      description: 'תזכורת לפני תחילת שיעור',
-      color: Colors.accent,
-    },
-    {
-      key: 'subscription_alerts',
-      icon: AlertCircle,
-      title: 'התראות מנוי',
-      description: 'התראה כשהמנוי עומד לפוג',
-      color: '#f97316',
-    },
-  ];
-
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ChevronLeft size={24} color={Colors.text} />
-        </TouchableOpacity>
+    <View style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
+
+      {/* Custom Header */}
+      <View style={[styles.header, { paddingTop: insets.top }]}>
         <View style={styles.headerContent}>
-          <Text style={styles.title}>🔔 התראות</Text>
-          <Text style={styles.subtitle}>הגדרות התראות Push</Text>
+          <View style={{ width: 40 }} />
+          <Text style={styles.headerTitle}>הגדרות התראות</Text>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backButton}
+          >
+            <Ionicons name="chevron-forward" size={24} color="#09090B" />
+          </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Permission Status */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>סטטוס הרשאות</Text>
+      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}>
+        {loading ? (
+          <View style={{ marginTop: 40 }}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+          </View>
+        ) : (
+          SECTIONS.map((section, index) => (
+            <View key={index} style={styles.sectionContainer}>
+              <Text style={styles.sectionTitle}>{section.title}</Text>
 
-          {permissionStatus === 'granted' ? (
-            <View style={styles.statusCard}>
-              <CheckCircle size={48} color={Colors.success} />
-              <Text style={[styles.statusTitle, { color: Colors.success }]}>התראות מופעלות</Text>
-              <Text style={styles.statusText}>
-                קיבלת אישור לקבל התראות מהאפליקציה
-              </Text>
-            </View>
-          ) : permissionStatus === 'denied' ? (
-            <View style={styles.statusCard}>
-              <AlertCircle size={48} color={Colors.error} />
-              <Text style={[styles.statusTitle, { color: Colors.error }]}>התראות חסומות</Text>
-              <Text style={styles.statusText}>
-                התראות נחסמו. עבור להגדרות המכשיר כדי לאפשר
-              </Text>
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: Colors.error }]}
-                onPress={handleRequestPermission}
-              >
-                <Text style={styles.actionButtonText}>פתח הגדרות</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.statusCard}>
-              <Bell size={48} color={Colors.textSecondary} />
-              <Text style={styles.statusTitle}>התראות לא מופעלות</Text>
-              <Text style={styles.statusText}>
-                אפשר התראות כדי לקבל עדכונים על פלטות והישגים
-              </Text>
-              <TouchableOpacity style={styles.actionButton} onPress={handleRequestPermission}>
-                <Text style={styles.actionButtonText}>אפשר התראות</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+              <View style={styles.card}>
+                {section.data.map((item, itemIndex) => {
+                  const isLast = itemIndex === section.data.length - 1;
+                  const iconName = Platform.OS === 'ios' ? item.iconIOS : item.iconAndroid;
 
-        {/* Notification Types */}
-        {permissionStatus === 'granted' && !loading && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>סוגי התראות</Text>
+                  return (
+                    <View
+                      key={item.key}
+                      style={[
+                        styles.row,
+                        !isLast && styles.rowBorder
+                      ]}
+                    >
+                      {/* Left: Switch */}
+                      <Switch
+                        value={!!settings[item.key as keyof UserNotificationSettings]}
+                        onValueChange={() => toggleSetting(item.key as keyof UserNotificationSettings)}
+                        trackColor={{ false: '#E5E7EB', true: Platform.OS === 'ios' ? '#34C759' : Colors.primary }}
+                        thumbColor={'#FFFFFF'}
+                        ios_backgroundColor="#E5E7EB"
+                      />
 
-            {notificationTypes.map((type) => (
-              <View key={type.key} style={styles.notificationCard}>
-                <View style={[styles.notificationIcon, { backgroundColor: type.color + '20' }]}>
-                  <type.icon size={24} color={type.color} />
-                </View>
-                <View style={styles.notificationInfo}>
-                  <Text style={styles.notificationTitle}>{type.title}</Text>
-                  <Text style={styles.notificationDescription}>{type.description}</Text>
-                </View>
-                <Switch
-                  value={preferences[type.key as keyof typeof preferences]}
-                  onValueChange={(value) => handleTogglePreference(type.key, value)}
-                  trackColor={{ false: '#3e3e3e', true: type.color + '60' }}
-                  thumbColor={
-                    preferences[type.key as keyof typeof preferences] ? type.color : '#8e8e8e'
-                  }
-                />
+                      {/* Right: Content */}
+                      <View style={styles.contentContainer}>
+                        <Text style={styles.label}>{item.label}</Text>
+                        <View style={[styles.iconBox, { backgroundColor: `${item.color}15` }]}>
+                          <Ionicons
+                            name={iconName}
+                            size={20}
+                            color={item.color}
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
               </View>
-            ))}
-          </View>
+            </View>
+          ))
         )}
-
-        {/* Test Notification */}
-        {permissionStatus === 'granted' && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>בדיקה</Text>
-            <TouchableOpacity style={styles.testButton} onPress={handleTestNotification}>
-              <Bell size={20} color={Colors.primary} />
-              <Text style={styles.testButtonText}>שלח התראת בדיקה</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Info */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>מידע</Text>
-          <View style={styles.infoCard}>
-            <Text style={styles.infoText}>
-              📱 <Text style={styles.infoBold}>התראות מקומיות:</Text> מופיעות מיד כשמתרחש אירוע
-              {'\n\n'}
-              🔔 <Text style={styles.infoBold}>התראות Push:</Text> יכולות להתקבל גם כשהאפליקציה
-              סגורה{'\n\n'}
-              🎯 <Text style={styles.infoBold}>פלטות הורווחו:</Text> התראה בזמן אמת כשזוכים
-              בפלטות{'\n\n'}
-              🏆 <Text style={styles.infoBold}>הישגים:</Text> התראה מיוחדת לפתיחת הישגים{'\n\n'}
-              📅 <Text style={styles.infoBold}>תזכורות:</Text> תזכורת שעה לפני שיעור
-            </Text>
-          </View>
-        </View>
-
-        <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   );
@@ -239,168 +239,98 @@ export default function NotificationsSettings() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background || '#181818',
+    backgroundColor: '#F9FAFB', // gray-50
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border || '#333',
-  },
-  backButton: {
-    padding: 8,
-    marginLeft: 8,
+    borderBottomColor: '#F3F4F6', // gray-100
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+    zIndex: 10,
   },
   headerContent: {
-    flex: 1,
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 8,
   },
-  title: {
-    fontSize: 24,
+  headerTitle: {
+    fontSize: 20,
     fontWeight: '800',
-    color: Colors.text || '#fff',
-    textAlign: 'right',
-    writingDirection: 'rtl',
+    color: '#09090B',
   },
-  subtitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.textSecondary || '#aaa',
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  scrollView: {
-    flex: 1,
+  backButton: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
   },
   scrollContent: {
-    padding: 20,
+    padding: 24,
   },
-  section: {
-    marginBottom: 24,
+  sectionContainer: {
+    marginBottom: 32,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
-    color: Colors.text || '#fff',
-    textAlign: 'right',
-    marginBottom: 16,
-  },
-  statusCard: {
-    backgroundColor: Colors.card || '#222',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    shadowColor: Colors.shadow || '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  statusTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.text || '#fff',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  statusText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.textSecondary || '#aaa',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  actionButton: {
-    backgroundColor: Colors.primary || '#da4477',
-    borderRadius: 12,
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    marginTop: 20,
-  },
-  actionButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  notificationCard: {
-    backgroundColor: Colors.card || '#222',
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
+    color: '#111827', // gray-900
     marginBottom: 12,
-    shadowColor: Colors.shadow || '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    textAlign: 'right',
+    paddingRight: 4,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24, // rounded-3xl
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
   },
-  notificationIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 16,
+    padding: 20, // p-5
   },
-  notificationInfo: {
-    flex: 1,
-    alignItems: 'flex-end',
+  rowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#F9FAFB', // gray-50
   },
-  notificationTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.text || '#fff',
-    textAlign: 'right',
-    marginBottom: 4,
-  },
-  notificationDescription: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: Colors.textSecondary || '#aaa',
-    textAlign: 'right',
-  },
-  testButton: {
-    backgroundColor: Colors.card || '#222',
-    borderRadius: 12,
-    padding: 16,
+  contentContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    borderWidth: 2,
-    borderColor: Colors.primary || '#da4477',
-    shadowColor: Colors.shadow || '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    gap: 16,
   },
-  testButtonText: {
+  label: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.primary || '#da4477',
-  },
-  infoCard: {
-    backgroundColor: Colors.card || '#222',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: Colors.shadow || '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  infoText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.text || '#fff',
-    lineHeight: 24,
+    color: '#1F2937', // gray-800
     textAlign: 'right',
   },
-  infoBold: {
-    fontWeight: '700',
+  iconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

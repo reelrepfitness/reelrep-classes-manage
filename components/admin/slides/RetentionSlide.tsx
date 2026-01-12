@@ -184,8 +184,8 @@ export const RetentionSlide = () => {
         <Card className="h-[340px] border-none rounded-[40px]" style={{ backgroundColor: 'white', borderWidth: 0 }}>
             <CardContent className="h-full flex-1 p-4">
                 {/* Tabs & Select All Header */}
-                <View className="flex-row-reverse justify-between items-center border-b border-gray-100 mb-2 pb-2">
-                    <View className="flex-row-reverse flex-1">
+                <View className="flex-row justify-between items-center border-b border-gray-100 mb-2 pb-2">
+                    <View className="flex-row flex-1">
                         <TabButton id="1w" label="שבוע 1" count={weeks1.length} />
                         <TabButton id="2w" label="שבועיים" count={weeks2.length} />
                         <TabButton id="3w" label="3 שבועות+" count={weeks3.length} />
@@ -195,7 +195,7 @@ export const RetentionSlide = () => {
                     {currentList.length > 0 && (
                         <TouchableOpacity
                             onPress={toggleSelectAll}
-                            className="flex-row-reverse items-center gap-1 bg-gray-50 px-2 py-1.5 rounded-full border border-gray-100 ml-2"
+                            className="flex-row items-center gap-1 bg-gray-50 px-2 py-1.5 rounded-full border border-gray-100 ml-2"
                         >
                             <Text className="text-[10px] text-gray-600 font-medium">הכל</Text>
                             {isAllSelected ? (
@@ -228,11 +228,11 @@ export const RetentionSlide = () => {
                                         activeOpacity={0.7}
                                         onPress={() => toggleSelection(item.id)}
                                         className={cn(
-                                            "flex-row-reverse items-center justify-between py-3 border-b border-gray-50 transition-all",
+                                            "flex-row items-center justify-between py-3 border-b border-gray-50 transition-all",
                                             isSelected ? "bg-blue-50/50 -mx-2 px-2 rounded-lg" : ""
                                         )}
                                     >
-                                        <View className="flex-row-reverse items-center gap-3 flex-1">
+                                        <View className="flex-row items-center gap-3 flex-1">
                                             {/* Checkbox */}
                                             <TouchableOpacity onPress={() => toggleSelection(item.id)}>
                                                 {isSelected ? (
@@ -266,7 +266,7 @@ export const RetentionSlide = () => {
                         onPress={handleWhatsApp}
                         disabled={selectedIds.size === 0}
                         className={cn(
-                            "w-full py-3.5 rounded-xl flex-row-reverse justify-center items-center gap-2 shadow-sm transition-all",
+                            "w-full py-3.5 rounded-xl flex-row justify-center items-center gap-2 shadow-sm transition-all",
                             selectedIds.size === 0 ? "bg-gray-100" : "bg-[#25D366]"
                         )}
                         activeOpacity={0.8}

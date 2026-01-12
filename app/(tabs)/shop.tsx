@@ -53,10 +53,10 @@ export default function ShopScreen() {
       {/* Header Section */}
       <View style={{ paddingTop: insets.top }} className="bg-background pb-4 border-b border-gray-100 shadow-sm">
         <View className="px-5 pt-2 mb-4">
-          <View className="flex-row-reverse justify-between items-center mb-2">
-            <Text className="text-3xl font-extrabold text-[#09090B]">חנות</Text>
+          <View className="flex-row justify-between items-center mb-2">
+            <Text className="text-3xl font-extrabold text-[#09090B] text-right">חנות</Text>
             {cart.length > 0 && (
-              <View className="flex-row-reverse items-center bg-primary px-3 py-1.5 rounded-full gap-1">
+              <View className="flex-row items-center bg-primary px-3 py-1.5 rounded-full gap-1">
                 <ShoppingCart size={18} color="#FFFFFF" />
                 <Text className="text-white text-sm font-bold">{cart.length}</Text>
               </View>
@@ -66,7 +66,7 @@ export default function ShopScreen() {
         </View>
 
         {/* Category Tabs */}
-        <View className="flex-row-reverse gap-2 px-5">
+        <View className="flex-row gap-2 px-5">
           {shopTabs.map(tab => (
             <TouchableOpacity
               key={tab.key}
@@ -132,7 +132,7 @@ export default function ShopScreen() {
 
                 {/* Package Header */}
                 <View className="mb-5">
-                  <View className="flex-row-reverse justify-between items-center mb-2">
+                  <View className="flex-row justify-between items-center mb-2">
                     <Text className="text-2xl font-extrabold text-[#09090B] text-right">{pkg.name}</Text>
                     <View className="bg-primary/10 px-3 py-1 rounded-full">
                       <Text className="text-xs font-bold text-primary">{pkg.durationLabel}</Text>
@@ -140,8 +140,8 @@ export default function ShopScreen() {
                   </View>
 
                   {/* Price */}
-                  <View className="flex-row-reverse items-baseline mb-2">
-                    <Text className="text-4xl font-extrabold text-primary">{pkg.price.toFixed(0)}</Text>
+                  <View className="flex-row items-baseline mb-2">
+                    <Text className="text-4xl font-extrabold text-primary text-right">{pkg.price.toFixed(0)}</Text>
                     <Text className="text-lg font-bold text-primary mr-1">{pkg.currency}</Text>
                     {!isTicket && (
                       <Text className="text-base text-gray-500 mr-1">/{hebrew.shop.month}</Text>
@@ -160,7 +160,7 @@ export default function ShopScreen() {
                 {/* Features */}
                 <View className="gap-3 mb-5">
                   {pkg.features.map((feature, index) => (
-                    <View key={index} className="flex-row-reverse items-center gap-3">
+                    <View key={index} className="flex-row items-center gap-3">
                       <Check size={16} color="#10b981" />
                       <Text className="text-sm text-[#09090B] flex-1 text-right">{feature}</Text>
                     </View>
@@ -203,7 +203,7 @@ export default function ShopScreen() {
             <Text className="text-xl font-bold text-[#09090B] text-right mb-4">{hebrew.shop.cart}</Text>
 
             {/* Plates Balance */}
-            <View className="flex-row-reverse items-center bg-[#09090B] rounded-xl p-4 mb-4 gap-3">
+            <View className="flex-row items-center bg-[#09090B] rounded-xl p-4 mb-4 gap-3">
               <Image
                 source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/qmix9kvsaxeiodcudbn96' }}
                 className="w-10 h-10"
@@ -231,7 +231,7 @@ export default function ShopScreen() {
                 ) : (
                   <View className="bg-gray-50 rounded-xl p-4 gap-3 border border-gray-200">
                     {/* Plates Input Row */}
-                    <View className="flex-row-reverse items-center gap-3">
+                    <View className="flex-row items-center gap-3">
                       <TouchableOpacity
                         onPress={() => {
                           const current = parseInt(platesInput) || 0;
@@ -275,7 +275,7 @@ export default function ShopScreen() {
                     </Text>
 
                     {/* Action Buttons */}
-                    <View className="flex-row-reverse gap-3">
+                    <View className="flex-row gap-3">
                       <TouchableOpacity
                         onPress={() => {
                           const max = getMaxPlatesUsable();
@@ -305,7 +305,7 @@ export default function ShopScreen() {
 
             {/* Discount Display */}
             {platesToUse > 0 && (
-              <View className="flex-row-reverse justify-between items-center mb-4">
+              <View className="flex-row justify-between items-center mb-4">
                 <Text className="text-base font-semibold text-green-600">{hebrew.shop.platesApplied}:</Text>
                 <Text className="text-lg font-bold text-green-600">-{platesToUse} ₪</Text>
               </View>
@@ -315,7 +315,7 @@ export default function ShopScreen() {
             <View className="h-px bg-gray-200 my-2" />
 
             {/* Total */}
-            <View className="flex-row-reverse justify-between items-center mb-4">
+            <View className="flex-row justify-between items-center mb-4">
               <Text className="text-lg font-semibold text-[#09090B]">
                 {platesToUse > 0 ? hebrew.shop.originalPrice : hebrew.shop.total}:
               </Text>
@@ -329,9 +329,9 @@ export default function ShopScreen() {
 
             {/* Final Price (if plates applied) */}
             {platesToUse > 0 && (
-              <View className="flex-row-reverse justify-between items-center mb-4">
+              <View className="flex-row justify-between items-center mb-4">
                 <Text className="text-xl font-bold text-[#09090B]">{hebrew.shop.finalPrice}:</Text>
-                <Text className="text-3xl font-extrabold text-green-600">{getDiscountedTotal()} ₪</Text>
+                <Text className="text-3xl font-extrabold text-green-600 text-right">{getDiscountedTotal()} ₪</Text>
               </View>
             )}
 

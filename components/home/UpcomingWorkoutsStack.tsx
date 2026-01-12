@@ -54,90 +54,101 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export const UpcomingWorkoutsStack = () => {
     const { user, updateUser } = useAuth();
-    const { cancelBooking } = useClasses();
-    const [bookings, setBookings] = useState<Booking[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { cancelBooking, getMyClasses, isLoading: contextLoading } = useClasses();
     const [currentIndex, setCurrentIndex] = useState(0);
     const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
     const [modalVisible, setModalVisible] = useState(false);
 
-    const fetchBookings = useCallback(async () => {
-        if (!user) return;
+    // Derive bookings directly from Context
+    // effectively "live" data. No need for local useEffect fetching.
+    const bookings = React.useMemo(() => {
+        const myClasses = getMyClasses();
+        const now = new Date();
 
-        try {
-            // Use server-side NOW() for timezone consistency
-            const { data, error } = await supabase
-                .from('class_bookings')
-                .select(`
-          id,
-          status,
-          classes!inner (
-            id,
-            name_hebrew,
-            coach_name,
-            class_date,
-            location_hebrew,
-            max_participants,
-            current_participants
-          )
-        `)
-                .eq('user_id', user.id)
-                .in('status', ['confirmed', 'completed', 'no_show', 'late']) // Include all active statuses
-                .order('class_date', { foreignTable: 'classes', ascending: true });
+        // Filter and map to component's Booking type
+        const futureBookings = myClasses
+            .filter(c => {
+                const start = new Date(`${c.date}T${c.time}`);
+                return start > now;
+            })
+            .map(c => ({
+                id: c.id,
+                // Context doesn't expose the booking ID directly in Class object easily without extra lookup, 
+                // but getMyClasses returns Class objects. 
+                // We might need to find the actual booking ID for cancellation.
+                // However, the `cancelBooking` in context usually takes a bookingId.
+                // Let's check `classes.tsx` or `ClassesContext`.
+                // `getMyClasses` filters `classes` array. `classes` array items don't have booking Id.
+                // But `cancelBooking` in `ClassesContext` (viewed previously) takes a `bookingId`.
+                // The `getMyClasses` implementation returns `Class[]`.
+                // We need the `bookingId`.
+                // `ClassesContext` also exposes `bookings` array.
+                // Let's lookup the booking ID from the `bookings` array available in context.
 
-            if (error) throw error;
+                status: 'confirmed', // getMyClasses filters for confirmed
+                classes: {
+                    id: c.id,
+                    name_hebrew: c.title,
+                    coach_name: c.instructor,
+                    class_date: `${c.date}T${c.time}`, // Reconstruct ISO
+                    location_hebrew: c.location,
+                    max_participants: c.capacity,
+                    current_participants: c.enrolled,
+                },
+                enrolledAvatars: c.enrolledAvatars,
+                enrolled: c.enrolled,
+                capacity: c.capacity
+            }));
 
-            // Filter for future classes using local time
-            const now = new Date();
-            const futureBookings = (data || []).filter((booking: any) => {
-                const classDate = new Date(booking.classes.class_date);
-                return classDate > now;
+        return futureBookings.sort((a, b) =>
+            new Date(a.classes.class_date).getTime() - new Date(b.classes.class_date).getTime()
+        );
+    }, [getMyClasses]);
+
+    // We also need the actual booking ID for the cancellation logic. 
+    // The simplified map above lacks it. 
+    // We should use `getClassBooking` from context or `bookings` array.
+
+    // Let's refine the Memo to join with `bookings` from context.
+    const { bookings: allMyBookings } = useClasses();
+
+    const refinedBookings: Booking[] = React.useMemo(() => {
+        const future = getMyClasses().filter(c => new Date(`${c.date}T${c.time}`) > new Date());
+
+        return future.map(c => {
+            // Find the specific booking for this class instance
+            const booking = allMyBookings.find(b => {
+                // Match schedule and date
+                const bDate = b.classDate ? new Date(b.classDate).toISOString().split('T')[0] : null;
+                return b.scheduleId === c.scheduleId && bDate === c.date && b.status === 'confirmed';
             });
 
-            // Fetch enrollment data for each class
-            const bookingsWithEnrollment = await Promise.all(
-                futureBookings.map(async (booking: any) => {
-                    const { data: enrollmentData } = await supabase
-                        .from('class_bookings')
-                        .select('profiles:user_id(avatar_url)')
-                        .eq('class_id', booking.classes.id)
-                        .eq('status', 'confirmed');
+            return {
+                id: booking?.id || 'optimistic_id', // Fallback or accurate ID
+                status: 'confirmed',
+                classes: {
+                    id: c.id,
+                    name_hebrew: c.title,
+                    coach_name: c.instructor,
+                    class_date: `${c.date}T${c.time}`,
+                    location_hebrew: c.location,
+                    max_participants: c.capacity,
+                    current_participants: c.enrolled,
+                },
+                enrolledAvatars: c.enrolledAvatars,
+                enrolled: c.enrolled,
+                capacity: c.capacity
+            };
+        });
+    }, [getMyClasses, allMyBookings]);
 
-                    const enrolledAvatars = (enrollmentData || [])
-                        .map((e: any) => e.profiles?.avatar_url)
-                        .filter((url: any): url is string => !!url);
+    // Use refinedBookings for rendering
+    const displayBookings = refinedBookings;
 
-                    return {
-                        ...booking,
-                        enrolledAvatars,
-                        enrolled: enrollmentData?.length || booking.classes.current_participants || 0,
-                        capacity: booking.classes.max_participants || 8,
-                    };
-                })
-            );
+    // Remove local loading state, use context loading if needed or just show skeletal if empty & loading?
+    // User wants "instant" so assume data is there or cached.
+    const loading = contextLoading && displayBookings.length === 0;
 
-            // Sort by class_date (closest date first)
-            const sortedBookings = bookingsWithEnrollment.sort((a, b) => {
-                const dateA = new Date(a.classes.class_date).getTime();
-                const dateB = new Date(b.classes.class_date).getTime();
-                return dateA - dateB;
-            });
-
-            setBookings(sortedBookings);
-        } catch (err) {
-            console.error('Error fetching bookings:', err);
-        } finally {
-            setLoading(false);
-        }
-    }, [user]);
-
-    useEffect(() => {
-        fetchBookings();
-
-        // Refresh every minute to auto-remove cards when class time arrives
-        const interval = setInterval(fetchBookings, 60000);
-        return () => clearInterval(interval);
-    }, [fetchBookings]);
 
     const handleNextCard = useCallback(() => {
         // Cycle to next card, wrap around to start
@@ -193,7 +204,7 @@ export const UpcomingWorkoutsStack = () => {
                         try {
                             await cancelBooking(booking.id);
                             setModalVisible(false);
-                            fetchBookings(); // Refresh local list
+                            // fetchBookings(); // Context updates automatically
                             Alert.alert('בוטל', 'השיעור בוטל בהצלחה.');
                         } catch (e) {
                             Alert.alert('שגיאה', 'אירעה שגיאה בביטול השיעור');
@@ -214,11 +225,6 @@ export const UpcomingWorkoutsStack = () => {
                         onPress: async () => {
                             try {
                                 const newLate = lateCancellations + 1;
-                                // We rely on context's cancelBooking or custom logic? 
-                                // classes.tsx calls cancelBooking AND updateUser manually for late cancels if not ticket.
-                                // But context's cancelBooking might handle just the DB delete.
-                                // We should replicate the logic fully if we want consistent behavior.
-
                                 await cancelBooking(booking.id);
 
                                 if (!user?.ticket) {
@@ -236,7 +242,7 @@ export const UpcomingWorkoutsStack = () => {
                                 }
 
                                 setModalVisible(false);
-                                fetchBookings();
+                                // fetchBookings(); // Context updates automatically
                             } catch (e) {
                                 Alert.alert('שגיאה', 'אירעה שגיאה בביטול השיעור');
                             }
@@ -255,21 +261,21 @@ export const UpcomingWorkoutsStack = () => {
     return (
         <>
             <View className="relative h-52 w-full items-center justify-center px-4">
-                {bookings.map((booking, idx) => {
+                {displayBookings.map((booking, idx) => {
                     // Calculate relative position from current index (circular)
                     let relativeIndex = idx - currentIndex;
-                    if (relativeIndex < 0) relativeIndex += bookings.length;
+                    if (relativeIndex < 0) relativeIndex += displayBookings.length;
 
                     // Only render top 3 visible cards
                     const isVisible = relativeIndex < 3;
-                    if (!isVisible && bookings.length > 3) return null;
+                    if (!isVisible && displayBookings.length > 3) return null;
 
                     return (
                         <Card
                             key={booking.id}
                             booking={booking}
                             index={relativeIndex}
-                            total={bookings.length}
+                            total={displayBookings.length}
                             onSwipeLeft={handleNextCard}
                             onSwipeRight={handlePrevCard}
                             isFirst={relativeIndex === 0}
@@ -280,9 +286,9 @@ export const UpcomingWorkoutsStack = () => {
                 })}
 
                 {/* Page indicators */}
-                {bookings.length > 1 && (
-                    <View className="absolute bottom-0 flex-row gap-2 items-center">
-                        {bookings.map((_, idx) => (
+                {displayBookings.length > 1 && (
+                    <View className="absolute bottom-0 flex-row-reverse gap-2 items-center">
+                        {displayBookings.map((_, idx) => (
                             <View
                                 key={idx}
                                 className={cn(
@@ -464,7 +470,7 @@ const Card = ({
                     className="flex-1 p-5 flex-col justify-between"
                 >
                     {/* Header - Title on right, Time badge on left */}
-                    <View className="flex-row-reverse justify-between items-start">
+                    <View className="flex-row justify-between items-start">
                         <View className="items-end">
                             <Text className="text-xl font-black text-right text-white">
                                 {booking.classes.name_hebrew}
@@ -494,8 +500,8 @@ const Card = ({
                     {/* Attendance Section */}
                     <View className="mt-3">
                         {/* Capacity Count + Avatar Group */}
-                        <View className="flex-row-reverse items-center justify-between mb-2">
-                            <View className="flex-row-reverse items-center gap-2">
+                        <View className="flex-row items-center justify-between mb-2">
+                            <View className="flex-row items-center gap-2">
                                 <Image
                                     source={require('@/assets/images/group-session.webp')}
                                     style={{ width: 24, height: 24, tintColor: '#FFFFFF' }}

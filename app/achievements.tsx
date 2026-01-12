@@ -241,7 +241,7 @@ export default function AchievementsScreen() {
 
           return (
             <View key={key}>
-              <View className="flex-row-reverse justify-between items-center mb-4 px-1">
+              <View className="flex-row justify-between items-center mb-4 px-1">
                 <Text className="text-xl font-bold text-[#09090B]">{label}</Text>
                 <Text className="text-gray-400 font-bold">{categoryAchievements.length}</Text>
               </View>
@@ -350,36 +350,36 @@ export default function AchievementsScreen() {
     <View className="flex-1 bg-background">
       {/* Header Area */}
       <View style={{ paddingTop: insets.top }} className="bg-background pb-4 border-b border-gray-100">
-        <View className="px-5 pt-2 mb-6 flex-row-reverse justify-between items-center">
-          <Text className="text-3xl font-extrabold text-[#09090B]">הישגים</Text>
+        <View className="px-5 pt-2 mb-6 flex-row justify-between items-center">
+          <Text className="text-3xl font-extrabold text-[#09090B] text-right">הישגים</Text>
           <TouchableOpacity onPress={() => router.back()} className="p-2 bg-surface rounded-full">
             <ChevronRight size={24} color="#09090B" />
           </TouchableOpacity>
         </View>
 
         {/* Stats Row */}
-        <View className="flex-row-reverse justify-between px-8 mb-6">
+        <View className="flex-row justify-between px-8 mb-6">
           <View className="items-center">
-            <Text className="text-2xl font-extrabold text-[#09090B]">{completedAchievements.length}</Text>
+            <Text className="text-2xl font-extrabold text-[#09090B] text-right">{completedAchievements.length}</Text>
             <Text className="text-xs font-bold text-gray-400">הושגו</Text>
           </View>
           <View className="w-[1px] h-10 bg-gray-100" />
           <View className="items-center">
-            <Text className="text-2xl font-extrabold text-primary">{activeAchievements.length}</Text>
+            <Text className="text-2xl font-extrabold text-primary text-right">{activeAchievements.length}</Text>
             <Text className="text-xs font-bold text-gray-400">בתהליך</Text>
           </View>
           <View className="w-[1px] h-10 bg-gray-100" />
           <View className="items-center">
             <View className="flex-row items-center gap-1">
               <Image source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/q4z20c8mkfmyhfvuuiyfn' }} className="w-5 h-5" resizeMode="contain" />
-              <Text className="text-2xl font-extrabold text-[#09090B]">{totalPoints}</Text>
+              <Text className="text-2xl font-extrabold text-[#09090B] text-right">{totalPoints}</Text>
             </View>
             <Text className="text-xs font-bold text-gray-400">פלטות</Text>
           </View>
         </View>
 
         {/* Tabs */}
-        <View className="mx-5 bg-surface p-1 rounded-2xl flex-row-reverse">
+        <View className="mx-5 bg-surface p-1 rounded-2xl flex-row">
           <TouchableOpacity
             onPress={() => setSelectedTab('achievements')}
             className={cn(

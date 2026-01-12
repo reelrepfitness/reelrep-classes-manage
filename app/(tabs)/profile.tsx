@@ -20,7 +20,7 @@ const StatBox = ({ label, value, icon: Icon, image, color }: any) => (
         <Icon size={24} color={color} />
       )}
     </View>
-    <Text className="text-2xl font-bold text-text">{value}</Text>
+    <Text className="text-2xl font-bold text-text text-right">{value}</Text>
     <Text className="text-xs text-muted mt-1 text-center font-medium">{label}</Text>
   </View>
 );
@@ -29,11 +29,11 @@ const MenuItem = ({ icon: Icon, title, subtitle, isDestructive, onPress }: any) 
   <TouchableOpacity
     onPress={onPress}
     className={cn(
-      "flex-row-reverse items-center justify-between p-4 bg-surface mb-3 rounded-2xl active:scale-[0.98] transition-all shadow-sm",
+      "flex-row items-center justify-between p-4 bg-surface mb-3 rounded-2xl active:scale-[0.98] transition-all shadow-sm",
       isDestructive && "border border-red-200 bg-red-50"
     )}
   >
-    <View className="flex-row-reverse items-center gap-4">
+    <View className="flex-row items-center gap-4">
       <View className={cn("p-2.5 rounded-xl", isDestructive ? "bg-red-100" : "bg-white")}>
         <Icon size={20} color={isDestructive ? "#ef4444" : Colors.primary} />
       </View>
@@ -68,7 +68,7 @@ export default function ProfileScreen() {
 
         {/* Header Section */}
         <View className="px-5 pt-6 pb-8">
-          <View className="flex-row-reverse items-center gap-4 mb-8">
+          <View className="flex-row items-center gap-4 mb-8">
             <View className="w-20 h-20 rounded-full bg-surface items-center justify-center border-2 border-white shadow-md">
               <User size={32} color={Colors.primary} />
             </View>
@@ -89,9 +89,9 @@ export default function ProfileScreen() {
           {/* כרטיס יתרת פלטות - מעוצב מחדש */}
           <TouchableOpacity
             onPress={() => router.push('/plates/store')}
-            className="bg-surface rounded-2xl p-4 flex-row-reverse items-center justify-between shadow-sm"
+            className="bg-surface rounded-2xl p-4 flex-row items-center justify-between shadow-sm"
           >
-            <View className="flex-row-reverse items-center gap-4">
+            <View className="flex-row items-center gap-4">
               <Image
                 source={{ uri: 'https://res.cloudinary.com/diwe4xzro/image/upload/v1762853884/%D7%98%D7%A7%D7%A1%D7%98_%D7%94%D7%A4%D7%A1%D7%A7%D7%94_%D7%A9%D7%9C%D7%9A_2.png_zpdglt.png' }}
                 className="w-12 h-12 rounded-full"
@@ -110,7 +110,7 @@ export default function ProfileScreen() {
         {/* Stats Grid */}
         <View className="px-4 mb-8">
           <Text className="text-text font-bold mb-4 text-right px-1 text-lg">{hebrew.profile.statistics}</Text>
-          <View className="flex-row-reverse gap-3">
+          <View className="flex-row gap-3">
             <StatBox
               label={hebrew.profile.totalWorkouts}
               value={stats.workouts.toString()}
@@ -137,8 +137,8 @@ export default function ProfileScreen() {
           <View className="px-4 mb-8">
             <Text className="text-text font-bold mb-4 text-right px-1 text-lg">{hebrew.profile.subscription}</Text>
             <View className="bg-surface rounded-2xl p-5 shadow-sm">
-              <View className="flex-row-reverse justify-between items-center mb-4">
-                <View className="flex-row-reverse items-center gap-2">
+              <View className="flex-row justify-between items-center mb-4">
+                <View className="flex-row items-center gap-2">
                   <CreditCard size={18} color={Colors.primary} />
                   <Text className="text-muted font-medium text-sm">שיעורים החודש</Text>
                 </View>
@@ -156,7 +156,7 @@ export default function ProfileScreen() {
                 />
               </View>
 
-              <View className="flex-row-reverse justify-between">
+              <View className="flex-row justify-between">
                 <Text className="text-muted text-xs">בתוקף עד</Text>
                 <Text className="text-text text-xs font-medium">{new Date(user.subscription.endDate).toLocaleDateString('he-IL')}</Text>
               </View>

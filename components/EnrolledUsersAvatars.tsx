@@ -24,7 +24,7 @@ export function EnrolledUsersAvatars({ users, maxVisible = 3 }: EnrolledUsersAva
     const remainingCount = Math.max(0, users.length - maxVisible);
 
     return (
-        <View className="flex-row-reverse items-center mt-2">
+        <View className="flex-row items-center mt-2">
             {visibleUsers.map((user, index) => {
                 const userData = user.profiles;
                 const userName = userData?.full_name || userData?.name || 'משתמש';

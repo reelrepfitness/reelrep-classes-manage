@@ -140,13 +140,13 @@ export const RetentionCard = () => {
 
     return (
         <View style={{ backgroundColor: 'white' }} className="rounded-3xl p-5 shadow-sm border border-gray-100 flex-1">
-            <View className="flex-row-reverse justify-between items-center mb-4">
+            <View className="flex-row justify-between items-center mb-4">
                 <Text className="text-lg font-extrabold text-[#09090B]">שימור לקוחות</Text>
                 <Text className="text-xs text-gray-400">לא התאמנו לאחרונה</Text>
             </View>
 
             {/* Tabs */}
-            <View className="flex-row-reverse border-b border-gray-100 mb-4">
+            <View className="flex-row border-b border-gray-100 mb-4">
                 <TabButton id="1w" label="שבוע 1" count={weeks1.length} />
                 <TabButton id="2w" label="שבועיים" count={weeks2.length} />
                 <TabButton id="3w" label="3 שבועות+" count={weeks3.length} />
@@ -166,8 +166,8 @@ export const RetentionCard = () => {
                         keyExtractor={item => item.id}
                         showsVerticalScrollIndicator={false}
                         renderItem={({ item }) => (
-                            <View className="flex-row-reverse items-center justify-between py-2 border-b border-gray-50">
-                                <View className="flex-row-reverse items-center gap-2">
+                            <View className="flex-row items-center justify-between py-2 border-b border-gray-50">
+                                <View className="flex-row items-center gap-2">
                                     <View className="w-8 h-8 bg-gray-100 rounded-full items-center justify-center">
                                         <User size={14} color="#9CA3AF" />
                                     </View>
@@ -190,7 +190,7 @@ export const RetentionCard = () => {
                     onPress={handleSendMessage}
                     disabled={currentList.length === 0}
                     className={cn(
-                        "w-full py-3 rounded-xl flex-row-reverse justify-center items-center gap-2",
+                        "w-full py-3 rounded-xl flex-row justify-center items-center gap-2",
                         currentList.length === 0 ? "bg-gray-100" : "bg-black"
                     )}
                 >

@@ -1,207 +1,242 @@
 // app/admin/financial/index.tsx
-// Financial Dashboard - Main Screen
-
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
+  Dimensions,
+  Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BarChart, PieChart } from 'react-native-gifted-charts';
+import { AdminHeader } from '@/components/admin/AdminHeader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DollarSign, Calendar, TrendingUp, FileText, ChevronLeft } from 'lucide-react-native';
-import { supabase } from '@/constants/supabase';
-import Colors from '@/constants/colors';
-import { MonthlyComparisonChart } from '@/components/charts/MonthlyComparisonChart';
+import { ArrowUpRight, ArrowDownRight, TrendingUp, Users, RefreshCw } from 'lucide-react-native';
 
-interface FinancialStats {
-  todayRevenue: number;
-  monthRevenue: number;
-  totalInvoices: number;
-  pendingPayments: number;
-}
+const { width } = Dimensions.get('window');
 
-export default function FinancialDashboard() {
-  const router = useRouter();
+// --- Mock Data ---
+
+const MONTHS = [
+  { id: '1', label: 'ינו׳', full: 'ינואר' },
+  { id: '2', label: 'פבר׳', full: 'פברואר' },
+  { id: '3', label: 'מרץ', full: 'מרץ' },
+  { id: '4', label: 'אפר׳', full: 'אפריל' },
+  { id: '5', label: 'מאי', full: 'מאי' },
+  { id: '6', label: 'יוני', full: 'יוני' },
+];
+
+const MOCK_FINANCIALS = {
+  income: 48250,
+  expenses: 15800,
+  netProfit: 32450,
+  mrr: 42000,
+  arpu: 350,
+  churn: '2.4%',
+};
+
+const BAR_DATA = [
+  { value: 12000, frontColor: '#34D399', spacing: 10, label: 'ינו׳' },
+  { value: 8000, frontColor: '#F87171' },
+
+  { value: 15000, frontColor: '#34D399', spacing: 10, label: 'פבר׳' },
+  { value: 9500, frontColor: '#F87171' },
+
+  { value: 20000, frontColor: '#34D399', spacing: 10, label: 'מרץ' },
+  { value: 12000, frontColor: '#F87171' },
+
+  { value: 28000, frontColor: '#34D399', spacing: 10, label: 'אפר׳' },
+  { value: 14000, frontColor: '#F87171' },
+
+  { value: 32000, frontColor: '#34D399', spacing: 10, label: 'מאי' },
+  { value: 11000, frontColor: '#F87171' },
+
+  { value: 48250, frontColor: '#34D399', spacing: 10, label: 'יוני' },
+  { value: 15800, frontColor: '#F87171' },
+];
+
+const PIE_DATA = [
+  { value: 65, color: '#3B82F6', text: '65%', focused: true }, // Memberships
+  { value: 25, color: '#8B5CF6', text: '25%' }, // Punch Cards
+  { value: 10, color: '#F59E0B', text: '10%' }, // Products
+];
+
+const LEGEND_DATA = [
+  { label: 'מנויים', color: '#3B82F6', percentage: '65%' },
+  { label: 'כרטיסיות', color: '#8B5CF6', percentage: '25%' },
+  { label: 'מוצרים', color: '#F59E0B', percentage: '10%' },
+];
+
+export default function FinancialAnalyticsScreen() {
+  const [selectedMonth, setSelectedMonth] = useState('6'); // Default to June
   const insets = useSafeAreaInsets();
-  const [stats, setStats] = useState<FinancialStats>({
-    todayRevenue: 0,
-    monthRevenue: 0,
-    totalInvoices: 0,
-    pendingPayments: 0,
-  });
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadFinancialStats();
-  }, []);
+  const renderMonthSelector = () => (
+    <View style={styles.monthSelectorContainer}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.monthSelectorContent}
+      >
+        {MONTHS.map((month) => {
+          const isSelected = selectedMonth === month.id;
+          return (
+            <TouchableOpacity
+              key={month.id}
+              style={[styles.monthPill, isSelected && styles.monthPillSelected]}
+              onPress={() => setSelectedMonth(month.id)}
+            >
+              <Text style={[styles.monthText, isSelected && styles.monthTextSelected]}>
+                {month.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
 
-  const loadFinancialStats = async () => {
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-        .toISOString()
-        .split('T')[0];
-
-      // Get today's revenue
-      const { data: todayData } = await supabase
-        .from('green_invoice_documents')
-        .select('amount')
-        .gte('created_at', today)
-        .eq('status', 'paid');
-
-      const todayRevenue = todayData?.reduce((sum, doc) => sum + (doc.amount || 0), 0) || 0;
-
-      // Get month revenue
-      const { data: monthData } = await supabase
-        .from('green_invoice_documents')
-        .select('amount')
-        .gte('created_at', firstDayOfMonth)
-        .eq('status', 'paid');
-
-      const monthRevenue = monthData?.reduce((sum, doc) => sum + (doc.amount || 0), 0) || 0;
-
-      // Get total invoices
-      const { count: totalInvoices } = await supabase
-        .from('green_invoice_documents')
-        .select('*', { count: 'exact', head: true });
-
-      // Get pending payments
-      const { count: pendingPayments } = await supabase
-        .from('green_invoice_documents')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending');
-
-      setStats({
-        todayRevenue,
-        monthRevenue,
-        totalInvoices: totalInvoices || 0,
-        pendingPayments: pendingPayments || 0,
-      });
-    } catch (error) {
-      console.error('Error loading financial stats:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const statCards = [
-    {
-      label: 'הכנסות היום',
-      value: `₪${stats.todayRevenue.toFixed(2)}`,
-      icon: DollarSign,
-      color: Colors.success || '#4ade80',
-    },
-    {
-      label: 'הכנסות חודשיות',
-      value: `₪${stats.monthRevenue.toFixed(2)}`,
-      icon: TrendingUp,
-      color: Colors.primary || '#da4477',
-    },
-    {
-      label: 'סך חשבוניות',
-      value: stats.totalInvoices.toString(),
-      icon: FileText,
-      color: Colors.accent || '#60a5fa',
-    },
-    {
-      label: 'תשלומים ממתינים',
-      value: stats.pendingPayments.toString(),
-      icon: Calendar,
-      color: '#fbbf24',
-    },
-  ];
-
-  const menuItems = [
-    {
-      title: 'מסמכים יומיים',
-      subtitle: 'צפה בהכנסות ומסמכים לפי יום',
-      icon: Calendar,
-      color: Colors.primary || '#da4477',
-      route: '/admin/financial/daily-documents',
-    },
-    {
-      title: 'השוואה חודשית',
-      subtitle: 'גרפים והשוואות בין חודשים',
-      icon: TrendingUp,
-      color: Colors.accent || '#60a5fa',
-      route: '/admin/financial/monthly-comparison',
-    },
-    {
-      title: 'כל החשבוניות',
-      subtitle: 'צפה וסנן את כל המסמכים',
-      icon: FileText,
-      color: Colors.success || '#4ade80',
-      route: '/admin/financial/all-invoices',
-    },
-  ];
-
-  if (loading) {
-    return (
-      <View style={[styles.container, styles.centered, { paddingTop: insets.top }]}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-        <Text style={styles.loadingText}>טוען נתונים פיננסיים...</Text>
-      </View>
-    );
-  }
-
-  return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ChevronLeft size={24} color={Colors.text} />
-        </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={styles.title}>💰 לוח ניהול פיננסי</Text>
-          <Text style={styles.subtitle}>מערכת Green Invoice</Text>
+  const renderNetProfitCard = () => (
+    <View style={styles.heroCard}>
+      <View style={styles.heroRowTop}>
+        <View style={styles.heroItem}>
+          <Text style={styles.heroLabel}>הוצאות</Text>
+          <View style={styles.heroValueContainer}>
+            <ArrowDownRight size={16} color="#EF4444" />
+            <Text style={[styles.heroSubValue, { color: '#EF4444' }]}>
+              ₪{MOCK_FINANCIALS.expenses.toLocaleString()}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.dividerVertical} />
+        <View style={styles.heroItem}>
+          <Text style={styles.heroLabel}>הכנסות</Text>
+          <View style={styles.heroValueContainer}>
+            <ArrowUpRight size={16} color="#10B981" />
+            <Text style={[styles.heroSubValue, { color: '#10B981' }]}>
+              ₪{MOCK_FINANCIALS.income.toLocaleString()}
+            </Text>
+          </View>
         </View>
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Stats Grid */}
-        <View style={styles.statsGrid}>
-          {statCards.map((stat, index) => (
-            <View key={index} style={styles.statCard}>
-              <View style={[styles.statIcon, { backgroundColor: stat.color + '20' }]}>
-                <stat.icon size={24} color={stat.color} />
-              </View>
-              <Text style={styles.statValue}>{stat.value}</Text>
-              <Text style={styles.statLabel}>{stat.label}</Text>
+      <View style={styles.driverHorizontal} />
+
+      <View style={styles.heroMain}>
+        <Text style={styles.heroMainLabel}>רווח נקי (יוני)</Text>
+        <Text style={styles.heroMainValue}>₪{MOCK_FINANCIALS.netProfit.toLocaleString()}</Text>
+      </View>
+    </View>
+  );
+
+  const renderTrendChart = () => (
+    <View style={styles.chartCard}>
+      <Text style={styles.sectionTitle}>מגמה חצי שנתית</Text>
+      <View style={styles.chartContainer}>
+        <BarChart
+          data={BAR_DATA}
+          barWidth={18}
+          height={220}
+          width={width - 80}
+          minHeight={3}
+          barBorderTopLeftRadius={4}
+          barBorderTopRightRadius={4}
+          frontColor={'#333'} // Fallback
+          yAxisTextStyle={{ color: '#9CA3AF', fontSize: 10 }}
+          xAxisLabelTextStyle={{ color: '#6B7280', fontSize: 10, fontFamily: Platform.select({ ios: 'System', android: 'Roboto' }) }}
+          noOfSections={4}
+          yAxisThickness={0}
+          xAxisThickness={0}
+          hideRules
+          backgroundColor="transparent"
+          initialSpacing={10}
+        />
+      </View>
+    </View>
+  );
+
+  const renderDistributionChart = () => (
+    <View style={styles.chartCard}>
+      <Text style={styles.sectionTitle}>התפלגות הכנסות</Text>
+      <View style={styles.pieContainer}>
+        {/* Legend */}
+        <View style={styles.legendContainer}>
+          {LEGEND_DATA.map((item, index) => (
+            <View key={index} style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+              <Text style={styles.legendLabel}>{item.label}</Text>
+              <Text style={styles.legendPercent}>{item.percentage}</Text>
             </View>
           ))}
         </View>
 
-        {/* Monthly Comparison Chart */}
-        <View style={{ marginBottom: 24 }}>
-          <MonthlyComparisonChart />
-        </View>
+        {/* Chart */}
+        <PieChart
+          data={PIE_DATA}
+          donut
+          sectionAutoFocus
+          radius={70}
+          innerRadius={50}
+          innerCircleColor={'#fff'} // Match card background
+          centerLabelComponent={() => (
+            <View style={{ justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ fontSize: 22, color: '#111', fontWeight: 'bold' }}>65%</Text>
+              <Text style={{ fontSize: 10, color: '#888' }}>מנויים</Text>
+            </View>
+          )}
+        />
+      </View>
+    </View>
+  );
 
-        {/* Menu Items */}
-        <View style={styles.menuSection}>
-          {menuItems.map((item, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.menuCard}
-              onPress={() => router.push(item.route as any)}
-            >
-              <View style={[styles.menuIcon, { backgroundColor: item.color + '20' }]}>
-                <item.icon size={28} color={item.color} />
-              </View>
-              <View style={styles.menuContent}>
-                <Text style={styles.menuTitle}>{item.title}</Text>
-                <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
-              </View>
-              <ChevronLeft size={20} color={Colors.textSecondary} />
-            </TouchableOpacity>
-          ))}
+  const renderKPIRow = () => (
+    <View style={styles.kpiRow}>
+      <View style={styles.kpiCard}>
+        <View style={[styles.kpiIcon, { backgroundColor: '#DBEAFE' }]}>
+          <TrendingUp size={18} color="#2563EB" />
         </View>
+        <Text style={styles.kpiLabel}>MRR</Text>
+        <Text style={styles.kpiValue}>₪{MOCK_FINANCIALS.mrr.toLocaleString()}</Text>
+      </View>
+
+      <View style={styles.kpiCard}>
+        <View style={[styles.kpiIcon, { backgroundColor: '#D1FAE5' }]}>
+          <Users size={18} color="#059669" />
+        </View>
+        <Text style={styles.kpiLabel}>ARPU</Text>
+        <Text style={styles.kpiValue}>₪{MOCK_FINANCIALS.arpu}</Text>
+      </View>
+
+      <View style={styles.kpiCard}>
+        <View style={[styles.kpiIcon, { backgroundColor: '#FEE2E2' }]}>
+          <RefreshCw size={18} color="#DC2626" />
+        </View>
+        <Text style={styles.kpiLabel}>נטו</Text>
+        <Text style={styles.kpiValue}>{MOCK_FINANCIALS.churn}</Text>
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      <AdminHeader title="דוחות ואנליטיקה" />
+
+      {/* Month Selector Strip */}
+      {renderMonthSelector()}
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {renderNetProfitCard()}
+
+        {renderTrendChart()}
+
+        {renderDistributionChart()}
+
+        {renderKPIRow()}
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -212,133 +247,187 @@ export default function FinancialDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background || '#181818',
-  },
-  centered: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border || '#333',
-  },
-  backButton: {
-    padding: 8,
-    marginLeft: 8,
-  },
-  headerContent: {
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: Colors.text || '#fff',
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  subtitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.textSecondary || '#aaa',
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  scrollView: {
-    flex: 1,
+    backgroundColor: '#F9FAFB', // Light gray background
   },
   scrollContent: {
     padding: 20,
+    gap: 20,
   },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  // Month Selector
+  monthSelectorContainer: {
+    backgroundColor: '#fff',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  monthSelectorContent: {
+    paddingHorizontal: 16,
     gap: 12,
-    marginBottom: 24,
   },
-  statCard: {
-    width: '48%',
-    backgroundColor: Colors.card || '#222',
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    shadowColor: Colors.shadow || '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+  monthPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
   },
-  statIcon: {
-    width: 48,
-    height: 48,
+  monthPillSelected: {
+    backgroundColor: '#111827', // Black
+  },
+  monthText: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  monthTextSelected: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  // Hero Profit Card
+  heroCard: {
+    backgroundColor: '#fff',
     borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  statValue: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: Colors.text || '#fff',
+  heroRowTop: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  heroItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  heroLabel: {
+    fontSize: 12,
+    color: '#9CA3AF',
     marginBottom: 4,
   },
-  statLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.textSecondary || '#aaa',
-    textAlign: 'center',
-    writingDirection: 'rtl',
-  },
-  menuSection: {
-    gap: 12,
-  },
-  menuCard: {
-    backgroundColor: Colors.card || '#222',
-    borderRadius: 16,
-    padding: 20,
-    flexDirection: 'row',
+  heroValueContainer: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    shadowColor: Colors.shadow || '#000',
+    gap: 4,
+  },
+  heroSubValue: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  dividerVertical: {
+    width: 1,
+    height: 30,
+    backgroundColor: '#F3F4F6',
+  },
+  driverHorizontal: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginBottom: 16,
+  },
+  heroMain: {
+    alignItems: 'center',
+  },
+  heroMainLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  heroMainValue: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: '#111827',
+    letterSpacing: -1,
+  },
+  // Chart Cards
+  chartCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     elevation: 2,
   },
-  menuIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 16,
-  },
-  menuContent: {
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-  menuTitle: {
+  sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.text || '#fff',
+    color: '#111',
+    marginBottom: 20,
+    textAlign: 'right', // RTL
+  },
+  chartContainer: {
+    alignItems: 'center',
+    marginLeft: -20, // Offset for y-axis labels space
+  },
+  // Pie Chart Layout
+  pieContainer: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  legendContainer: {
+    flex: 1,
+    gap: 12,
+    paddingRight: 10,
+  },
+  legendItem: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  legendLabel: {
+    fontSize: 14,
+    color: '#4B5563',
+    flex: 1,
     textAlign: 'right',
-    writingDirection: 'rtl',
+  },
+  legendPercent: {
+    fontSize: 14,
+    color: '#111',
+    fontWeight: '600',
+  },
+  // KPI Row
+  kpiRow: {
+    flexDirection: 'row-reverse',
+    gap: 12,
+  },
+  kpiCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  kpiIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  kpiLabel: {
+    fontSize: 12,
+    color: '#9CA3AF',
     marginBottom: 4,
   },
-  menuSubtitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.textSecondary || '#aaa',
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  loadingText: {
-    marginTop: 16,
+  kpiValue: {
     fontSize: 16,
-    color: Colors.textSecondary || '#aaa',
-    textAlign: 'center',
+    fontWeight: '700',
+    color: '#111',
   },
 });

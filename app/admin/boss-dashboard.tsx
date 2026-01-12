@@ -12,9 +12,9 @@ import {
 import { supabase } from '@/constants/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
-import { FinancialCards } from '@/components/boss/FinancialCards.tsx';
-import { QuickTasksList } from '@/components/boss/QuickTasksList.tsx';
-import { TodayClassCard } from '@/components/boss/TodayClassCard.tsx';
+import { FinancialCards } from '@/components/boss/FinancialCards';
+import { QuickTasksList } from '@/components/boss/QuickTasksList';
+import { TodayClassCard } from '@/components/boss/TodayClassCard';
 
 interface ClassData {
   id: string;
@@ -210,5 +210,38 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 8,
     textAlign: 'center',
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  alertButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  alertButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#da4477', // Brand Pink
+  },
+  alertIconBadge: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF4D4D', // Red dot
+    position: 'absolute',
+    top: 6,
+    right: 10,
+    zIndex: 1,
   },
 });

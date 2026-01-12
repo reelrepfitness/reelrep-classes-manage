@@ -29,6 +29,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { supabase } from '@/constants/supabase';
 import Colors from '@/constants/colors';
+import { AdminHeader } from '@/components/admin/AdminHeader';
 
 interface Client {
   id: string;
@@ -233,16 +234,8 @@ export default function ClientManagement() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ChevronLeft size={24} color={Colors.text} />
-        </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={styles.title}>👥 ניהול לקוחות</Text>
-          <Text style={styles.subtitle}>{clients.length} לקוחות</Text>
-        </View>
-      </View>
+    <View style={styles.container}>
+      <AdminHeader title="ניהול לקוחות" />
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
@@ -498,6 +491,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  // header styles can stay if unused, or be removed. Leaving them for safety but better to cleanup if possible.
   header: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -105,7 +105,7 @@ export function FinancialCards() {
             <DollarSign size={16} color="#6b7280" />
           </CardHeader>
           <CardContent>
-            <Text className="text-2xl font-bold">{formatCurrency(data.todayIncome)}</Text>
+            <Text className="text-2xl font-bold text-right">{formatCurrency(data.todayIncome)}</Text>
             <Text className="text-xs text-muted">+0% מהאתמול</Text>
           </CardContent>
         </Card>
@@ -117,7 +117,7 @@ export function FinancialCards() {
             <TrendingUp size={16} color="#6b7280" />
           </CardHeader>
           <CardContent>
-            <Text className="text-2xl font-bold">{formatCurrency(data.currentMonthIncome)}</Text>
+            <Text className="text-2xl font-bold text-right">{formatCurrency(data.currentMonthIncome)}</Text>
             <Text className="text-xs text-muted">
               {data.currentMonthIncome > data.lastMonthIncome ? '+' : ''}
               {data.lastMonthIncome > 0 ? Math.round(((data.currentMonthIncome - data.lastMonthIncome) / data.lastMonthIncome) * 100) : 0}% מחודש שעבר
@@ -132,7 +132,7 @@ export function FinancialCards() {
             <DollarSign size={16} color="#6b7280" />
           </CardHeader>
           <CardContent>
-            <Text className="text-2xl font-bold">{formatCurrency(data.lastMonthIncome)}</Text>
+            <Text className="text-2xl font-bold text-right">{formatCurrency(data.lastMonthIncome)}</Text>
             <Text className="text-xs text-muted">הכנסות סופיות</Text>
           </CardContent>
         </Card>
@@ -144,7 +144,7 @@ export function FinancialCards() {
             <TrendingUp size={16} color="#6b7280" />
           </CardHeader>
           <CardContent>
-            <Text className="text-2xl font-bold">
+            <Text className="text-2xl font-bold text-right">
               {data.lastMonthIncome > 0 ? Math.round(((data.currentMonthIncome - data.lastMonthIncome) / data.lastMonthIncome) * 100) : 0}%
             </Text>
             <Text className="text-xs text-muted">בהשוואה לחודש שעבר</Text>
@@ -154,7 +154,7 @@ export function FinancialCards() {
 
       {/* Row 2: Chart Comparison */}
       <View className="bg-surface p-4 rounded-2xl border border-gray-200 shadow-sm items-center">
-        <View className="w-full flex-row-reverse justify-between items-center mb-4 px-2">
+        <View className="w-full flex-row justify-between items-center mb-4 px-2">
           <Text className="text-sm font-bold text-[#09090B]">השוואה חודשית</Text>
           {data.currentMonthIncome > data.lastMonthIncome ? (
             <View className="flex-row items-center bg-green-100 px-2 py-1 rounded-full">
@@ -195,9 +195,9 @@ export function FinancialCards() {
       {/* Row 3: Navigation to Achievements (Fix for the crash) */}
       <TouchableOpacity
         onPress={() => router.push('/achievements' as any)}
-        className="bg-surface p-4 rounded-2xl border border-gray-200 shadow-sm flex-row-reverse justify-between items-center active:scale-[0.99]"
+        className="bg-surface p-4 rounded-2xl border border-gray-200 shadow-sm flex-row justify-between items-center active:scale-[0.99]"
       >
-        <View className="flex-row-reverse items-center gap-3">
+        <View className="flex-row items-center gap-3">
           <View className="bg-yellow-100 p-2.5 rounded-full border border-yellow-200">
             <Award size={20} color="#ca8a04" />
           </View>

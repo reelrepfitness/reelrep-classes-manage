@@ -18,6 +18,7 @@ import { router } from 'expo-router';
 import { CRMManager } from '@/lib/services/crm-manager';
 import { Lead, LeadStatus, LeadStats } from '@/constants/crm-types';
 import colors from '@/constants/colors';
+import { AdminHeader } from '@/components/admin/AdminHeader';
 
 const STATUS_CONFIG: Record<LeadStatus, { title: string; icon: string; color: string }> = {
   new: { title: 'חדשים', icon: 'add-circle', color: '#3b82f6' },
@@ -168,8 +169,8 @@ export default function LeadsManagementScreen() {
     const statusConfig = STATUS_CONFIG[lead.status];
     const daysSinceContact = lead.last_contact_at
       ? Math.floor(
-          (Date.now() - new Date(lead.last_contact_at).getTime()) / (1000 * 60 * 60 * 24)
-        )
+        (Date.now() - new Date(lead.last_contact_at).getTime()) / (1000 * 60 * 60 * 24)
+      )
       : null;
 
     const needsAttention = daysSinceContact !== null && daysSinceContact > 3;
@@ -246,16 +247,14 @@ export default function LeadsManagementScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="arrow-forward" size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>ניהול לידים</Text>
+    <View style={styles.container}>
+      <AdminHeader title="ניהול לידים" />
+
+      {/* Header with Search (Modified to remove title/back, kept search/add) */}
+      <View style={styles.subHeader}>
+        <View style={styles.headerActions}>
           <TouchableOpacity onPress={() => router.push('/admin/leads/new' as any)}>
-            <Ionicons name="add-circle" size={28} color="#fff" />
+            <Ionicons name="add-circle" size={32} color={colors.primary} />
           </TouchableOpacity>
         </View>
 
@@ -318,7 +317,7 @@ export default function LeadsManagementScreen() {
           <Ionicons name="stats-chart" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -327,40 +326,39 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f9fafb',
   },
-  header: {
-    backgroundColor: colors.background,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  headerTop: {
+  subHeader: {
+    padding: 16,
     flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#fff',
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   searchContainer: {
+    flex: 1,
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#fff',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     gap: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   searchInput: {
     flex: 1,
-    color: '#fff',
+    color: '#111827',
     fontSize: 16,
     textAlign: 'right',
   },
   statsContainer: {
     flexDirection: 'row-reverse',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
     gap: 12,
   },
   statCard: {
@@ -390,7 +388,7 @@ const styles = StyleSheet.create({
   },
   filtersContainer: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingBottom: 12,
     gap: 8,
     flexDirection: 'row-reverse',
   },

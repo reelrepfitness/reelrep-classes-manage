@@ -103,8 +103,8 @@ export const BirthdaySlide = () => {
                 {/* Hero: Today's Birthdays */}
                 {todayList.length > 0 ? (
                     <View className="mb-4">
-                        <View className="bg-white/10 p-4 rounded-2xl flex-row-reverse items-center justify-between shadow-sm border border-white/20">
-                            <View className="flex-row-reverse items-center gap-3">
+                        <View className="bg-white/10 p-4 rounded-2xl flex-row items-center justify-between shadow-sm border border-white/20">
+                            <View className="flex-row items-center gap-3">
                                 <View className="bg-white/20 p-2 rounded-full">
                                     <Cake size={20} color="white" />
                                 </View>
@@ -150,8 +150,8 @@ export const BirthdaySlide = () => {
                             keyExtractor={item => item.id}
                             showsVerticalScrollIndicator={false}
                             renderItem={({ item }) => (
-                                <View className="flex-row-reverse items-center justify-between py-2 border-b border-white/10">
-                                    <View className="flex-row-reverse items-center gap-3">
+                                <View className="flex-row items-center justify-between py-2 border-b border-white/10">
+                                    <View className="flex-row items-center gap-3">
                                         <View className="w-8 h-8 bg-white/20 rounded-full items-center justify-center">
                                             <Gift size={14} color="white" />
                                         </View>

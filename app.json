@@ -55,6 +55,12 @@
           "healthSharePermission": "Allow $(PRODUCT_NAME) to access your health data",
           "healthUpdatePermission": "Allow $(PRODUCT_NAME) to update your health data"
         }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "האפליקציה צריכה גישה ליומן כדי לסנכרן את השיעורים שלך."
+        }
       ]
     ],
     "experiments": {

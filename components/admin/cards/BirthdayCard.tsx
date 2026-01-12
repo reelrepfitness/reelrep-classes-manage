@@ -99,7 +99,7 @@ export const BirthdayCard = () => {
 
     return (
         <View style={{ backgroundColor: Colors.primary }} className="rounded-3xl p-5 shadow-sm border border-white/10 flex-1">
-            <View className="flex-row-reverse justify-between items-center mb-4">
+            <View className="flex-row justify-between items-center mb-4">
                 <Text className="text-lg font-extrabold text-white">ימי הולדת</Text>
                 <Text className="text-xs text-pink-100">היום ובקרוב</Text>
             </View>
@@ -108,9 +108,9 @@ export const BirthdayCard = () => {
             {todayList.length > 0 ? (
                 <View className="mb-4">
                     <View
-                        className="bg-white p-4 rounded-2xl flex-row-reverse items-center justify-between shadow-sm"
+                        className="bg-white p-4 rounded-2xl flex-row items-center justify-between shadow-sm"
                     >
-                        <View className="flex-row-reverse items-center gap-3">
+                        <View className="flex-row items-center gap-3">
                             <View className="bg-pink-50 p-2 rounded-full">
                                 <Cake size={20} color={Colors.primary} />
                             </View>
@@ -160,8 +160,8 @@ export const BirthdayCard = () => {
                         keyExtractor={item => item.id}
                         showsVerticalScrollIndicator={false}
                         renderItem={({ item }) => (
-                            <View className="flex-row-reverse items-center justify-between py-2 border-b border-white/10">
-                                <View className="flex-row-reverse items-center gap-3">
+                            <View className="flex-row items-center justify-between py-2 border-b border-white/10">
+                                <View className="flex-row items-center gap-3">
                                     <View className="w-8 h-8 bg-white/20 rounded-full items-center justify-center">
                                         <Gift size={14} color="white" />
                                     </View>

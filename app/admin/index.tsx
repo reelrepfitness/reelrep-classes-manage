@@ -1,241 +1,63 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Users, AlertCircle, DollarSign, Pause, LogOut, ShoppingCart } from 'lucide-react-native';
-import { useAuth } from '@/contexts/AuthContext';
-import Colors from '@/constants/colors';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/constants/supabase';
-import { AdminActionTabs } from '@/components/admin/AdminActionTabs';
-import { useClasses } from '@/contexts/ClassesContext';
-import { Calendar, Clock, ChevronLeft } from 'lucide-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useState } from 'react';
-import AdminClassModal from '@/components/admin/AdminClassModal';
+import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import RevenueWidget from '@/components/admin/dashboard/RevenueWidget';
+import LeadFunnelWidget from '@/components/admin/dashboard/LeadFunnelWidget';
+import DailyClassesWidget from '@/components/admin/dashboard/DailyClassesWidget';
+import StatsGrid from '@/components/admin/dashboard/StatsGrid';
+import { useAdminDashboardData } from '@/hooks/admin/useAdminDashboardData';
+import { AdminHeader } from '@/components/admin/AdminHeader';
 
 export default function AdminDashboard() {
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { user, signOut } = useAuth();
-  const { classes } = useClasses();
+  const { revenue, funnel, stats, todaysClasses, loading, refresh } = useAdminDashboardData();
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [selectedClass, setSelectedClass] = useState<any>(null);
-  const [modalVisible, setModalVisible] = useState(false);
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  }, [refresh]);
 
-  // Filter Today's Classes
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayString = today.toLocaleDateString('en-CA'); // Matches YYYY-MM-DD format used in context
-
-  const todaysClasses = classes
-    .filter(c => c.date === todayString)
-    .sort((a, b) => a.time.localeCompare(b.time));
-
-  const getProgressColor = (percentage: number) => {
-    if (percentage < 30) return Colors.error; // Red
-    if (percentage < 80) return '#eab308'; // Yellow
-    return '#22c55e'; // Green
-  };
-
-  const handleClassPress = (classItem: any) => {
-    setSelectedClass(classItem);
-    setModalVisible(true);
-  };
-
-  // Fetch active subscriptions count
-  const { data: activeSubscriptions = 0 } = useQuery({
-    queryKey: ['admin-active-subscriptions'],
-    queryFn: async () => {
-      const { count } = await supabase
-        .from('user_subscriptions')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_active', true);
-      return count || 0;
-    },
-  });
-
-  // Fetch clients needing attention (expiring soon or last workout)
-  const { data: needsAttention = 0 } = useQuery({
-    queryKey: ['admin-needs-attention'],
-    queryFn: async () => {
-      const threeDaysFromNow = new Date();
-      threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
-
-      const { count } = await supabase
-        .from('user_subscriptions')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_active', true)
-        .lte('end_date', threeDaysFromNow.toISOString());
-
-      return count || 0;
-    },
-  });
-
-  // Fetch debts (clients who owe money)
-  const { data: debtsData } = useQuery({
-    queryKey: ['admin-debts'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('user_subscriptions')
-        .select('outstanding_balance')
-        .gt('outstanding_balance', 0);
-
-      const totalDebt = data?.reduce((sum, item) => sum + (item.outstanding_balance || 0), 0) || 0;
-      const count = data?.length || 0;
-      return { count, totalDebt };
-    },
-  });
-
-  // Fetch frozen plans count
-  const { data: frozenPlans = 0 } = useQuery({
-    queryKey: ['admin-frozen-plans'],
-    queryFn: async () => {
-      const { count } = await supabase
-        .from('user_subscriptions')
-        .select('*', { count: 'exact', head: true })
-        .eq('plan_status', 'frozen');
-
-      return count || 0;
-    },
-  });
-
-
-
-  // ... inside component
-  const [trend, setTrend] = useState<'up' | 'down' | 'neutral'>('neutral');
-
-  // ... 
-
-  // Handle Trend Logic
-  React.useEffect(() => {
-    const checkTrend = async () => {
-      try {
-        const todayStr = new Date().toLocaleDateString('en-CA');
-        const storedDate = await AsyncStorage.getItem('admin_trend_date');
-        const storedBaseline = await AsyncStorage.getItem('admin_trend_baseline');
-
-        if (storedDate !== todayStr || storedBaseline === null) {
-          // New day or first run: set baseline
-          await AsyncStorage.setItem('admin_trend_date', todayStr);
-          await AsyncStorage.setItem('admin_trend_baseline', needsAttention.toString());
-          setTrend('neutral');
-        } else {
-          // Same day: compare
-          const baseline = parseInt(storedBaseline, 10);
-          if (needsAttention > baseline) {
-            setTrend('up');
-          } else if (needsAttention < baseline) {
-            setTrend('down');
-          } else {
-            setTrend('neutral');
-          }
-        }
-      } catch (e) {
-        console.error('Failed to update trend', e);
-      }
-    };
-    checkTrend();
-  }, [needsAttention]);
-
-  const handleSignOut = () => {
-    signOut();
-    router.replace('/auth');
-  };
-
-  const actionCards = [
-    {
-      label: 'מנויים פעילים',
-      value: activeSubscriptions.toString(),
-      icon: null, // Custom image
-      customIcon: require('@/assets/images/active-users.webp'),
-      color: Colors.primary,
-      route: '/admin/clients/active',
-    },
-    {
-      label: 'דורשים טיפול',
-      value: needsAttention.toString(),
-      icon: null, // Custom image
-      customIcon: require('@/assets/images/octagon-exclamation.webp'),
-      color: '#f59e0b',
-      route: '/admin/clients/needs-attention',
-      borderColor: trend === 'up' ? Colors.error : trend === 'down' ? '#22c55e' : undefined,
-    },
-    {
-      label: 'חייבים',
-      value: debtsData?.totalDebt ? `₪${debtsData.totalDebt.toFixed(0)}` : '₪0',
-      subtitle: (debtsData?.count || 0) > 0 ? `${debtsData?.count} לקוחות` : undefined,
-      icon: null, // Custom image
-      customIcon: require('@/assets/images/debt.webp'),
-      color: '#ef4444',
-      route: '/admin/clients/debts',
-    },
-    {
-      label: 'הקפאות',
-      value: frozenPlans.toString(),
-      icon: null, // Custom image
-      customIcon: require('@/assets/images/snowflake.webp'),
-      color: '#06b6d4',
-      route: '/admin/clients/frozen',
-    },
-    {
-      label: 'חנות / רכישה',
-      value: 'חנות', // Or some other label/stat
-      icon: ShoppingCart,
-      color: '#8b5cf6',
-      route: '/admin/store',
-    },
+  // Transform Stats for Grid
+  const statsGridData = [
+    { key: 'debts', label: `חייבים (₪${stats.debts.total})`, value: stats.debts.count, icon: 'card' as const, color: '#EF4444', route: '/admin/financial/debts' },
+    { key: 'frozen', label: 'מנויים בהקפאה', value: stats.frozen, icon: 'snow' as const, color: '#3B82F6', route: '/admin/clients/frozen' },
+    { key: 'active', label: 'מנויים פעילים', value: stats.active, icon: 'people' as const, color: '#10B981', route: '/admin/clients/active' },
+    { key: 'tasks', label: 'לטיפול דחוף', value: stats.tasks, icon: 'alert-circle' as const, color: '#F97316', route: '/admin/alerts-menu' },
   ];
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
+      <AdminHeader title="מסך ניהול" />
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
       >
-        {/* Income/Actions Tabs */}
-        <View style={styles.chartSection}>
-          <AdminActionTabs />
-        </View>
+        {/* 1. Revenue Hero */}
+        <RevenueWidget
+          revenue={revenue.total}
+          trend={revenue.trend}
+          trendUp={revenue.trendUp}
+          data={revenue.chartData}
+        />
 
-        {/* Action Cards Grid */}
-        <View style={styles.cardsGrid}>
-          {actionCards.map((card, index) => (
-            <TouchableOpacity
-              key={index}
-              style={[
-                styles.actionCard,
-                (card as any).borderColor && { borderColor: (card as any).borderColor, borderWidth: 2 }
-              ]}
-              onPress={() => router.push(card.route as any)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.cardIcon}>
-                {card.customIcon ? (
-                  <Image source={card.customIcon} style={{ width: 48, height: 48, tintColor: card.color }} resizeMode="contain" />
-                ) : (
-                  <card.icon size={24} color={card.color} />
-                )}
-              </View>
-              <Text style={styles.cardValue}>{card.value}</Text>
-              {card.subtitle && (
-                <Text style={styles.cardSubtitle}>{card.subtitle}</Text>
-              )}
-              <Text style={styles.cardLabel}>{card.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {/* 2. Lead Funnel */}
+        <LeadFunnelWidget
+          newLeads={funnel.newLeads}
+          trials={funnel.trials}
+          conversionRate={funnel.conversionRate}
+        />
 
+        {/* 3. Daily Studio */}
+        <DailyClassesWidget classes={todaysClasses} />
 
+        {/* 4. Stats Grid */}
+        <StatsGrid stats={statsGridData} />
 
         <View style={{ height: 40 }} />
       </ScrollView>
-
-      <AdminClassModal
-        visible={modalVisible}
-        classItem={selectedClass}
-        onClose={() => setModalVisible(false)}
-      />
     </View>
   );
 }
@@ -243,159 +65,13 @@ export default function AdminDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  headerContent: {
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-  logoutButton: {
-    padding: 8,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: Colors.text,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  subtitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.textSecondary,
-    textAlign: 'right',
-    writingDirection: 'rtl',
+    backgroundColor: '#F9FAFB', // Light Background for Content
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
-  },
-  chartSection: {
-    marginBottom: 24,
-  },
-  cardsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  actionCard: {
-    width: '48%',
-    backgroundColor: Colors.card,
-    borderRadius: 20, // Slightly rounder
-    padding: 24, // More breathing room
-    alignItems: 'center',
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
-  },
-  cardIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  cardValue: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: Colors.text,
-    marginBottom: 2,
-  },
-  cardSubtitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-    marginBottom: 4,
-  },
-  cardLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    writingDirection: 'rtl',
-  },
-  sectionContainer: {
-    marginTop: 24,
-    marginBottom: 8,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: Colors.text,
-    textAlign: 'right',
-    marginBottom: 16,
-    writingDirection: 'rtl',
-  },
-  classCard: {
-    width: 150,
-    aspectRatio: 1,
-    backgroundColor: Colors.card,
-    borderRadius: 20,
-    padding: 16,
-    marginRight: 12,
-    justifyContent: 'space-between',
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
-  },
-  className: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.text,
-    marginBottom: 4,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  classTimeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  classTime: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    fontWeight: '500',
-  },
-  capacityText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  progressBarContainer: {
-    width: 6,
-    height: 35,
-    backgroundColor: '#f4f4f5',
-    borderRadius: 10,
-    overflow: 'hidden',
-    justifyContent: 'flex-end',
-  },
-  progressBarFill: {
-    width: '100%',
-    borderRadius: 10,
+    padding: 24,
+    paddingTop: 24,
   },
 });

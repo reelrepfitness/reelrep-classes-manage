@@ -79,7 +79,7 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
       const { data, error } = await supabase
         .from('class_bookings')
         .select('class_id, status, classes:class_id(schedule_id, class_date), profiles:user_id(avatar_url)')
-        .in('status', ['confirmed', 'completed', 'no_show']);
+        .in('status', ['confirmed', 'completed', 'no_show', 'waiting_list']);
 
       if (error) {
         console.error('Error fetching all bookings:', error);
@@ -110,20 +110,31 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
           return matchesSchedule && matchesDate;
         });
 
-        const enrolledCount = classBookings.length;
-        const enrolledAvatars = classBookings
+        const enrolledBookings = classBookings.filter((b: any) =>
+          ['confirmed', 'completed', 'no_show'].includes(b.status)
+        );
+        const waitingListBookings = classBookings.filter((b: any) =>
+          b.status === 'waiting_list'
+        );
+
+        const enrolledCount = enrolledBookings.length;
+        const waitingListCount = waitingListBookings.length;
+        const enrolledAvatars = enrolledBookings
           .map((b: any) => b.profiles?.avatar_url as string | undefined)
           .filter((url): url is string => !!url);
 
         return {
           ...classItem,
           enrolled: enrolledCount,
+          waitingListCount,
           enrolledAvatars,
         };
       });
 
-      // Only update if the enrolled counts actually changed
-      const hasChanges = updatedClasses.some((c, i) => c.enrolled !== classes[i].enrolled);
+      // Only update if the enrolled counts or waiting list counts actually changed
+      const hasChanges = updatedClasses.some((c, i) =>
+        c.enrolled !== classes[i].enrolled || c.waitingListCount !== classes[i].waitingListCount
+      );
       if (hasChanges) {
         setClasses(updatedClasses);
       }

@@ -4,6 +4,7 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { I18nManager, Platform } from "react-native";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { WorkoutProvider } from "@/contexts/WorkoutContext";
@@ -15,8 +16,8 @@ SplashScreen.preventAutoHideAsync();
 
 if (Platform.OS !== 'web') {
   if (!I18nManager.isRTL) {
-    I18nManager.forceRTL(true);
     I18nManager.allowRTL(true);
+    I18nManager.forceRTL(true);
   }
 }
 
@@ -63,17 +64,19 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <AuthProvider>
-          <WorkoutProvider>
-            <ShopProvider>
-              <ClassesProvider>
-                <AchievementsProvider>
-                  <RootLayoutNav />
-                </AchievementsProvider>
-              </ClassesProvider>
-            </ShopProvider>
-          </WorkoutProvider>
-        </AuthProvider>
+        <BottomSheetModalProvider>
+          <AuthProvider>
+            <WorkoutProvider>
+              <ShopProvider>
+                <ClassesProvider>
+                  <AchievementsProvider>
+                    <RootLayoutNav />
+                  </AchievementsProvider>
+                </ClassesProvider>
+              </ShopProvider>
+            </WorkoutProvider>
+          </AuthProvider>
+        </BottomSheetModalProvider>
       </GestureHandlerRootView>
     </QueryClientProvider>
   );

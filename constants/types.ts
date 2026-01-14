@@ -99,6 +99,7 @@ export interface Class {
   location: string;
   requiredSubscription: SubscriptionType[];
   enrolledAvatars?: string[];
+  waitingListCount?: number;
 }
 
 export interface ClassBooking {

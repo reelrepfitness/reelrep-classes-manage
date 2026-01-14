@@ -1,5 +1,5 @@
 // app/admin/clients/index.tsx
-// Client Management Screen
+// Client Management Screen - REDESIGNED
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -11,25 +11,22 @@ import {
   ActivityIndicator,
   TextInput,
   Alert,
-  Modal,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  ChevronLeft,
   Search,
   Users,
-  Edit,
+  ChevronRight,
   Ban,
-  CheckCircle,
-  Calendar,
-  Plus,
-  Minus,
+  Filter,
 } from 'lucide-react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { supabase } from '@/constants/supabase';
 import Colors from '@/constants/colors';
 import { AdminHeader } from '@/components/admin/AdminHeader';
+
+const { width } = Dimensions.get('window');
 
 interface Client {
   id: string;
@@ -54,10 +51,6 @@ export default function ClientManagement() {
   const [filteredClients, setFilteredClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [editingField, setEditingField] = useState<string>('');
 
   useEffect(() => {
     loadClients();
@@ -70,14 +63,12 @@ export default function ClientManagement() {
   const loadClients = async () => {
     try {
       setLoading(true);
-
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .order('full_name', { ascending: true });
 
       if (error) throw error;
-
       setClients(data || []);
     } catch (error) {
       console.error('Error loading clients:', error);
@@ -103,379 +94,141 @@ export default function ClientManagement() {
     setFilteredClients(filtered);
   };
 
-  const handleBlockClient = async (client: Client) => {
-    const isBlocked = client.block_end_date && new Date(client.block_end_date) > new Date();
-
-    if (isBlocked) {
-      // Unblock
-      Alert.alert('ביטול חסימה', `האם לבטל את החסימה של ${client.full_name}?`, [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'כן',
-          onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from('profiles')
-                .update({ block_end_date: null })
-                .eq('id', client.id);
-
-              if (error) throw error;
-
-              Alert.alert('הצלחה', 'החסימה בוטלה');
-              loadClients();
-            } catch (error) {
-              console.error('Error unblocking client:', error);
-              Alert.alert('שגיאה', 'לא ניתן לבטל את החסימה');
-            }
-          },
-        },
-      ]);
-    } else {
-      // Block for 30 days
-      Alert.alert('חסימת לקוח', `האם לחסום את ${client.full_name} ל-30 ימים?`, [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'כן',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const blockDate = new Date();
-              blockDate.setDate(blockDate.getDate() + 30);
-
-              const { error } = await supabase
-                .from('profiles')
-                .update({ block_end_date: blockDate.toISOString() })
-                .eq('id', client.id);
-
-              if (error) throw error;
-
-              Alert.alert('הצלחה', 'הלקוח נחסם ל-30 ימים');
-              loadClients();
-            } catch (error) {
-              console.error('Error blocking client:', error);
-              Alert.alert('שגיאה', 'לא ניתן לחסום את הלקוח');
-            }
-          },
-        },
-      ]);
-    }
-  };
-
-  const handleEditClient = (client: Client) => {
-    setSelectedClient(client);
-    setShowEditModal(true);
-  };
-
-  const handleUpdateField = async (field: string, value: any) => {
-    if (!selectedClient) return;
-
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ [field]: value })
-        .eq('id', selectedClient.id);
-
-      if (error) throw error;
-
-      Alert.alert('הצלחה', 'השדה עודכן בהצלחה');
-      loadClients();
-      setSelectedClient({ ...selectedClient, [field]: value });
-    } catch (error) {
-      console.error('Error updating field:', error);
-      Alert.alert('שגיאה', 'לא ניתן לעדכן את השדה');
-    }
-  };
-
-  const handleChangeClasses = async (delta: number) => {
-    if (!selectedClient) return;
-
-    const newValue = Math.max(0, selectedClient.classes_used + delta);
-
-    await handleUpdateField('classes_used', newValue);
-  };
-
-  const getSubscriptionColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return Colors.success || '#4ade80';
-      case 'expired':
-        return Colors.error || '#ef4444';
-      case 'cancelled':
-        return Colors.textSecondary || '#aaa';
-      default:
-        return Colors.textSecondary || '#aaa';
-    }
-  };
-
-  const getSubscriptionText = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'פעיל';
-      case 'expired':
-        return 'פג תוקף';
-      case 'cancelled':
-        return 'בוטל';
-      default:
-        return status;
-    }
-  };
-
   const isClientBlocked = (client: Client) => {
     return client.block_end_date && new Date(client.block_end_date) > new Date();
   };
 
-  const formatDate = (dateStr: string | null | undefined) => {
-    if (!dateStr) return 'לא נקבע';
-    return new Intl.DateTimeFormat('he-IL', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    }).format(new Date(dateStr));
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'active': return '#22C55E';
+      case 'expired': return '#EF4444';
+      case 'frozen': return '#3B82F6';
+      default: return '#94A3B8';
+    }
+  };
+
+  const getStatusName = (status: string) => {
+    switch (status) {
+      case 'active': return 'פעיל';
+      case 'expired': return 'פג תוקף';
+      case 'frozen': return 'קפוא';
+      default: return 'לא ידוע';
+    }
   };
 
   return (
     <View style={styles.container}>
       <AdminHeader title="ניהול לקוחות" />
 
-      {/* Search Bar */}
+      {/* 1. Statistics Summary */}
+      {!loading && (
+        <View style={styles.statsSummary}>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryValue}>{clients.length}</Text>
+            <Text style={styles.summaryLabel}>סה"כ לקוחות</Text>
+          </View>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryItem}>
+            <Text style={[styles.summaryValue, { color: '#22C55E' }]}>
+              {clients.filter(c => c.subscription_status === 'active').length}
+            </Text>
+            <Text style={styles.summaryLabel}>מנויים פעילים</Text>
+          </View>
+        </View>
+      )}
+
+      {/* 2. Search & Filter Bar */}
       <View style={styles.searchContainer}>
+        <TouchableOpacity
+          style={styles.newClientButton}
+          onPress={() => router.push('/admin/clients/new')}
+          activeOpacity={0.7}
+        >
+          <Users size={18} color="#fff" />
+          <Text style={styles.newClientButtonText}>לקוח חדש</Text>
+        </TouchableOpacity>
+
         <View style={styles.searchBar}>
-          <Search size={20} color={Colors.textSecondary} />
+          <Search size={20} color="#94A3B8" />
           <TextInput
             style={styles.searchInput}
             placeholder="חיפוש לפי שם או אימייל..."
-            placeholderTextColor={Colors.textSecondary}
+            placeholderTextColor="#94A3B8"
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
         </View>
       </View>
 
-      {/* Clients List */}
+      {/* 3. Clients List */}
       {loading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
       ) : filteredClients.length === 0 ? (
         <View style={styles.centered}>
+          <Users size={48} color="#E2E8F0" style={{ marginBottom: 12 }} />
           <Text style={styles.emptyText}>לא נמצאו לקוחות</Text>
         </View>
       ) : (
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
           showsVerticalScrollIndicator={false}
         >
           {filteredClients.map((client) => {
             const blocked = isClientBlocked(client);
+            const statusColor = getStatusColor(client.subscription_status || 'expired');
 
             return (
-              <View
+              <TouchableOpacity
                 key={client.id}
                 style={[styles.clientCard, blocked && styles.clientCardBlocked]}
+                activeOpacity={0.7}
+                onPress={() => router.push(`/admin/clients/${client.id}`)}
               >
-                <View style={styles.clientHeader}>
-                  <View style={styles.clientInfo}>
-                    <Text style={styles.clientName}>{client.full_name || 'משתמש'}</Text>
-                    <Text style={styles.clientEmail}>{client.email}</Text>
-                    {blocked && (
-                      <View style={styles.blockedBadge}>
-                        <Ban size={14} color={Colors.error} />
-                        <Text style={styles.blockedText}>
-                          חסום עד {formatDate(client.block_end_date)}
-                        </Text>
-                      </View>
-                    )}
+                <View style={styles.cardMain}>
+                  <View style={styles.clientAvatar}>
+                    <Text style={styles.avatarText}>{client.full_name?.charAt(0) || '?'}</Text>
+                    <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
                   </View>
-                </View>
 
-                <View style={styles.clientStats}>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>מנוי</Text>
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        {
-                          backgroundColor:
-                            getSubscriptionColor(client.subscription_status || 'cancelled') + '20',
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.statusText,
-                          { color: getSubscriptionColor(client.subscription_status || 'cancelled') },
-                        ]}
-                      >
-                        {getSubscriptionText(client.subscription_status || 'cancelled')}
+                  <View style={styles.clientInfo}>
+                    <Text style={styles.clientName}>{client.full_name || 'ללא שם'}</Text>
+                    <Text style={styles.clientEmail} numberOfLines={1}>{client.email}</Text>
+                  </View>
+
+                  <View style={styles.cardRight}>
+                    <View style={[styles.statusBadge, { backgroundColor: statusColor + '15' }]}>
+                      <Text style={[styles.statusBadgeText, { color: statusColor }]}>
+                        {getStatusName(client.subscription_status || 'expired')}
                       </Text>
                     </View>
-                  </View>
-
-                  <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>שיעורים</Text>
-                    <Text style={styles.statValue}>
-                      {client.classes_used || 0}/{client.classes_per_month || 0}
-                    </Text>
-                  </View>
-
-                  <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>פלטות</Text>
-                    <Text style={styles.statValue}>{client.plate_balance || 0}</Text>
+                    <ChevronRight size={20} color="#CBD5E1" />
                   </View>
                 </View>
 
-                <View style={styles.clientActions}>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.editButton]}
-                    onPress={() => handleEditClient(client)}
-                  >
-                    <Edit size={18} color={Colors.primary} />
-                    <Text style={[styles.actionButtonText, { color: Colors.primary }]}>ערוך</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.actionButton,
-                      blocked ? styles.unblockButton : styles.blockButton,
-                    ]}
-                    onPress={() => handleBlockClient(client)}
-                  >
-                    {blocked ? (
-                      <>
-                        <CheckCircle size={18} color={Colors.success} />
-                        <Text style={[styles.actionButtonText, { color: Colors.success }]}>
-                          בטל חסימה
-                        </Text>
-                      </>
-                    ) : (
-                      <>
-                        <Ban size={18} color={Colors.error} />
-                        <Text style={[styles.actionButtonText, { color: Colors.error }]}>חסום</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
+                <View style={styles.cardFooter}>
+                  <View style={styles.footerStat}>
+                    <Text style={styles.footerLabel}>שיעורים החודש</Text>
+                    <Text style={styles.footerValue}>{client.classes_used || 0}/{client.classes_per_month || 0}</Text>
+                  </View>
+                  <View style={styles.footerDivider} />
+                  <View style={styles.footerStat}>
+                    <Text style={styles.footerLabel}>פלטות</Text>
+                    <Text style={styles.footerValue}>{client.plate_balance || 0}</Text>
+                  </View>
+                  {blocked && (
+                    <View style={styles.blockedIndicator}>
+                      <Ban size={12} color="#EF4444" />
+                      <Text style={styles.blockedText}>חסום</Text>
+                    </View>
+                  )}
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           })}
-
-          <View style={{ height: 40 }} />
         </ScrollView>
-      )}
-
-      {/* Edit Modal */}
-      <Modal visible={showEditModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            {selectedClient && (
-              <>
-                <Text style={styles.modalTitle}>עריכת {selectedClient.full_name}</Text>
-
-                <ScrollView showsVerticalScrollIndicator={false}>
-                  {/* Subscription Dates */}
-                  <View style={styles.editSection}>
-                    <Text style={styles.editLabel}>תאריך תחילת מנוי</Text>
-                    <TouchableOpacity
-                      style={styles.editButton2}
-                      onPress={() => {
-                        setEditingField('subscription_start');
-                        setShowDatePicker(true);
-                      }}
-                    >
-                      <Calendar size={18} color={Colors.primary} />
-                      <Text style={styles.editButtonText2}>
-                        {formatDate(selectedClient.subscription_start)}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.editSection}>
-                    <Text style={styles.editLabel}>תאריך סיום מנוי</Text>
-                    <TouchableOpacity
-                      style={styles.editButton2}
-                      onPress={() => {
-                        setEditingField('subscription_end');
-                        setShowDatePicker(true);
-                      }}
-                    >
-                      <Calendar size={18} color={Colors.primary} />
-                      <Text style={styles.editButtonText2}>
-                        {formatDate(selectedClient.subscription_end)}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Classes Used */}
-                  <View style={styles.editSection}>
-                    <Text style={styles.editLabel}>שיעורים שנוצלו</Text>
-                    <View style={styles.counterContainer}>
-                      <TouchableOpacity
-                        style={styles.counterButton}
-                        onPress={() => handleChangeClasses(1)}
-                      >
-                        <Plus size={20} color={Colors.primary} />
-                      </TouchableOpacity>
-                      <Text style={styles.counterValue}>{selectedClient.classes_used || 0}</Text>
-                      <TouchableOpacity
-                        style={styles.counterButton}
-                        onPress={() => handleChangeClasses(-1)}
-                      >
-                        <Minus size={20} color={Colors.primary} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {/* Stats */}
-                  <View style={styles.editSection}>
-                    <Text style={styles.editLabel}>סטטיסטיקות</Text>
-                    <View style={styles.statsGrid}>
-                      <View style={styles.statBox}>
-                        <Text style={styles.statBoxValue}>{selectedClient.total_workouts || 0}</Text>
-                        <Text style={styles.statBoxLabel}>סך אימונים</Text>
-                      </View>
-                      <View style={styles.statBox}>
-                        <Text style={styles.statBoxValue}>
-                          {selectedClient.late_cancellations || 0}
-                        </Text>
-                        <Text style={styles.statBoxLabel}>ביטולים מאוחרים</Text>
-                      </View>
-                    </View>
-                  </View>
-                </ScrollView>
-
-                <TouchableOpacity
-                  style={styles.closeButton}
-                  onPress={() => {
-                    setShowEditModal(false);
-                    setSelectedClient(null);
-                  }}
-                >
-                  <Text style={styles.closeButtonText}>סגור</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      {/* Date Picker */}
-      {showDatePicker && selectedClient && (
-        <DateTimePicker
-          value={
-            editingField === 'subscription_start'
-              ? new Date(selectedClient.subscription_start || new Date())
-              : new Date(selectedClient.subscription_end || new Date())
-          }
-          mode="date"
-          display="default"
-          onChange={(event, date) => {
-            setShowDatePicker(false);
-            if (date) {
-              handleUpdateField(editingField, date.toISOString());
-            }
-          }}
-        />
       )}
     </View>
   );
@@ -484,276 +237,205 @@ export default function ClientManagement() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background || '#181818',
+    backgroundColor: '#FFFFFF', // Clean White
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingBottom: 100,
   },
-  // header styles can stay if unused, or be removed. Leaving them for safety but better to cleanup if possible.
-  header: {
-    flexDirection: 'row',
+  statsSummary: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    justifyContent: 'center',
     paddingVertical: 16,
+    backgroundColor: '#F8FAFC',
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border || '#333',
+    borderBottomColor: '#F1F5F9',
   },
-  backButton: {
-    padding: 8,
-    marginLeft: 8,
-  },
-  headerContent: {
+  summaryItem: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: 'center',
   },
-  title: {
-    fontSize: 24,
+  summaryValue: {
+    fontSize: 20,
     fontWeight: '800',
-    color: Colors.text || '#fff',
-    textAlign: 'right',
-    writingDirection: 'rtl',
+    color: '#0F172A',
   },
-  subtitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.textSecondary || '#aaa',
-    textAlign: 'right',
+  summaryLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    marginTop: 2,
+  },
+  summaryDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: '#E2E8F0',
   },
   searchContainer: {
     padding: 20,
+    backgroundColor: '#fff',
+  },
+  newClientButton: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primary,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    marginBottom: 12,
+    gap: 8,
+  },
+  newClientButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
   },
   searchBar: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    backgroundColor: Colors.card || '#222',
-    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 16,
     paddingHorizontal: 16,
-    gap: 12,
+    height: 52,
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: Colors.text || '#fff',
+    color: '#0F172A',
     paddingVertical: 12,
+    marginRight: 10,
     textAlign: 'right',
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 4,
   },
   clientCard: {
-    backgroundColor: Colors.card || '#222',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: Colors.shadow || '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
     elevation: 2,
+    overflow: 'hidden',
   },
   clientCardBlocked: {
-    borderWidth: 2,
-    borderColor: (Colors.error || '#ef4444') + '40',
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
   },
-  clientHeader: {
-    marginBottom: 12,
+  cardMain: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+  },
+  clientAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  avatarText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  statusDot: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   clientInfo: {
+    flex: 1,
+    marginRight: 12,
     alignItems: 'flex-end',
   },
   clientName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.text || '#fff',
-    textAlign: 'right',
-    marginBottom: 4,
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 2,
   },
   clientEmail: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.textSecondary || '#aaa',
-    textAlign: 'right',
-    marginBottom: 8,
+    fontSize: 13,
+    color: '#64748B',
   },
-  blockedBadge: {
-    flexDirection: 'row',
+  cardRight: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: (Colors.error || '#ef4444') + '20',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  blockedText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.error || '#ef4444',
-  },
-  clientStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 12,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: Colors.border || '#333',
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: Colors.textSecondary || '#aaa',
-    marginBottom: 4,
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.text || '#fff',
+    gap: 8,
   },
   statusBadge: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
   },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '700',
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
   },
-  clientActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
+  cardFooter: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 10,
-    gap: 6,
+    backgroundColor: '#FBFCFE',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  editButton: {
-    backgroundColor: (Colors.primary || '#da4477') + '20',
+  footerStat: {
+    flex: 1,
+    alignItems: 'center',
   },
-  blockButton: {
-    backgroundColor: (Colors.error || '#ef4444') + '20',
-  },
-  unblockButton: {
-    backgroundColor: (Colors.success || '#4ade80') + '20',
-  },
-  actionButtonText: {
-    fontSize: 14,
+  footerLabel: {
+    fontSize: 10,
     fontWeight: '700',
+    color: '#94A3B8',
+    marginBottom: 2,
+  },
+  footerValue: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#334155',
+  },
+  footerDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: '#E2E8F0',
+  },
+  blockedIndicator: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+    marginLeft: 8,
+  },
+  blockedText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#EF4444',
   },
   emptyText: {
     fontSize: 16,
-    color: Colors.textSecondary || '#aaa',
-    textAlign: 'center',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: Colors.card || '#222',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    maxHeight: '80%',
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: Colors.text || '#fff',
-    textAlign: 'right',
-    marginBottom: 24,
-  },
-  editSection: {
-    marginBottom: 20,
-  },
-  editLabel: {
-    fontSize: 14,
     fontWeight: '600',
-    color: Colors.text || '#fff',
-    textAlign: 'right',
-    marginBottom: 8,
-  },
-  editButton2: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.background || '#181818',
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
-  },
-  editButtonText2: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text || '#fff',
-  },
-  counterContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 20,
-  },
-  counterButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: (Colors.primary || '#da4477') + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  counterValue: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: Colors.text || '#fff',
-    minWidth: 60,
+    color: '#94A3B8',
     textAlign: 'center',
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  statBox: {
-    flex: 1,
-    backgroundColor: Colors.background || '#181818',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  statBoxValue: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: Colors.text || '#fff',
-    marginBottom: 4,
-  },
-  statBoxLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: Colors.textSecondary || '#aaa',
-    textAlign: 'center',
-  },
-  closeButton: {
-    backgroundColor: Colors.primary || '#da4477',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  closeButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
   },
 });

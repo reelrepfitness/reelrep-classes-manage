@@ -32,6 +32,7 @@ const MENU_ITEMS = [
     { label: 'דשבורד', value: '/admin', icon: 'speedometer' },
     { label: 'ניהול שיעורים', value: '/admin/classes', icon: 'calendar' },
     { label: 'ניהול לקוחות', value: '/admin/clients', icon: 'people' },
+    { label: 'ניהול טפסים', value: '/admin/forms', icon: 'document-text' },
     { label: 'דוחות', value: '/admin/financial', icon: 'bar-chart' },
     { label: 'הגדרות', value: '/admin/settings', icon: 'settings' },
     { label: 'התנתק', value: 'logout', icon: 'log-out', isDestructive: true },
@@ -50,12 +51,12 @@ export function AdminHeader({ title, disabled = false }: AdminHeaderProps) {
         if (disabled) return;
 
         if (isOpen) {
-            progress.value = withSpring(0, { damping: 15, stiffness: 100 });
+            progress.value = withTiming(0, { duration: 250 });
             // Delay state update to allow animation to finish
-            setTimeout(() => setIsOpen(false), 300);
+            setTimeout(() => setIsOpen(false), 250);
         } else {
             setIsOpen(true);
-            progress.value = withSpring(1, { damping: 15, stiffness: 100 });
+            progress.value = withTiming(1, { duration: 250 });
         }
     };
 
@@ -66,7 +67,7 @@ export function AdminHeader({ title, disabled = false }: AdminHeaderProps) {
             if (value === 'logout') {
                 // Handle logout
                 console.log('Logging out...');
-                router.replace('/(auth)/login');
+                router.replace('/(auth)/login' as any);
             } else {
                 router.push(value as any);
             }
@@ -111,6 +112,7 @@ export function AdminHeader({ title, disabled = false }: AdminHeaderProps) {
             case 'speedometer': return 'speedometer-outline';
             case 'calendar': return 'calendar-outline';
             case 'people': return 'people-outline';
+            case 'document-text': return 'document-text-outline';
             case 'bar-chart': return 'stats-chart-outline';
             case 'settings': return 'settings-outline';
             case 'log-out': return 'log-out-outline';
@@ -130,7 +132,10 @@ export function AdminHeader({ title, disabled = false }: AdminHeaderProps) {
             )}
 
             {/* Menu Dropdown Container - Rendered under header visually but handled via zIndex */}
-            <View style={[styles.menuContainer, { top: insets.top + 60 }]}>
+            <View
+                style={[styles.menuContainer, { top: insets.top + 60 }]}
+                pointerEvents={isOpen ? 'auto' : 'none'}
+            >
                 <Animated.View style={[styles.dropdown, menuStyle]}>
                     {MENU_ITEMS.map((item, index) => {
                         const isSelected = pathname === item.value;

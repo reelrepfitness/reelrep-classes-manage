@@ -51,46 +51,45 @@ export const [ShopProvider, useShop] = createContextHook(() => {
 
   const packages: SubscriptionPackage[] = useMemo(() => {
     const subscriptions = !plansQuery.data ? [] : plansQuery.data.flatMap(plan => {
-      const durations = [
-        { key: 'price-3-months' as const, months: 3 },
-        { key: 'price-6-months' as const, months: 6 },
-      ];
+      // Only show 6-month subscriptions
+      const key = 'price-6-months' as const;
+      const months = 6;
 
-      return durations.flatMap(({ key, months }) => {
-        const priceValue = plan[key];
-        const price = priceValue ? Number(priceValue) : null;
-        if (!price || Number.isNaN(price)) return [];
+      // Explicitly access the column using bracket notation because of the hyphens
+      const priceValue = plan[key];
+      const price = priceValue ? Number(priceValue) : null;
 
-        const isUnlimited = plan.type === 'unlimited';
-        const highlight = plan.name?.includes('חופשי');
-        const classesPerMonth = plan.sessions_per_week ? plan.sessions_per_week * 4 : 0;
-        const durationLabel = `${months} חודשים`;
+      if (price === null || price === undefined || Number.isNaN(price)) return [];
 
-        const baseFeatures: string[] = [];
-        if (plan.description) baseFeatures.push(plan.description);
-        if (isUnlimited) {
-          baseFeatures.push('אימונים ללא הגבלה');
-        } else if (plan.sessions_per_week) {
-          baseFeatures.push(`${plan.sessions_per_week} אימונים בשבוע (~${classesPerMonth} בחודש)`);
-        }
+      const isUnlimited = plan.type === 'unlimited';
+      const highlight = plan.name?.includes('חופשי');
+      const classesPerMonth = plan.sessions_per_week ? plan.sessions_per_week * 4 : 0;
+      const durationLabel = `${months} חודשים`;
 
-        return {
-          id: `${plan.id}-${months}`,
-          planId: plan.id,
-          type: plan.type as 'basic' | 'premium' | 'vip' | 'limited' | 'unlimited',
-          planType: plan.type,
-          name: plan.name,
-          price,
-          currency: '₪',
-          duration: 'monthly',
-          durationLabel,
-          durationMonths: months,
-          features: baseFeatures,
-          classesPerMonth,
-          popular: highlight && months === 6,
-          highlight,
-        } as SubscriptionPackage;
-      });
+      const baseFeatures: string[] = [];
+      if (plan.description) baseFeatures.push(plan.description);
+      if (isUnlimited) {
+        baseFeatures.push('אימונים ללא הגבלה');
+      } else if (plan.sessions_per_week) {
+        baseFeatures.push(`${plan.sessions_per_week} אימונים בשבוע (~${classesPerMonth} בחודש)`);
+      }
+
+      return [{
+        id: `${plan.id}-${months}`,
+        planId: plan.id,
+        type: plan.type as 'basic' | 'premium' | 'vip' | 'limited' | 'unlimited',
+        planType: plan.type,
+        name: plan.name,
+        price,
+        currency: '₪',
+        duration: 'monthly',
+        durationLabel,
+        durationMonths: months,
+        features: baseFeatures,
+        classesPerMonth,
+        popular: highlight && months === 6,
+        highlight,
+      } as SubscriptionPackage];
     });
 
     const tickets = !ticketPlansQuery.data ? [] : ticketPlansQuery.data.map(plan => ({

@@ -19,10 +19,10 @@ export default function AdminDashboard() {
 
   // Transform Stats for Grid
   const statsGridData = [
-    { key: 'debts', label: `חייבים (₪${stats.debts.total})`, value: stats.debts.count, icon: 'card' as const, color: '#EF4444', route: '/admin/financial/debts' },
-    { key: 'frozen', label: 'מנויים בהקפאה', value: stats.frozen, icon: 'snow' as const, color: '#3B82F6', route: '/admin/clients/frozen' },
-    { key: 'active', label: 'מנויים פעילים', value: stats.active, icon: 'people' as const, color: '#10B981', route: '/admin/clients/active' },
-    { key: 'tasks', label: 'לטיפול דחוף', value: stats.tasks, icon: 'alert-circle' as const, color: '#F97316', route: '/admin/alerts-menu' },
+    { key: 'debts', label: `חייבים (₪${stats.debts.total})`, value: stats.debts.count, icon: 'card' as const, color: '#EF4444', route: '/admin/financial/debts' as any },
+    { key: 'frozen', label: 'מנויים בהקפאה', value: stats.frozen, icon: 'snow' as const, color: '#3B82F6', route: '/admin/clients/frozen' as any },
+    { key: 'active', label: 'מנויים פעילים', value: stats.active, icon: 'people' as const, color: '#10B981', route: '/admin/clients/active' as any },
+    { key: 'tasks', label: 'לטיפול דחוף', value: stats.tasks, icon: 'alert-circle' as const, color: '#F97316', route: '/admin-alerts' as any },
   ];
 
   return (
@@ -56,7 +56,7 @@ export default function AdminDashboard() {
         {/* 4. Stats Grid */}
         <StatsGrid stats={statsGridData} />
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 120 }} />
       </ScrollView>
     </View>
   );

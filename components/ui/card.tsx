@@ -48,4 +48,26 @@ const CardTitle = React.forwardRef<Text, React.ComponentProps<typeof Text>>(
 );
 CardTitle.displayName = "CardTitle";
 
-export { Card, CardHeader, CardTitle, CardContent };
+const CardDescription = React.forwardRef<Text, React.ComponentProps<typeof Text>>(
+    ({ className, ...props }, ref) => (
+        <Text
+            ref={ref}
+            className={cn("text-sm text-gray-500", className)}
+            {...props}
+        />
+    )
+);
+CardDescription.displayName = "CardDescription";
+
+const CardFooter = React.forwardRef<View, React.ComponentProps<typeof View>>(
+    ({ className, ...props }, ref) => (
+        <View
+            ref={ref}
+            className={cn("flex flex-row items-center p-6 pt-0", className)}
+            {...props}
+        />
+    )
+);
+CardFooter.displayName = "CardFooter";
+
+export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent };

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Search } from 'lucide-react-native';
+import { ChevronLeft, Users, ChevronRight } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/constants/supabase';
 import Colors from '@/constants/colors';
@@ -34,95 +34,95 @@ export default function ActiveClientsScreen() {
                 .order('created_at', { ascending: false });
 
             const { data, error } = await query;
+            if (error) return [];
 
-            if (error) {
-                console.error('[Admin] Error fetching clients:', error);
-                return [];
-            }
-
-            // Filter by active subscriptions if needed
             if (!showAll && data) {
                 return data.filter((client: any) =>
                     client.user_subscriptions?.some((sub: any) => sub.is_active)
                 );
             }
-
             return data || [];
         },
     });
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
-            <View style={styles.header}>
+        <View style={styles.container}>
+            {/* Header Area */}
+            <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <ChevronLeft size={24} color={Colors.text} />
+                    <ChevronRight size={24} color="#000" />
                 </TouchableOpacity>
-                <View style={styles.headerContent}>
-                    <Text style={styles.title}>רשימת לקוחות</Text>
-                    <Text style={styles.subtitle}>
+                <View style={styles.headerTitleContainer}>
+                    <Text style={styles.headerTitle}>רשימת לקוחות</Text>
+                    <Text style={styles.headerSubtitle}>
                         {clients.length} {showAll ? 'לקוחות' : 'מנויים פעילים'}
                     </Text>
                 </View>
+                <View style={{ width: 40 }} />
             </View>
 
-            {/* Toggle for All/Active */}
-            <View style={styles.toggleContainer}>
+            {/* Toggle Section */}
+            <View style={styles.toggleRow}>
+                <View style={styles.toggleTextContainer}>
+                    <Text style={styles.toggleLabel}>הצג את כל הלקוחות</Text>
+                    <Text style={styles.toggleSublabel}>כולל מנויים שהסתיימו</Text>
+                </View>
                 <Switch
                     value={showAll}
                     onValueChange={setShowAll}
-                    trackColor={{ false: Colors.border, true: Colors.primary }}
-                    thumbColor={Colors.card}
+                    trackColor={{ false: '#E2E8F0', true: Colors.primary }}
+                    thumbColor="#fff"
                 />
-                <Text style={styles.toggleLabel}>הצג את כל הלקוחות (כולל לשעבר)</Text>
             </View>
 
             <ScrollView
                 style={styles.scrollView}
-                contentContainerStyle={styles.scrollContent}
+                contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
                 showsVerticalScrollIndicator={false}
             >
-                {(clients || []).map((client: any) => {
+                {isLoading ? (
+                    <View style={styles.centered}>
+                        <ActivityIndicator color={Colors.primary} size="large" />
+                    </View>
+                ) : (clients || []).map((client: any) => {
                     const subscription = client.user_subscriptions?.[0];
                     const plan = subscription?.subscription_plans;
                     const isActive = subscription?.is_active;
 
                     return (
-                        <View key={client.id} style={styles.clientCard}>
-                            <View style={styles.clientInfo}>
-                                <Text style={styles.clientName}>{client.full_name || client.name}</Text>
-                                <Text style={styles.clientEmail}>{client.email}</Text>
-                                {plan && (
-                                    <View style={styles.planInfo}>
-                                        <View
-                                            style={[
-                                                styles.statusBadge,
-                                                { backgroundColor: isActive ? Colors.success + '20' : Colors.border },
-                                            ]}
-                                        >
-                                            <Text
-                                                style={[
-                                                    styles.statusText,
-                                                    { color: isActive ? Colors.success : Colors.textSecondary },
-                                                ]}
-                                            >
-                                                {isActive ? 'פעיל' : 'לא פעיל'}
-                                            </Text>
-                                        </View>
-                                        <Text style={styles.planName}>{plan.name}</Text>
-                                    </View>
-                                )}
+                        <TouchableOpacity
+                            key={client.id}
+                            style={styles.clientCard}
+                            onPress={() => router.push(`/admin/clients/${client.id}`)}
+                            activeOpacity={0.7}
+                        >
+                            <View style={styles.cardHeader}>
+                                <View style={styles.avatarPlaceholder}>
+                                    <Text style={styles.avatarText}>{(client.full_name || client.name)?.charAt(0) || '?'}</Text>
+                                </View>
+                                <View style={styles.clientInfo}>
+                                    <Text style={styles.clientName}>{client.full_name || client.name}</Text>
+                                    <Text style={styles.clientEmail}>{client.email}</Text>
+                                </View>
                             </View>
-                        </View>
+
+                            <View style={styles.cardFooter}>
+                                <View style={styles.planBadge}>
+                                    <View style={[styles.statusDot, { backgroundColor: isActive ? '#22C55E' : '#94A3B8' }]} />
+                                    <Text style={styles.planName}>{plan?.name || 'ללא מנוי'}</Text>
+                                </View>
+                                <ChevronLeft size={18} color="#CBD5E1" />
+                            </View>
+                        </TouchableOpacity>
                     );
                 })}
 
                 {clients.length === 0 && !isLoading && (
                     <View style={styles.emptyState}>
+                        <Users size={40} color="#E2E8F0" />
                         <Text style={styles.emptyText}>אין לקוחות להצגה</Text>
                     </View>
                 )}
-
-                <View style={{ height: 40 }} />
             </ScrollView>
         </View>
     );
@@ -131,52 +131,54 @@ export default function ActiveClientsScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: Colors.background,
+        backgroundColor: '#FFFFFF',
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'space-between',
         paddingHorizontal: 20,
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: Colors.border,
+        paddingBottom: 20,
+        backgroundColor: '#fff',
     },
     backButton: {
-        padding: 8,
-        marginLeft: 8,
+        padding: 4,
     },
-    headerContent: {
-        flex: 1,
-        alignItems: 'flex-end',
+    headerTitleContainer: {
+        alignItems: 'center',
     },
-    title: {
-        fontSize: 24,
+    headerTitle: {
+        fontSize: 18,
         fontWeight: '800',
-        color: Colors.text,
-        textAlign: 'right',
-        writingDirection: 'rtl',
+        color: '#0F172A',
     },
-    subtitle: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: Colors.textSecondary,
-        textAlign: 'right',
-        writingDirection: 'rtl',
+    headerSubtitle: {
+        fontSize: 13,
+        color: '#64748B',
+        fontWeight: '600',
+        marginTop: 2,
     },
-    toggleContainer: {
+    toggleRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        gap: 12,
+        justifyContent: 'space-between',
+        padding: 20,
+        backgroundColor: '#F8FAFC',
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
+    },
+    toggleTextContainer: {
+        alignItems: 'flex-start',
     },
     toggleLabel: {
         fontSize: 15,
-        fontWeight: '600',
-        color: Colors.text,
-        textAlign: 'right',
-        writingDirection: 'rtl',
-        flex: 1,
+        fontWeight: '700',
+        color: '#1E293B',
+    },
+    toggleSublabel: {
+        fontSize: 12,
+        color: '#64748B',
+        marginTop: 2,
     },
     scrollView: {
         flex: 1,
@@ -185,59 +187,86 @@ const styles = StyleSheet.create({
         padding: 20,
     },
     clientCard: {
-        backgroundColor: Colors.card,
-        borderRadius: 16,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
         padding: 16,
         marginBottom: 12,
-        shadowColor: Colors.shadow,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
         elevation: 2,
     },
-    clientInfo: {
-        alignItems: 'flex-end',
-    },
-    clientName: {
-        fontSize: 17,
-        fontWeight: '700',
-        color: Colors.text,
-        textAlign: 'right',
-        writingDirection: 'rtl',
-        marginBottom: 4,
-    },
-    clientEmail: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: Colors.textSecondary,
-        textAlign: 'right',
-        marginBottom: 8,
-    },
-    planInfo: {
+    cardHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        marginBottom: 12,
     },
-    statusBadge: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 8,
+    avatarPlaceholder: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#F1F5F9',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    statusText: {
-        fontSize: 12,
+    avatarText: {
+        fontSize: 16,
         fontWeight: '700',
+        color: Colors.primary,
+    },
+    clientInfo: {
+        flex: 1,
+        marginRight: 12,
+        alignItems: 'flex-start',
+    },
+    clientName: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: '#0F172A',
+        marginBottom: 2,
+    },
+    clientEmail: {
+        fontSize: 12,
+        color: '#64748B',
+    },
+    cardFooter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#F8FAFC',
+    },
+    planBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    statusDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
     },
     planName: {
         fontSize: 13,
-        fontWeight: '600',
-        color: Colors.text,
+        fontWeight: '700',
+        color: '#475569',
+    },
+    centered: {
+        padding: 40,
+        alignItems: 'center',
     },
     emptyState: {
         padding: 40,
         alignItems: 'center',
+        gap: 12,
     },
     emptyText: {
-        fontSize: 16,
-        color: Colors.textSecondary,
+        fontSize: 15,
+        color: '#94A3B8',
+        fontWeight: '600',
     },
 });

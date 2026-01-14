@@ -12,8 +12,10 @@ import { hebrew } from '@/constants/hebrew';
 import { supabase } from '@/constants/supabase';
 import { cn } from '@/lib/utils';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { AvatarCircles } from '@/components/ui/AvatarCircles';
 import { ClassRegistrationCard } from '@/components/ui/ClassRegistrationCard';
+import { ClassAttendeesSheet } from '@/components/ui/ClassAttendeesSheet';
 import { CalendarSyncBar } from '@/components/ui/CalendarSyncBar';
 import { CalendarSelectionModal } from '@/components/ui/CalendarSelectionModal';
 
@@ -97,7 +99,23 @@ const parseDateKey = (key: string) => {
 };
 const NEXT_WEEK_LOCK_MESSAGE = 'ההרשמה לשבוע הבא נפתחת כל חמישי ב-12:00';
 
-// --- Main Component ---
+// --- MOCK DATA FOR ATTENDEES (REQUESTED) ---
+const MOCK_BOOKED_USERS = [
+  { id: '1', name: 'איתי אהרוני', avatarUrl: 'https://i.pravatar.cc/150?u=1' },
+  { id: '2', name: 'נועה קירל', avatarUrl: 'https://i.pravatar.cc/150?u=2' },
+  { id: '3', name: 'מיכל אמדורסקי', avatarUrl: 'https://i.pravatar.cc/150?u=3' },
+  { id: '4', name: 'גיא זוארץ', avatarUrl: 'https://i.pravatar.cc/150?u=4' },
+  { id: '5', name: 'אסי עזר', avatarUrl: 'https://i.pravatar.cc/150?u=5' },
+  { id: '6', name: 'רותם סלע', avatarUrl: 'https://i.pravatar.cc/150?u=6' },
+  { id: '7', name: 'עברי לידר', avatarUrl: 'https://i.pravatar.cc/150?u=7' },
+  { id: '8', name: 'נינט טייב', avatarUrl: 'https://i.pravatar.cc/150?u=8' },
+];
+
+const MOCK_WAITLIST_USERS = [
+  { id: 'w1', name: 'נועם לוי', position: 1, joinedAt: '14:30', avatarUrl: 'https://i.pravatar.cc/150?u=w1' },
+  { id: 'w2', name: 'דניאל כהן', position: 2, joinedAt: '14:45', avatarUrl: 'https://i.pravatar.cc/150?u=w2' },
+  { id: 'w3', name: 'עומר רפאלי', position: 3, joinedAt: '15:05', avatarUrl: 'https://i.pravatar.cc/150?u=w3' },
+];
 
 export default function ClassesScreen() {
   const insets = useSafeAreaInsets();
@@ -110,6 +128,15 @@ export default function ClassesScreen() {
   const [enrolledUsers, setEnrolledUsers] = useState<any[]>([]);
   const [loadingEnrolled, setLoadingEnrolled] = useState(false);
   const [classBookingsMap, setClassBookingsMap] = useState<Record<string, any[]>>({});
+
+  // Attendees Sheet Ref
+  const attendeesSheetRef = useRef<any>(null);
+
+  const handleOpenAttendees = (item: any) => {
+    // If we want dynamic data, we'd set it here. For now, using mocks as requested.
+    // We ensure selectedClass is what the sheet refers to if needed.
+    attendeesSheetRef.current?.present();
+  };
 
   const lateCancellations = user?.lateCancellations || 0;
   const blockEndDate = user?.blockEndDate || null;
@@ -128,6 +155,94 @@ export default function ClassesScreen() {
     AsyncStorage.getItem('@reelrep_synced_calendar').then(id => {
       if (id) setSyncedCalendarId(id);
     });
+  }, []);
+
+  // --- Data Preparation (MOVED UP FOR SCOPE) ---
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Generate static Sun-Sat week based on weekOffset
+  const generateWeekDays = (offset: number) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Get Sunday of the current week
+    const currentSunday = new Date(today);
+    currentSunday.setDate(today.getDate() - today.getDay());
+
+    // Apply week offset (0 = current week, 1 = next week)
+    const targetSunday = new Date(currentSunday);
+    targetSunday.setDate(currentSunday.getDate() + (offset * 7));
+
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(targetSunday);
+      date.setDate(targetSunday.getDate() + i);
+      days.push({
+        dayOfWeek: i,
+        date: date.toISOString(),
+        dateKey: formatDateKey(date),
+        dayNumber: date.getDate(),
+      });
+    }
+    return days;
+  };
+
+  const calendarDays = generateWeekDays(weekOffset);
+
+  const groupedClasses = classes.reduce((groups, classItem) => {
+    if (!groups[classItem.date]) groups[classItem.date] = [];
+    groups[classItem.date].push(classItem);
+    return groups;
+  }, {} as Record<string, typeof classes>);
+
+  const filteredClasses = useMemo(() => {
+    let baseClasses = selectedDate !== null
+      ? (groupedClasses[selectedDate] || [])
+        .filter(classItem => {
+          const now = new Date();
+          const classDate = parseDateKey(classItem.date);
+          const isToday = classDate.toDateString() === now.toDateString();
+          if (isToday) {
+            const [hours, minutes] = classItem.time.split(':').map(Number);
+            const classDateTime = new Date();
+            classDateTime.setHours(hours, minutes, 0, 0);
+            return classDateTime.getTime() > now.getTime();
+          }
+          return true;
+        })
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      : [];
+
+    // --- MOCK DATA FOR TESTING WAITING LIST ---
+    if (selectedDate === formatDateKey(today)) {
+      baseClasses.push({
+        id: 'mock_full_class',
+        title: 'אימון כוח (Full)',
+        instructor: 'Ivan',
+        date: formatDateKey(today),
+        time: '23:59',
+        duration: 60,
+        capacity: 8,
+        enrolled: 8,
+        waitingListCount: 4,
+        enrolledAvatars: [
+          'https://i.pravatar.cc/150?u=1',
+          'https://i.pravatar.cc/150?u=2',
+          'https://i.pravatar.cc/150?u=3'
+        ],
+        difficulty: 'intermediate',
+        location: 'Main Gym',
+        requiredSubscription: ['unlimited'],
+        description: 'שיעור כוח מלא לבדיקת המתנה'
+      });
+    }
+
+    return baseClasses;
+  }, [groupedClasses, selectedDate, classes]);
+
+  useEffect(() => {
+    if (selectedDate === null) setSelectedDate(formatDateKey(today));
   }, []);
 
   // --- Effects & Logic ---
@@ -153,7 +268,7 @@ export default function ClassesScreen() {
     console.log('[Classes] Opening modal for classId:', classId);
 
     // 1. Try to find the class immediately
-    const classItem = classes.find(c => c.id === classId);
+    const classItem = filteredClasses.find(c => c.id === classId) || classes.find(c => c.id === classId);
 
     if (classItem) {
       setSelectedClass(classItem);
@@ -397,65 +512,7 @@ export default function ClassesScreen() {
     }
   };
 
-  // --- Data Preparation ---
 
-  const groupedClasses = classes.reduce((groups, classItem) => {
-    if (!groups[classItem.date]) groups[classItem.date] = [];
-    groups[classItem.date].push(classItem);
-    return groups;
-  }, {} as Record<string, typeof classes>);
-
-  // Generate static Sun-Sat week based on weekOffset
-  const generateWeekDays = (offset: number) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Get Sunday of the current week
-    const currentSunday = new Date(today);
-    currentSunday.setDate(today.getDate() - today.getDay());
-
-    // Apply week offset (0 = current week, 1 = next week)
-    const targetSunday = new Date(currentSunday);
-    targetSunday.setDate(currentSunday.getDate() + (offset * 7));
-
-    const days = [];
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(targetSunday);
-      date.setDate(targetSunday.getDate() + i);
-      days.push({
-        dayOfWeek: i,
-        date: date.toISOString(),
-        dateKey: formatDateKey(date),
-        dayNumber: date.getDate(),
-      });
-    }
-    return days;
-  };
-
-  const calendarDays = generateWeekDays(weekOffset);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  useEffect(() => {
-    if (selectedDate === null) setSelectedDate(formatDateKey(today));
-  }, []);
-
-  const filteredClasses = selectedDate !== null
-    ? (groupedClasses[selectedDate] || [])
-      .filter(classItem => {
-        const now = new Date();
-        const classDate = parseDateKey(classItem.date);
-        const isToday = classDate.toDateString() === now.toDateString();
-        if (isToday) {
-          const [hours, minutes] = classItem.time.split(':').map(Number);
-          const classDateTime = new Date();
-          classDateTime.setHours(hours, minutes, 0, 0);
-          return classDateTime.getTime() > now.getTime();
-        }
-        return true;
-      })
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    : [];
 
   // --- Render ---
 
@@ -484,13 +541,13 @@ export default function ClassesScreen() {
           }).panHandlers}
         >
           <View className="flex-row items-center justify-between px-2 pb-2">
-            {/* Left Arrow (Next Week) */}
+            {/* Right Arrow (Previous - Current Week) - First in RTL */}
             <TouchableOpacity
-              onPress={() => setWeekOffset(1)}
-              disabled={weekOffset === 1}
-              className={cn("p-2 rounded-full", weekOffset === 1 ? "opacity-30" : "bg-gray-100")}
+              onPress={() => { setWeekOffset(0); setSelectedDate(formatDateKey(today)); }}
+              disabled={weekOffset === 0}
+              className={cn("p-2 rounded-full", weekOffset === 0 ? "opacity-30" : "bg-gray-100")}
             >
-              <ChevronLeft size={20} color="#09090B" />
+              <ChevronRight size={20} color="#09090B" />
             </TouchableOpacity>
 
             {/* Days Strip */}
@@ -524,13 +581,13 @@ export default function ClassesScreen() {
               })}
             </View>
 
-            {/* Right Arrow (Previous - Current Week) */}
+            {/* Left Arrow (Next Week) - Last in RTL */}
             <TouchableOpacity
-              onPress={() => { setWeekOffset(0); setSelectedDate(formatDateKey(today)); }}
-              disabled={weekOffset === 0}
-              className={cn("p-2 rounded-full", weekOffset === 0 ? "opacity-30" : "bg-gray-100")}
+              onPress={() => setWeekOffset(1)}
+              disabled={weekOffset === 1}
+              className={cn("p-2 rounded-full", weekOffset === 1 ? "opacity-30" : "bg-gray-100")}
             >
-              <ChevronRight size={20} color="#09090B" />
+              <ChevronLeft size={20} color="#09090B" />
             </TouchableOpacity>
           </View>
         </View>
@@ -541,7 +598,6 @@ export default function ClassesScreen() {
 
       {/* 2. Classes List */}
       <ScrollView
-        // ... (rest of scrollview props)
         className="flex-1 bg-gray-50/50"
         contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
@@ -581,9 +637,9 @@ export default function ClassesScreen() {
                 {/* ... */}
                 <View className="flex-row justify-between">
                   {/* Right Side: Info */}
-                  <View className="flex-1 items-end pl-4">
+                  <View className="flex-1 items-start pl-4">
                     <View className="flex-row items-center gap-2 mb-1">
-                      <Text className="text-xl font-extrabold text-[#09090B] text-right">{classItem.title}</Text>
+                      <Text className="text-xl font-extrabold text-[#09090B] text-left">{classItem.title}</Text>
                       {isFull && !booked && (
                         <View className="bg-red-100 px-2 py-0.5 rounded text-xs">
                           <Text className="text-red-600 text-[10px] font-bold">מלא</Text>
@@ -635,12 +691,24 @@ export default function ClassesScreen() {
                     />
                   </View>
 
-                  <View className="flex-row justify-end">
-                    <AvatarCircles
-                      numPeople={Math.max(0, classItem.enrolled - 3)}
-                      avatarUrls={classItem.enrolledAvatars?.slice(0, 3) || []}
-                      className="justify-end"
-                    />
+                  <View className="flex-row items-center justify-start">
+                    <TouchableOpacity onPress={() => handleOpenAttendees(classItem)} activeOpacity={0.7}>
+                      <AvatarCircles
+                        numPeople={Math.max(0, classItem.enrolled - 3)}
+                        avatarUrls={classItem.enrolledAvatars?.slice(0, 3) || []}
+                        className="justify-start"
+                      />
+                    </TouchableOpacity>
+
+                    {/* Waiting List Badge (Left side in RTL) */}
+                    {isFull && !booked && (classItem.waitingListCount || 0) > 0 && (
+                      <View className="bg-[#FFF7ED] px-2 py-1 rounded-full flex-row items-center lg:gap-1 mr-2">
+                        <Ionicons name="hourglass-outline" size={12} color="#C2410C" />
+                        <Text className="text-[#C2410C] text-[10px] font-extrabold">
+                          {classItem.waitingListCount} ממתינים
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </View>
 
@@ -706,6 +774,7 @@ export default function ClassesScreen() {
               instructor={selectedClass.instructor}
               enrolled={selectedClass.enrolled}
               capacity={selectedClass.capacity}
+              waitingListCount={selectedClass.waitingListCount}
               enrolledAvatars={selectedClass.enrolledAvatars || []}
               isBooked={isClassBooked(selectedClass)}
               isAdmin={isAdmin}
@@ -722,6 +791,7 @@ export default function ClassesScreen() {
                 setModalVisible(false);
                 handleSwitchClass(selectedClass);
               }}
+              onOpenAttendees={() => handleOpenAttendees(selectedClass)}
               className="w-full"
             />
           )}
@@ -734,6 +804,17 @@ export default function ClassesScreen() {
         calendars={availableCalendars}
         onSelect={performSync}
         onClose={() => setCalendarModalVisible(false)}
+      />
+
+      {/* 5. Class Attendees Sheet (Global Instance) */}
+      <ClassAttendeesSheet
+        ref={attendeesSheetRef}
+        title={selectedClass?.title || ''}
+        subtitle={selectedClass ? `${selectedClass.time} • ${selectedClass.instructor}` : ''}
+        bookedUsers={MOCK_BOOKED_USERS}
+        waitlistUsers={MOCK_WAITLIST_USERS}
+        bookedCount={selectedClass ? `${selectedClass.enrolled}/${selectedClass.capacity}` : '0/0'}
+        waitlistCount={selectedClass?.waitingListCount || 0}
       />
     </View >
   );

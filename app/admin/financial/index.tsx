@@ -1,5 +1,5 @@
 // app/admin/financial/index.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,70 +8,140 @@ import {
   TouchableOpacity,
   Dimensions,
   Platform,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BarChart, PieChart } from 'react-native-gifted-charts';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUpRight, ArrowDownRight, TrendingUp, Users, RefreshCw } from 'lucide-react-native';
+import { useGreenInvoice } from '@/app/hooks/useGreenInvoice';
 
 const { width } = Dimensions.get('window');
 
-// --- Mock Data ---
-
+// --- Month Definitions ---
 const MONTHS = [
-  { id: '1', label: 'ינו׳', full: 'ינואר' },
-  { id: '2', label: 'פבר׳', full: 'פברואר' },
-  { id: '3', label: 'מרץ', full: 'מרץ' },
-  { id: '4', label: 'אפר׳', full: 'אפריל' },
-  { id: '5', label: 'מאי', full: 'מאי' },
-  { id: '6', label: 'יוני', full: 'יוני' },
-];
-
-const MOCK_FINANCIALS = {
-  income: 48250,
-  expenses: 15800,
-  netProfit: 32450,
-  mrr: 42000,
-  arpu: 350,
-  churn: '2.4%',
-};
-
-const BAR_DATA = [
-  { value: 12000, frontColor: '#34D399', spacing: 10, label: 'ינו׳' },
-  { value: 8000, frontColor: '#F87171' },
-
-  { value: 15000, frontColor: '#34D399', spacing: 10, label: 'פבר׳' },
-  { value: 9500, frontColor: '#F87171' },
-
-  { value: 20000, frontColor: '#34D399', spacing: 10, label: 'מרץ' },
-  { value: 12000, frontColor: '#F87171' },
-
-  { value: 28000, frontColor: '#34D399', spacing: 10, label: 'אפר׳' },
-  { value: 14000, frontColor: '#F87171' },
-
-  { value: 32000, frontColor: '#34D399', spacing: 10, label: 'מאי' },
-  { value: 11000, frontColor: '#F87171' },
-
-  { value: 48250, frontColor: '#34D399', spacing: 10, label: 'יוני' },
-  { value: 15800, frontColor: '#F87171' },
-];
-
-const PIE_DATA = [
-  { value: 65, color: '#3B82F6', text: '65%', focused: true }, // Memberships
-  { value: 25, color: '#8B5CF6', text: '25%' }, // Punch Cards
-  { value: 10, color: '#F59E0B', text: '10%' }, // Products
-];
-
-const LEGEND_DATA = [
-  { label: 'מנויים', color: '#3B82F6', percentage: '65%' },
-  { label: 'כרטיסיות', color: '#8B5CF6', percentage: '25%' },
-  { label: 'מוצרים', color: '#F59E0B', percentage: '10%' },
+  { id: 1, label: 'ינו׳', full: 'ינואר' },
+  { id: 2, label: 'פבר׳', full: 'פברואר' },
+  { id: 3, label: 'מרץ', full: 'מרץ' },
+  { id: 4, label: 'אפר׳', full: 'אפריל' },
+  { id: 5, label: 'מאי', full: 'מאי' },
+  { id: 6, label: 'יוני', full: 'יוני' },
+  { id: 7, label: 'יולי', full: 'יולי' },
+  { id: 8, label: 'אוג׳', full: 'אוגוסט' },
+  { id: 9, label: 'ספט׳', full: 'ספטמבר' },
+  { id: 10, label: 'אוק׳', full: 'אוקטובר' },
+  { id: 11, label: 'נוב׳', full: 'נובמבר' },
+  { id: 12, label: 'דצמ׳', full: 'דצמבר' },
 ];
 
 export default function FinancialAnalyticsScreen() {
-  const [selectedMonth, setSelectedMonth] = useState('6'); // Default to June
+  const currentMonth = new Date().getMonth() + 1; // 1-12
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const {
+    syncFinancialData,
+    getDashboardSummary,
+    loading,
+    error,
+  } = useGreenInvoice();
+
+  const [dashboardData, setDashboardData] = useState<any>(null);
+
+  // Load data on mount
+  useEffect(() => {
+    loadData();
+  }, [selectedMonth]);
+
+  const loadData = async () => {
+    try {
+      const data = await getDashboardSummary(selectedMonth);
+      setDashboardData(data);
+    } catch (err) {
+      console.error('Failed to load dashboard data:', err);
+      Alert.alert('שגיאה', 'לא הצלחנו לטעון את הנתונים');
+    }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      // Sync with Green Invoice
+      await syncFinancialData();
+      // Reload dashboard
+      await loadData();
+      Alert.alert('הצלחה', 'הנתונים עודכנו מ-Green Invoice');
+    } catch (err) {
+      Alert.alert('שגיאה', 'לא הצלחנו לסנכרן את הנתונים');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const insets = useSafeAreaInsets();
+
+  // --- Calculate Real Data ---
+  const income = dashboardData?.currentMonth?.income || 0;
+  const expenses = dashboardData?.currentMonth?.expenses || 0;
+  const netProfit = dashboardData?.currentMonth?.profit || 0;
+  const mrr = 0; // TODO: Calculate MRR from subscription data
+  const arpu = 0; // TODO: Calculate ARPU
+  const churn = '0%'; // TODO: Calculate churn rate
+
+  // --- Bar Chart Data (Current vs Last Month) ---
+  const barData = [
+    {
+      value: dashboardData?.lastMonth?.income || 0,
+      frontColor: '#34D399',
+      spacing: 10,
+      label: 'חודש קודם',
+    },
+    {
+      value: dashboardData?.lastMonth?.expenses || 0,
+      frontColor: '#F87171',
+    },
+    {
+      value: dashboardData?.currentMonth?.income || 0,
+      frontColor: '#10B981',
+      spacing: 10,
+      label: 'חודש נוכחי',
+    },
+    {
+      value: dashboardData?.currentMonth?.expenses || 0,
+      frontColor: '#EF4444',
+    },
+  ];
+
+  // --- Pie Chart Data (Payment Breakdown) ---
+  const paymentBreakdown = dashboardData?.paymentBreakdown || [];
+  const totalPayments = paymentBreakdown.reduce((sum, item) => sum + item.amount, 0) || 1;
+
+  const getPaymentColor = (type: number) => {
+    const colors: Record<number, string> = {
+      1: '#10B981', // Cash - Green
+      2: '#3B82F6', // Credit Card - Blue
+      4: '#8B5CF6', // Bank Transfer - Purple
+      6: '#F59E0B', // Bit - Orange
+      11: '#EC4899', // Standing Order - Pink
+    };
+    return colors[type] || '#6B7280';
+  };
+
+  const pieData = paymentBreakdown.slice(0, 5).map((item) => ({
+    value: Math.round((item.amount / totalPayments) * 100),
+    color: getPaymentColor(item.type),
+    text: `${Math.round((item.amount / totalPayments) * 100)}%`,
+  }));
+
+  const legendData = paymentBreakdown.slice(0, 5).map((item) => ({
+    label: item.label,
+    color: getPaymentColor(item.type),
+    percentage: `${Math.round((item.amount / totalPayments) * 100)}%`,
+  }));
+
+  // --- Render Functions ---
 
   const renderMonthSelector = () => (
     <View style={styles.monthSelectorContainer}>
@@ -106,7 +176,7 @@ export default function FinancialAnalyticsScreen() {
           <View style={styles.heroValueContainer}>
             <ArrowDownRight size={16} color="#EF4444" />
             <Text style={[styles.heroSubValue, { color: '#EF4444' }]}>
-              ₪{MOCK_FINANCIALS.expenses.toLocaleString()}
+              ₪{expenses.toLocaleString()}
             </Text>
           </View>
         </View>
@@ -116,7 +186,7 @@ export default function FinancialAnalyticsScreen() {
           <View style={styles.heroValueContainer}>
             <ArrowUpRight size={16} color="#10B981" />
             <Text style={[styles.heroSubValue, { color: '#10B981' }]}>
-              ₪{MOCK_FINANCIALS.income.toLocaleString()}
+              ₪{income.toLocaleString()}
             </Text>
           </View>
         </View>
@@ -125,45 +195,92 @@ export default function FinancialAnalyticsScreen() {
       <View style={styles.driverHorizontal} />
 
       <View style={styles.heroMain}>
-        <Text style={styles.heroMainLabel}>רווח נקי (יוני)</Text>
-        <Text style={styles.heroMainValue}>₪{MOCK_FINANCIALS.netProfit.toLocaleString()}</Text>
+        <Text style={styles.heroMainLabel}>
+          רווח נקי ({MONTHS.find(m => m.id === selectedMonth)?.full})
+        </Text>
+        <Text style={styles.heroMainValue}>₪{netProfit.toLocaleString()}</Text>
       </View>
+
+      {/* Refresh Button */}
+      <TouchableOpacity
+        style={styles.refreshButton}
+        onPress={handleRefresh}
+        disabled={isRefreshing}
+      >
+        {isRefreshing ? (
+          <ActivityIndicator size="small" color="#6B7280" />
+        ) : (
+          <>
+            <RefreshCw size={16} color="#6B7280" />
+            <Text style={styles.refreshText}>רענן נתונים</Text>
+          </>
+        )}
+      </TouchableOpacity>
     </View>
   );
 
-  const renderTrendChart = () => (
-    <View style={styles.chartCard}>
-      <Text style={styles.sectionTitle}>מגמה חצי שנתית</Text>
-      <View style={styles.chartContainer}>
-        <BarChart
-          data={BAR_DATA}
-          barWidth={18}
-          height={220}
-          width={width - 80}
-          minHeight={3}
-          barBorderTopLeftRadius={4}
-          barBorderTopRightRadius={4}
-          frontColor={'#333'} // Fallback
-          yAxisTextStyle={{ color: '#9CA3AF', fontSize: 10 }}
-          xAxisLabelTextStyle={{ color: '#6B7280', fontSize: 10, fontFamily: Platform.select({ ios: 'System', android: 'Roboto' }) }}
-          noOfSections={4}
-          yAxisThickness={0}
-          xAxisThickness={0}
-          hideRules
-          backgroundColor="transparent"
-          initialSpacing={10}
-        />
-      </View>
-    </View>
-  );
+  const renderTrendChart = () => {
+    if (!barData.length || !dashboardData) {
+      return (
+        <View style={styles.chartCard}>
+          <Text style={styles.sectionTitle}>השוואה לחודש הקודם</Text>
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>אין מספיק נתונים להצגת גרף</Text>
+          </View>
+        </View>
+      );
+    }
 
-  const renderDistributionChart = () => (
-    <View style={styles.chartCard}>
-      <Text style={styles.sectionTitle}>התפלגות הכנסות</Text>
-      <View style={styles.pieContainer}>
+    return (
+      <View style={styles.chartCard}>
+        <Text style={styles.sectionTitle}>השוואה לחודש הקודם</Text>
+        <View style={styles.chartContainer}>
+          <BarChart
+            data={barData}
+            barWidth={18}
+            height={220}
+            width={width - 80}
+            minHeight={3}
+            barBorderTopLeftRadius={4}
+            barBorderTopRightRadius={4}
+            frontColor={'#333'}
+            yAxisTextStyle={{ color: '#9CA3AF', fontSize: 10 }}
+            xAxisLabelTextStyle={{
+              color: '#6B7280',
+              fontSize: 10,
+              fontFamily: Platform.select({ ios: 'System', android: 'Roboto' }),
+            }}
+            noOfSections={4}
+            yAxisThickness={0}
+            xAxisThickness={0}
+            hideRules
+            backgroundColor="transparent"
+            initialSpacing={10}
+          />
+        </View>
+      </View>
+    );
+  };
+
+  const renderDistributionChart = () => {
+    if (!pieData.length || !dashboardData) {
+      return (
+        <View style={styles.chartCard}>
+          <Text style={styles.sectionTitle}>התפלגות תשלומים</Text>
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>אין נתונים על תשלומים</Text>
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.chartCard}>
+        <Text style={styles.sectionTitle}>התפלגות תשלומים</Text>
+        <View style={styles.pieContainer}>
         {/* Legend */}
         <View style={styles.legendContainer}>
-          {LEGEND_DATA.map((item, index) => (
+          {legendData.map((item, index) => (
             <View key={index} style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: item.color }]} />
               <Text style={styles.legendLabel}>{item.label}</Text>
@@ -173,23 +290,36 @@ export default function FinancialAnalyticsScreen() {
         </View>
 
         {/* Chart */}
-        <PieChart
-          data={PIE_DATA}
-          donut
-          sectionAutoFocus
-          radius={70}
-          innerRadius={50}
-          innerCircleColor={'#fff'} // Match card background
-          centerLabelComponent={() => (
-            <View style={{ justifyContent: 'center', alignItems: 'center' }}>
-              <Text style={{ fontSize: 22, color: '#111', fontWeight: 'bold' }}>65%</Text>
-              <Text style={{ fontSize: 10, color: '#888' }}>מנויים</Text>
-            </View>
-          )}
-        />
+        {pieData.length > 0 && (
+          <PieChart
+            data={pieData}
+            donut
+            sectionAutoFocus
+            radius={70}
+            innerRadius={50}
+            innerCircleColor={'#fff'}
+            centerLabelComponent={() => {
+              const topCategory = pieData.reduce((max, item) =>
+                item.value > max.value ? item : max
+              );
+              const topIndex = pieData.indexOf(topCategory);
+              return (
+                <View style={{ justifyContent: 'center', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 22, color: '#111', fontWeight: 'bold' }}>
+                    {topCategory.text || '0%'}
+                  </Text>
+                  <Text style={{ fontSize: 10, color: '#888' }}>
+                    {legendData[topIndex]?.label || ''}
+                  </Text>
+                </View>
+              );
+            }}
+          />
+        )}
       </View>
     </View>
-  );
+    );
+  };
 
   const renderKPIRow = () => (
     <View style={styles.kpiRow}>
@@ -197,27 +327,40 @@ export default function FinancialAnalyticsScreen() {
         <View style={[styles.kpiIcon, { backgroundColor: '#DBEAFE' }]}>
           <TrendingUp size={18} color="#2563EB" />
         </View>
-        <Text style={styles.kpiLabel}>MRR</Text>
-        <Text style={styles.kpiValue}>₪{MOCK_FINANCIALS.mrr.toLocaleString()}</Text>
+        <Text style={styles.kpiLabel}>סה"כ שנתי (הכנסות)</Text>
+        <Text style={styles.kpiValue}>₪{(dashboardData?.ytd?.income || 0).toLocaleString()}</Text>
+      </View>
+
+      <View style={styles.kpiCard}>
+        <View style={[styles.kpiIcon, { backgroundColor: '#FEE2E2' }]}>
+          <ArrowDownRight size={18} color="#DC2626" />
+        </View>
+        <Text style={styles.kpiLabel}>סה"כ שנתי (הוצאות)</Text>
+        <Text style={styles.kpiValue}>₪{(dashboardData?.ytd?.expenses || 0).toLocaleString()}</Text>
       </View>
 
       <View style={styles.kpiCard}>
         <View style={[styles.kpiIcon, { backgroundColor: '#D1FAE5' }]}>
           <Users size={18} color="#059669" />
         </View>
-        <Text style={styles.kpiLabel}>ARPU</Text>
-        <Text style={styles.kpiValue}>₪{MOCK_FINANCIALS.arpu}</Text>
-      </View>
-
-      <View style={styles.kpiCard}>
-        <View style={[styles.kpiIcon, { backgroundColor: '#FEE2E2' }]}>
-          <RefreshCw size={18} color="#DC2626" />
-        </View>
-        <Text style={styles.kpiLabel}>נטו</Text>
-        <Text style={styles.kpiValue}>{MOCK_FINANCIALS.churn}</Text>
+        <Text style={styles.kpiLabel}>סה"כ שנתי (רווח)</Text>
+        <Text style={styles.kpiValue}>₪{(dashboardData?.ytd?.profit || 0).toLocaleString()}</Text>
       </View>
     </View>
   );
+
+  // --- Loading State ---
+  if (loading && !dashboardData) {
+    return (
+      <View style={styles.container}>
+        <AdminHeader title="דוחות ואנליטיקה" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#DA4477" />
+          <Text style={styles.loadingText}>טוען נתונים פיננסיים...</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -231,14 +374,11 @@ export default function FinancialAnalyticsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {renderNetProfitCard()}
-
         {renderTrendChart()}
-
         {renderDistributionChart()}
-
         {renderKPIRow()}
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 120 }} />
       </ScrollView>
     </View>
   );
@@ -247,11 +387,21 @@ export default function FinancialAnalyticsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB', // Light gray background
+    backgroundColor: '#F9FAFB',
   },
   scrollContent: {
     padding: 20,
     gap: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6B7280',
   },
   // Month Selector
   monthSelectorContainer: {
@@ -271,7 +421,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
   },
   monthPillSelected: {
-    backgroundColor: '#111827', // Black
+    backgroundColor: '#DA4477', // Reel Rep pink
   },
   monthText: {
     fontSize: 14,
@@ -341,6 +491,24 @@ const styles = StyleSheet.create({
     color: '#111827',
     letterSpacing: -1,
   },
+  refreshButton: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  refreshText: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
   // Chart Cards
   chartCard: {
     backgroundColor: '#fff',
@@ -357,11 +525,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111',
     marginBottom: 20,
-    textAlign: 'right', // RTL
+    textAlign: 'right',
   },
   chartContainer: {
     alignItems: 'center',
-    marginLeft: -20, // Offset for y-axis labels space
+    marginLeft: -20,
+  },
+  emptyState: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#9CA3AF',
   },
   // Pie Chart Layout
   pieContainer: {

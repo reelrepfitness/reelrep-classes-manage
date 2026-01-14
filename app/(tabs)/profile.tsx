@@ -1,197 +1,278 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  Image,
+  StyleSheet,
+  Share,
+  I18nManager
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { User, Settings, LogOut, Trophy, Dumbbell, TrendingUp, Shield, ChevronLeft, CreditCard } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { useWorkouts } from '@/contexts/WorkoutContext';
-import { cn } from '@/lib/utils'; // וודא שזה קיים, אם לא - תמחק את ה-cn ותשתמש בסטרינג רגיל
-import { hebrew } from '@/constants/hebrew';
-import Colors from '@/constants/colors'; // נשמור את זה בשביל צבעי האייקונים
 
-// --- קומפוננטות עזר פנימיות ---
-
-const StatBox = ({ label, value, icon: Icon, image, color }: any) => (
-  <View className="flex-1 items-center bg-surface p-4 rounded-2xl mx-1 active:opacity-90">
-    <View className="p-3 rounded-full mb-2 bg-white shadow-sm">
-      {image ? (
-        <Image source={image} style={{ width: 24, height: 24 }} resizeMode="contain" />
-      ) : (
-        <Icon size={24} color={color} />
-      )}
-    </View>
-    <Text className="text-2xl font-bold text-text text-right">{value}</Text>
-    <Text className="text-xs text-muted mt-1 text-center font-medium">{label}</Text>
-  </View>
-);
-
-const MenuItem = ({ icon: Icon, title, subtitle, isDestructive, onPress }: any) => (
+// --- Menu Row Component (RTL Forced) ---
+const MenuRow = ({ icon, label, onPress, value, isDestructive, showChevron = true }: any) => (
   <TouchableOpacity
+    style={[styles.menuRow, isDestructive && styles.menuRowDestructive]}
     onPress={onPress}
-    className={cn(
-      "flex-row items-center justify-between p-4 bg-surface mb-3 rounded-2xl active:scale-[0.98] transition-all shadow-sm",
-      isDestructive && "border border-red-200 bg-red-50"
-    )}
+    activeOpacity={0.7}
   >
-    <View className="flex-row items-center gap-4">
-      <View className={cn("p-2.5 rounded-xl", isDestructive ? "bg-red-100" : "bg-white")}>
-        <Icon size={20} color={isDestructive ? "#ef4444" : Colors.primary} />
-      </View>
-      <View>
-        <Text className={cn("text-base font-bold text-right", isDestructive ? "text-red-500" : "text-text")}>
-          {title}
-        </Text>
-        {subtitle && <Text className="text-xs text-muted text-right mt-0.5">{subtitle}</Text>}
+    {/* Right Side (Icon + Label) - First in Visual Order for RTL */}
+    <View style={styles.menuRowRight}>
+      <Text style={[styles.menuLabel, isDestructive && styles.textDestructive]}>{label}</Text>
+      <View style={[styles.iconContainer, isDestructive && styles.iconContainerDestructive]}>
+        <Ionicons
+          name={icon}
+          size={18}
+          color={isDestructive ? '#EF4444' : '#374151'}
+        />
       </View>
     </View>
-    <ChevronLeft size={18} color="#71717A" />
+
+    {/* Left Side (Chevron/Value) */}
+    <View style={styles.menuRowLeft}>
+      {value && <Text style={styles.menuValue}>{value}</Text>}
+      {showChevron && <Ionicons name="chevron-back" size={18} color="#D1D5DB" />}
+    </View>
   </TouchableOpacity>
 );
 
-// --- המסך הראשי ---
+// --- Subscription Card Component ---
+const SubscriptionCard = ({ user, onPress }: { user: any, onPress: () => void }) => {
+  if (!user?.subscription) return null;
+
+  const totalClasses = user.subscription.classesPerMonth || 10;
+  const usedClasses = user.subscription.classesUsed || 0;
+  const remaining = totalClasses - usedClasses;
+  const isUnlimited = user.subscription.type === 'unlimited';
+
+  return (
+    <TouchableOpacity activeOpacity={0.95} style={styles.cardWrapper} onPress={onPress}>
+      <LinearGradient
+        colors={['#111827', '#000000']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.cardGradient}
+      >
+        <View style={styles.cardPatternCircle} />
+
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>{user.subscription.name || 'מנוי רגיל'}</Text>
+          <View style={styles.activeTag}>
+            <View style={styles.activeDot} />
+            <Text style={styles.activeTagText}>מנוי פעיל</Text>
+          </View>
+        </View>
+
+        <View style={styles.cardBody}>
+          <View style={styles.statsRow}>
+            <View style={{ alignItems: 'flex-start' }}>
+              <Text style={styles.statLabel}>תוקף עד</Text>
+              <Text style={styles.statValue}>
+                {new Date(user.subscription.endDate).toLocaleDateString('he-IL')}
+              </Text>
+            </View>
+            <View style={{ alignItems: 'flex-start' }}>
+              <Text style={styles.statLabel}>יתרה</Text>
+              <Text style={styles.statValue}>
+                {isUnlimited ? '∞' : remaining}
+                <Text style={styles.statTotal}>{!isUnlimited && ` / ${totalClasses}`}</Text>
+              </Text>
+            </View>
+          </View>
+
+          {!isUnlimited && (
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBarBg}>
+                <LinearGradient
+                  colors={['#34D399', '#10B981']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[styles.progressBarFill, { width: `${(remaining / totalClasses) * 100}%` }]}
+                />
+              </View>
+            </View>
+          )}
+        </View>
+      </LinearGradient>
+    </TouchableOpacity>
+  );
+};
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, signOut, isAdmin, isCoach } = useAuth();
-  const { getTotalStats } = useWorkouts();
 
-  const stats = getTotalStats();
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      router.replace('/(auth)/login' as any);
+    } catch (error) {
+      console.error("Logout failed", error);
+    }
+  };
 
-  const handleSignOut = () => {
-    signOut();
-    router.replace('/auth');
+  const shareApp = async () => {
+    try { await Share.share({ message: 'היי! בוא להתאמן איתי באפליקציית ReelRep Training' }); } catch (error) { console.log(error); }
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.bgDecoration} />
+
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
         {/* Header Section */}
-        <View className="px-5 pt-6 pb-8">
-          <View className="flex-row items-center gap-4 mb-8">
-            <View className="w-20 h-20 rounded-full bg-surface items-center justify-center border-2 border-white shadow-md">
-              <User size={32} color={Colors.primary} />
-            </View>
-            <View className="flex-1 items-end">
-              <Text className="text-text text-2xl font-bold mb-1 text-right">{user?.name || 'אורח'}</Text>
-              <Text className="text-muted text-sm mb-2 text-right">{user?.email}</Text>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.settingsIcon}>
+            {/* Future Settings */}
+          </TouchableOpacity>
 
-              {user?.subscription?.type && (
-                <View className="bg-primary/20 px-3 py-1 rounded-full self-end border border-primary/30">
-                  <Text className="text-primary text-xs font-bold tracking-wide">
-                    {user.subscription.type.toUpperCase()}
-                  </Text>
+          <View style={styles.profileInfo}>
+            <View style={styles.avatarWrapper}>
+              {user?.profileImage ? (
+                <Image source={{ uri: user.profileImage }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Text style={styles.avatarInitials}>{user?.name?.slice(0, 2).toUpperCase() || 'ME'}</Text>
                 </View>
               )}
-            </View>
-          </View>
-
-          {/* כרטיס יתרת פלטות - מעוצב מחדש */}
-          <TouchableOpacity
-            onPress={() => router.push('/plates/store')}
-            className="bg-surface rounded-2xl p-4 flex-row items-center justify-between shadow-sm"
-          >
-            <View className="flex-row items-center gap-4">
-              <Image
-                source={{ uri: 'https://res.cloudinary.com/diwe4xzro/image/upload/v1762853884/%D7%98%D7%A7%D7%A1%D7%98_%D7%94%D7%A4%D7%A1%D7%A7%D7%94_%D7%A9%D7%9C%D7%9A_2.png_zpdglt.png' }}
-                className="w-12 h-12 rounded-full"
-              />
-              <View>
-                <Text className="text-text text-lg font-bold text-right">{user?.plateBalance || 0}</Text>
-                <Text className="text-muted text-xs text-right">יתרת פלטות זמינה</Text>
+              <View style={styles.editBadge}>
+                <Ionicons name="pencil" size={12} color="#fff" />
               </View>
             </View>
-            <View className="bg-primary px-4 py-2 rounded-full shadow-sm">
-              <Text className="text-white text-xs font-bold">החנות</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* Stats Grid */}
-        <View className="px-4 mb-8">
-          <Text className="text-text font-bold mb-4 text-right px-1 text-lg">{hebrew.profile.statistics}</Text>
-          <View className="flex-row gap-3">
-            <StatBox
-              label={hebrew.profile.totalWorkouts}
-              value={stats.workouts.toString()}
-              icon={Dumbbell}
-              color={Colors.primary}
-            />
-            <StatBox
-              label='דקות אימון'
-              value={stats.duration.toString()}
-              icon={TrendingUp}
-              color="#a855f7" // סגול לשינוי
-            />
-            <StatBox
-              label={hebrew.home.achievements}
-              value={user?.achievements?.length.toString() || '0'}
-              image={require('@/assets/images/trophy.webp')}
-              color="#eab308" // זהב
-            />
+            <Text style={styles.userName}>{user?.name || 'אורח'}</Text>
+            <Text style={styles.userEmail}>{user?.email || 'user@example.com'}</Text>
           </View>
         </View>
 
-        {/* Subscription Info */}
-        {user?.subscription && (
-          <View className="px-4 mb-8">
-            <Text className="text-text font-bold mb-4 text-right px-1 text-lg">{hebrew.profile.subscription}</Text>
-            <View className="bg-surface rounded-2xl p-5 shadow-sm">
-              <View className="flex-row justify-between items-center mb-4">
-                <View className="flex-row items-center gap-2">
-                  <CreditCard size={18} color={Colors.primary} />
-                  <Text className="text-muted font-medium text-sm">שיעורים החודש</Text>
-                </View>
-                <Text className="text-text font-bold">
-                  <Text className="text-primary text-lg">{user.subscription.classesPerMonth - user.subscription.classesUsed}</Text>
-                  <Text className="text-muted text-sm"> / {user.subscription.classesPerMonth}</Text>
-                </Text>
-              </View>
+        {/* Subscription Section */}
+        <View style={styles.section}>
+          {user?.subscription ? (
+            <SubscriptionCard user={user} onPress={() => router.push('/subscription-management' as any)} />
+          ) : (
+            <View style={styles.emptyStateCard}>
+              <Ionicons name="alert-circle-outline" size={32} color="#9CA3AF" />
+              <Text style={styles.emptyStateText}>אין מנוי פעיל כרגע</Text>
+            </View>
+          )}
+        </View>
 
-              {/* Progress Bar Visual */}
-              <View className="h-2 bg-white rounded-full overflow-hidden mb-4">
-                <View
-                  className="h-full bg-primary rounded-full"
-                  style={{ width: `${((user.subscription.classesPerMonth - user.subscription.classesUsed) / user.subscription.classesPerMonth) * 100}%` }}
-                />
-              </View>
+        {/* Menu Groups */}
+        <View style={styles.menuContainer}>
+          <Text style={styles.sectionHeader}>הגדרות חשבון</Text>
+          <View style={styles.menuGroup}>
+            <MenuRow icon="receipt-outline" label="חשבוניות ותשלומים" onPress={() => { }} />
+            <View style={styles.divider} />
+            <MenuRow icon="heart-outline" label="הצהרת בריאות" value="בתוקף" onPress={() => { }} />
+            <View style={styles.divider} />
+            <MenuRow icon="notifications-outline" label="התראות" onPress={() => { }} />
+          </View>
+        </View>
 
-              <View className="flex-row justify-between">
-                <Text className="text-muted text-xs">בתוקף עד</Text>
-                <Text className="text-text text-xs font-medium">{new Date(user.subscription.endDate).toLocaleDateString('he-IL')}</Text>
-              </View>
+        {(isAdmin || isCoach) && (
+          <View style={styles.menuContainer}>
+            <Text style={styles.sectionHeader}>ניהול</Text>
+            <View style={styles.menuGroup}>
+              <MenuRow icon="shield-checkmark-outline" label="פאנל ניהול" onPress={() => router.push('/admin' as any)} />
             </View>
           </View>
         )}
 
-        {/* Menu Actions */}
-        <View className="px-4">
-          <Text className="text-text font-bold mb-4 text-right px-1 text-lg">{hebrew.profile.settings}</Text>
 
-          {(isAdmin || isCoach) && (
-            <MenuItem
-              icon={Shield}
-              title="לוח ניהול"
-              subtitle="גישת צוות ומנהלים"
-              onPress={() => router.push('/admin/' as any)}
-            />
-          )}
 
-          <MenuItem
-            icon={Settings}
-            title={hebrew.profile.settings}
-            onPress={() => console.log('Settings Pressed')} // תוסיף פה ניווט אם צריך
-          />
+        <View style={styles.menuContainer}>
+          <View style={styles.menuGroup}>
+            <MenuRow icon="share-social-outline" label="שתף לחברים" onPress={shareApp} />
+            <View style={styles.divider} />
+            <MenuRow icon="chatbubble-ellipses-outline" label="צור קשר / תמיכה" onPress={() => { }} />
+          </View>
+        </View>
 
-          <MenuItem
-            icon={LogOut}
-            title={hebrew.profile.logout}
-            isDestructive
-            onPress={handleSignOut}
-          />
+        <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
+          <Text style={styles.logoutText}>התנתק מהמערכת</Text>
+        </TouchableOpacity>
+
+        <View style={styles.versionInfo}>
+          <Text style={styles.versionText}>גרסה 1.0.2 • ReelRep Training</Text>
         </View>
 
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+// --- Styles ---
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F3F4F6' },
+  bgDecoration: {
+    position: 'absolute', top: 0, left: 0, right: 0, height: 300,
+    backgroundColor: '#fff', borderBottomLeftRadius: 40, borderBottomRightRadius: 40,
+    elevation: 2, shadowColor: '#000', shadowOpacity: 0.03, shadowOffset: { width: 0, height: 10 }
+  },
+  scrollContent: { paddingBottom: 50 },
+
+  // Header
+  header: { alignItems: 'center', paddingTop: 10, paddingBottom: 20 },
+  settingsIcon: { position: 'absolute', right: 24, top: 10, padding: 8 },
+  profileInfo: { alignItems: 'center' },
+  avatarWrapper: { marginBottom: 16, position: 'relative' },
+  avatar: { width: 90, height: 90, borderRadius: 45, borderWidth: 4, borderColor: '#F9FAFB' },
+  avatarPlaceholder: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#202020', alignItems: 'center', justifyContent: 'center', borderWidth: 4, borderColor: '#F9FAFB' },
+  avatarInitials: { fontSize: 32, fontWeight: 'bold', color: '#fff' },
+  editBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#111827', width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
+  userName: { fontSize: 22, fontWeight: '800', color: '#111827', marginBottom: 2 },
+  userEmail: { fontSize: 14, color: '#6B7280', fontWeight: '500' },
+
+  // Card
+  section: { paddingHorizontal: 20, marginBottom: 24 },
+  cardWrapper: {
+    borderRadius: 24,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.15, shadowRadius: 20,
+    elevation: 10,
+  },
+  cardGradient: { borderRadius: 24, padding: 24, minHeight: 190, justifyContent: 'space-between', overflow: 'hidden' },
+  cardPatternCircle: { position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,255,255,0.05)' },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cardTitle: { color: '#fff', fontSize: 22, fontWeight: '800', textAlign: 'left' },
+  activeTag: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(16, 185, 129, 0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, gap: 6 },
+  activeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981' },
+  activeTagText: { color: '#10B981', fontSize: 12, fontWeight: '700' },
+  cardBody: { marginTop: 20 },
+  statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
+  statLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginBottom: 4, textAlign: 'left' },
+  statValue: { color: '#fff', fontSize: 18, fontWeight: '700', textAlign: 'left' },
+  statTotal: { fontSize: 14, color: 'rgba(255,255,255,0.5)', fontWeight: '500' },
+  progressContainer: { marginTop: 0 },
+  progressBarBg: { height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' },
+  progressBarFill: { height: '100%', borderRadius: 4 },
+
+  emptyStateCard: { backgroundColor: '#fff', padding: 30, borderRadius: 20, alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#E5E7EB', borderStyle: 'dashed' },
+  emptyStateText: { color: '#6B7280', fontSize: 16, fontWeight: '500' },
+
+  // Menu
+  menuContainer: { paddingHorizontal: 20, marginBottom: 24 },
+  sectionHeader: { fontSize: 14, fontWeight: '700', color: '#6B7280', marginBottom: 12, textAlign: 'right', marginRight: 8 },
+  menuGroup: { backgroundColor: '#fff', borderRadius: 20, paddingVertical: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 },
+  menuRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 16 },
+  menuRowDestructive: {},
+  menuRowRight: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
+  menuRowLeft: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6 },
+  menuLabel: { fontSize: 16, color: '#111827', fontWeight: '500', textAlign: 'right' },
+  menuValue: { fontSize: 14, color: '#9CA3AF', fontWeight: '500' },
+  textDestructive: { color: '#EF4444' },
+  iconContainer: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
+  iconContainerDestructive: { backgroundColor: '#FEE2E2' },
+  divider: { height: 1, backgroundColor: '#F3F4F6', marginHorizontal: 16 },
+
+  // Logout & Footer
+  logoutButton: { marginHorizontal: 20, paddingVertical: 16, backgroundColor: '#FEE2E2', borderRadius: 16, alignItems: 'center', marginBottom: 20 },
+  logoutText: { color: '#EF4444', fontSize: 16, fontWeight: '700' },
+  versionInfo: { alignItems: 'center', marginBottom: 20 },
+  versionText: { color: '#D1D5DB', fontSize: 12, fontWeight: '500' },
+});

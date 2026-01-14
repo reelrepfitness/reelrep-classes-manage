@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, Image, TouchableOpacity, Animated } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Calendar, Clock, Users, MapPin, Trophy, XCircle, ArrowLeftRight } from 'lucide-react-native';
 import { cn } from '@/lib/utils';
 import Colors from '@/constants/colors';
 import { AvatarCircles } from '@/components/ui/AvatarCircles';
+import { ClassAttendeesSheet } from './ClassAttendeesSheet';
 
 interface ClassRegistrationCardProps {
     title: string;
@@ -12,6 +14,7 @@ interface ClassRegistrationCardProps {
     instructor: string;
     enrolled: number;
     capacity: number;
+    waitingListCount?: number;
     enrolledAvatars?: string[];
     isBooked?: boolean;
     isAdmin?: boolean;
@@ -19,6 +22,7 @@ interface ClassRegistrationCardProps {
     onCancel?: () => void;
     onCancelClass?: () => void;
     onSwitch?: () => void;
+    onOpenAttendees?: () => void;
     className?: string;
 }
 
@@ -29,6 +33,7 @@ export function ClassRegistrationCard({
     instructor,
     enrolled,
     capacity,
+    waitingListCount = 0,
     enrolledAvatars = [],
     isBooked = false,
     isAdmin = false,
@@ -36,6 +41,7 @@ export function ClassRegistrationCard({
     onCancel,
     onCancelClass,
     onSwitch,
+    onOpenAttendees,
     className,
 }: ClassRegistrationCardProps) {
     const [timeLeft, setTimeLeft] = useState(0);
@@ -146,7 +152,7 @@ export function ClassRegistrationCard({
             {/* Info Cards */}
             <View className="px-6 pb-4">
 
-                {/* Instructor */}
+                {/* Instructor & Capacity */}
                 <View className="flex-row gap-3 mb-4">
                     {/* Coach Card */}
                     <View className="flex-1 bg-gray-50 rounded-xl py-3 items-center justify-center gap-2 border border-gray-100">
@@ -163,18 +169,30 @@ export function ClassRegistrationCard({
                     </View>
                 </View>
 
-                {/* Avatar Group */}
-                {enrolledAvatars.length > 0 && (
-                    <View className="mt-3 flex-row justify-end">
-                        <AvatarCircles
-                            avatarUrls={enrolledAvatars.slice(0, 4)}
-                            numPeople={Math.max(0, enrolled - 4)}
-                        />
-                    </View>
-                )}
+                {/* Waiting List & Avatars Area */}
+                <View className="mt-3 flex-row items-center justify-between">
+                    {/* LEFTSIDE (in RTL this is visually LEFT) */}
+                    {isFull && !isBooked && waitingListCount > 0 && (
+                        <View className="bg-[#FFF7ED] px-3 py-1.5 rounded-full flex-row items-center gap-1.5 border border-[#FFEDD5]">
+                            <Ionicons name="hourglass-outline" size={14} color="#C2410C" />
+                            <Text className="text-[#C2410C] text-xs font-extrabold">{waitingListCount} ממתינים</Text>
+                        </View>
+                    )}
+                    <View className="flex-1" />
+
+                    {/* RIGHTSIDE (Avatars) */}
+                    {enrolledAvatars.length > 0 && (
+                        <TouchableOpacity onPress={onOpenAttendees} activeOpacity={0.7}>
+                            <AvatarCircles
+                                avatarUrls={enrolledAvatars.slice(0, 4)}
+                                numPeople={Math.max(0, enrolled - 4)}
+                            />
+                        </TouchableOpacity>
+                    )}
+                </View>
 
                 {/* Progress Bar */}
-                <View className="mt-3">
+                <View className="mt-4">
                     <View className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
                         <View
                             className={cn(
@@ -233,7 +251,6 @@ export function ClassRegistrationCard({
             {isBooked ? (
                 // Already registered - show cancel/switch options
                 <View className="p-6 pt-4 border-t border-gray-100">
-                    {/* Row 1: Cancel Class + Switch */}
                     <View className="flex-row gap-3 mb-3">
                         <TouchableOpacity
                             onPress={onCancelClass}
@@ -250,7 +267,6 @@ export function ClassRegistrationCard({
                             <Text className="text-gray-700 text-base font-bold">החלפה</Text>
                         </TouchableOpacity>
                     </View>
-                    {/* Row 2: Close */}
                     <TouchableOpacity
                         onPress={onCancel}
                         className="w-full py-3.5 rounded-xl items-center bg-[#09090B] active:bg-gray-800"
@@ -261,7 +277,6 @@ export function ClassRegistrationCard({
             ) : (
                 // Not registered - show register/cancel options
                 <View className="flex-row gap-3 p-6 pt-4 border-t border-gray-100">
-                    {/* Cancel/Close Button */}
                     <TouchableOpacity
                         onPress={onCancel}
                         className="flex-1 py-3.5 rounded-xl items-center border border-gray-200 bg-gray-50 active:bg-gray-100"
@@ -269,23 +284,27 @@ export function ClassRegistrationCard({
                         <Text className="text-gray-700 text-base font-bold">ביטול</Text>
                     </TouchableOpacity>
 
-                    {/* Register Button */}
+                    {/* Register / Join Waitlist Button */}
                     <TouchableOpacity
                         onPress={onRegister}
-                        disabled={isFull && !isAdmin}
                         className={cn(
-                            "flex-1 py-3.5 rounded-xl items-center",
-                            isFull && !isAdmin ? "bg-gray-300" : "bg-primary"
+                            "flex-1 py-3.5 rounded-xl items-center border",
+                            isFull && !isAdmin
+                                ? "bg-white border-primary" // Outlined for waitlist
+                                : "bg-primary border-primary" // Solid for regular
                         )}
-                        style={!isFull ? {
+                        style={!isFull || isAdmin ? {
                             shadowColor: Colors.primary,
                             shadowOffset: { width: 0, height: 4 },
                             shadowOpacity: 0.3,
                             shadowRadius: 8,
                         } : {}}
                     >
-                        <Text className="text-white text-base font-bold">
-                            {isFull && !isAdmin ? 'מלא' : 'הירשם'}
+                        <Text className={cn(
+                            "text-base font-bold",
+                            isFull && !isAdmin ? "text-primary" : "text-white"
+                        )}>
+                            {isFull && !isAdmin ? 'הכנס להמתנה' : 'הירשם'}
                         </Text>
                     </TouchableOpacity>
                 </View>

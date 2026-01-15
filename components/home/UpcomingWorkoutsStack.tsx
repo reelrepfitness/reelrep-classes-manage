@@ -9,7 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Calendar, User, Users, Clock } from 'lucide-react-native';
+import { Icon } from '@/components/ui/icon';
 import { supabase } from '@/constants/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -171,7 +171,7 @@ export const UpcomingWorkoutsStack = () => {
     if (bookings.length === 0) {
         return (
             <View className="h-48 w-full items-center justify-center bg-gray-50 rounded-3xl border border-gray-200">
-                <Calendar size={48} color="#D1D5DB" strokeWidth={1.5} />
+                <Icon name="calendar" size={48} color="#D1D5DB" strokeWidth={1.5} />
                 <Text className="text-gray-400 font-bold mt-4">אין אימונים עתידיים</Text>
             </View>
         );

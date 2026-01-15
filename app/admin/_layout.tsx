@@ -1,11 +1,13 @@
 import { Stack } from 'expo-router';
 import React from 'react';
 import { View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { CustomTabBar } from '@/components/ui/CustomTabBar';
 
 export default function AdminLayout() {
     return (
         <View style={{ flex: 1 }}>
+            <StatusBar style="light" />
             <Stack
                 screenOptions={{
                     headerShown: false,

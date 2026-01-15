@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,16 +7,14 @@ import {
   StyleSheet,
   Image,
   Dimensions,
-  Linking,
-  Platform
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { useWorkouts } from '@/contexts/WorkoutContext';
 import { UpcomingWorkoutsStack } from '@/components/home/UpcomingWorkoutsStack';
 import Colors from '@/constants/colors';
+import { supabase } from '@/constants/supabase';
+import { Icon } from '@/components/ui/icon';
 
 const { width } = Dimensions.get('window');
 
@@ -35,7 +33,52 @@ const getHebrewDate = () => {
 
 // --- Components ---
 
-const StatusCard = ({ label, value, icon }: any) => (
+const WorkoutsCard = ({ thisMonth, lastMonth }: { thisMonth: number; lastMonth: number }) => {
+  const change = thisMonth - lastMonth;
+  const isPositive = change >= 0;
+
+  return (
+    <View style={styles.workoutsCard}>
+      <View style={styles.workoutsCardHeader}>
+        <View style={styles.iconBadge}>
+          <Icon name="dumbbell" size={20} color={Colors.primary} strokeWidth={2.5} />
+        </View>
+        <Text style={styles.workoutsCardTitle}>אימונים</Text>
+      </View>
+
+      <View style={styles.workoutsStats}>
+        <View style={styles.workoutsStat}>
+          <Text style={styles.workoutsMainValue}>{thisMonth}</Text>
+          <Text style={styles.workoutsMainLabel}>החודש</Text>
+        </View>
+
+        <View style={styles.workoutsDivider} />
+
+        <View style={styles.workoutsStat}>
+          <Text style={styles.workoutsSecondaryValue}>{lastMonth}</Text>
+          <Text style={styles.workoutsSecondaryLabel}>חודש שעבר</Text>
+        </View>
+      </View>
+
+      {change !== 0 && (
+        <View style={[styles.changeBadge, { backgroundColor: isPositive ? '#ECFDF5' : '#FEF2F2' }]}>
+          <Icon
+            name="trending-up"
+            size={12}
+            color={isPositive ? '#10B981' : '#EF4444'}
+            strokeWidth={2.5}
+            style={{ transform: [{ rotate: isPositive ? '0deg' : '180deg' }] }}
+          />
+          <Text style={[styles.changeText, { color: isPositive ? '#10B981' : '#EF4444' }]}>
+            {Math.abs(change)} {isPositive ? 'יותר' : 'פחות'}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
+const StatusCard = ({ label, value }: { label: string; value: string | number }) => (
   <View style={styles.statusCard}>
     <View style={styles.statusContent}>
       <Text style={styles.statusValue}>{value}</Text>
@@ -45,14 +88,14 @@ const StatusCard = ({ label, value, icon }: any) => (
   </View>
 );
 
-const ActionCard = ({ title, iconName, onPress }: any) => (
+const ActionCard = ({ title, iconName, onPress }: { title: string; iconName: string; onPress: () => void }) => (
   <TouchableOpacity
     style={styles.actionCard}
     activeOpacity={0.7}
     onPress={onPress}
   >
     <View style={styles.actionIconContainer}>
-      <Ionicons name={iconName} size={28} color={Colors.primary} />
+      <Icon name={iconName} size={24} color={Colors.primary} strokeWidth={2.5} />
     </View>
     <Text style={styles.actionTitle}>{title}</Text>
   </TouchableOpacity>
@@ -62,14 +105,51 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { getTotalStats } = useWorkouts();
 
-  // Mock / Calculated Data
-  const workoutsThisMonth = 12; // Placeholder
-  const balance = user?.subscription?.type?.includes('class')
-    ? (user.subscription.classesPerMonth - user.subscription.classesUsed)
-    : '∞';
-  const points = 350; // Placeholder
+  const [workoutsThisMonth, setWorkoutsThisMonth] = useState(0);
+  const [workoutsLastMonth, setWorkoutsLastMonth] = useState(0);
+  const [totalWorkouts, setTotalWorkouts] = useState(0);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const fetchAttendedWorkouts = async () => {
+      const now = new Date();
+      const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+
+      // This month
+      const { count: thisMonthCount } = await supabase
+        .from('class_bookings')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('status', 'completed')
+        .gte('attended_at', firstDayThisMonth.toISOString());
+
+      // Last month
+      const { count: lastMonthCount } = await supabase
+        .from('class_bookings')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('status', 'completed')
+        .gte('attended_at', firstDayLastMonth.toISOString())
+        .lte('attended_at', lastDayLastMonth.toISOString());
+
+      // Total all time
+      const { count: totalCount } = await supabase
+        .from('class_bookings')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('status', 'completed');
+
+      setWorkoutsThisMonth(thisMonthCount || 0);
+      setWorkoutsLastMonth(lastMonthCount || 0);
+      setTotalWorkouts(totalCount || 0);
+    };
+
+    fetchAttendedWorkouts();
+  }, [user?.id])
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -77,24 +157,16 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* 1. Header (Clean & Personal) */}
+        {/* 1. Header */}
         <View style={styles.header}>
-          {/* Left Side: Avatar (Visual Left in code, Right in RTL?) 
-                Wait, in RTL Row: 
-                First item rendered is Rightmost visually. 
-                Request: "Right Side (Text)... Left Side (Avatar)".
-                So in Code (Flex Row): 
-                <TextSide /> 
-                <AvatarSide /> 
-            */}
           <View style={styles.headerTextContainer}>
             <Text style={styles.greetingTitle}>היי, {user?.name?.split(' ')[0] || 'אורח'}</Text>
             <Text style={styles.dateSubtitle}>{getHebrewDate()}</Text>
           </View>
 
           <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.avatarContainer}>
-            {user?.avatar_url ? (
-              <Image source={{ uri: user.avatar_url }} style={styles.avatar} />
+            {(user as any)?.avatar_url ? (
+              <Image source={{ uri: (user as any).avatar_url }} style={styles.avatar} />
             ) : (
               <View style={[styles.avatar, styles.avatarPlaceholder]}>
                 <Text style={styles.avatarInitials}>{user?.name?.slice(0, 1).toUpperCase() || '?'}</Text>
@@ -103,58 +175,32 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 2. Hero Stack (Center Stage) */}
+        {/* 2. Upcoming Classes Stack */}
         <View style={styles.heroSection}>
           <UpcomingWorkoutsStack />
         </View>
 
-        {/* 3. Status Strip (Functional Data) */}
-        <View style={styles.statusStrip}>
-          {/* 3 Columns */}
-          <StatusCard
-            label="ניקוד צבור"
-            value={points}
-          />
-          <StatusCard
-            label="יתרה"
-            value={balance}
-          />
-          <StatusCard
-            label="אימונים החודש"
-            value={workoutsThisMonth}
-          />
+        {/* Divider after upcoming classes */}
+        <View style={styles.divider} />
+
+        {/* 3. Stats Row */}
+        <View style={styles.statsRow}>
+          <WorkoutsCard thisMonth={workoutsThisMonth} lastMonth={workoutsLastMonth} />
+          <StatusCard label="סה״כ אימונים" value={totalWorkouts} />
         </View>
 
-        {/* 4. Quick Actions (The Grid) */}
-        <View style={styles.actionsSection}>
-          <Text style={styles.sectionTitle}>פעולות מהירות</Text>
-          <View style={styles.actionsGrid}>
-            {/* 2x2 Grid */}
-            {/* RTL visual flow: Top Right -> Top Left? 
-                    Unless purely grid. 
-                    Let's render 4 items.
-                */}
-            <ActionCard
-              title="יומן ביצועים"
-              iconName="calendar-outline"
-              onPress={() => router.push('/performance' as any)}
-            />
-            <ActionCard
-              title="חנות והטבות" // Shop
-              iconName="cart-outline"
-              onPress={() => router.push('/shop' as any)}
-            />
-            <ActionCard
-              title="ההישגים שלי" // Progress
-              iconName="stats-chart-outline"
-              onPress={() => router.push('/achievements' as any)}
-            />
-            <ActionCard
-              title="יצירת קשר" // Contact
-              iconName="chatbubble-ellipses-outline"
-              onPress={() => Linking.openURL('https://wa.me/972500000000')}
-            />
-          </View>
+        {/* 4. Quick Actions */}
+        <View style={styles.actionsRow}>
+          <ActionCard
+            title="יומן ביצועים"
+            iconName="calendar"
+            onPress={() => router.push('/performance' as any)}
+          />
+          <ActionCard
+            title="חנות והטבות"
+            iconName="shopping-bag"
+            onPress={() => router.push('/shop' as any)}
+          />
         </View>
 
         <View style={{ height: 120 }} />
@@ -166,7 +212,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAFA', // Clean White/Off-white
+    backgroundColor: '#FAFAFA',
   },
   scrollContent: {
     paddingBottom: 40,
@@ -174,21 +220,7 @@ const styles = StyleSheet.create({
 
   // Header
   header: {
-    flexDirection: 'row', // RTL handled by content order if logic requires specifically
-    // Design check: "Right Side (Text) ... Left Side (Avatar)"
-    // In LTR Flex Row: [Left Item] [Right Item]
-    // In RTL Device: [Right Item] [Left Item]
-    // Assuming we want strict control or native RTL:
-    // Let's use justifyContent: space-between normally. 
-    // If we put Text first, it goes to Left in LTR.
-    // We want Text on Right. So Avatar First, then Text? 
-    // Or just flexDirection: 'row-reverse' to force it?
-    // Native RTL flips it automatically. 
-    // Let's assume Native RTL is ON. 
-    // So layout: <Avatar /> <Text /> -> Avatar on Right.
-    // Wait, request said "Right Side (Text)". 
-    // So in RTL: [Text] ... [Avatar] (Avatar on left).
-    // So structure: <Avatar /> ... <Text /> 
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
@@ -200,9 +232,9 @@ const styles = StyleSheet.create({
   },
   greetingTitle: {
     fontSize: 24,
-    fontWeight: '700', // Bold
+    fontWeight: '700',
     color: '#171717',
-    textAlign: 'left', // Will align right in RTL likely
+    textAlign: 'left',
   },
   dateSubtitle: {
     fontSize: 14,
@@ -223,7 +255,7 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 24,
     borderWidth: 2,
-    borderColor: Colors.primary, // #da4477
+    borderColor: Colors.primary,
     backgroundColor: '#fff',
   },
   avatarPlaceholder: {
@@ -240,18 +272,108 @@ const styles = StyleSheet.create({
 
   // Hero
   heroSection: {
-    marginBottom: 32,
+    marginBottom: 24,
     paddingHorizontal: 0,
   },
 
-  // Status Strip
-  statusStrip: {
-    flexDirection: 'row-reverse', // Ensure standard order 1-2-3? Or just row. 
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    gap: 12,
-    marginBottom: 32,
+  // Divider
+  divider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: 20,
+    marginBottom: 24,
   },
+
+  // Stats Row
+  statsRow: {
+    flexDirection: 'row-reverse',
+    gap: 12,
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+
+  // Workouts Card
+  workoutsCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    gap: 12,
+  },
+  workoutsCardHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: `${Colors.primary}12`,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  workoutsCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#171717',
+  },
+  workoutsStats: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    gap: 12,
+  },
+  workoutsStat: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  workoutsMainValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: Colors.primary,
+  },
+  workoutsMainLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  workoutsSecondaryValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#9CA3AF',
+  },
+  workoutsSecondaryLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#9CA3AF',
+  },
+  workoutsDivider: {
+    width: 1,
+    height: '70%',
+    backgroundColor: '#E5E7EB',
+  },
+  changeBadge: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  changeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Status Card (Points)
   statusCard: {
     flex: 1,
     backgroundColor: '#ffffff',
@@ -259,11 +381,11 @@ const styles = StyleSheet.create({
     padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, // Soft shadow
+    shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
-    minHeight: 80,
-    justifyContent: 'space-between',
+    minHeight: 120,
+    justifyContent: 'center',
     position: 'relative',
     overflow: 'hidden',
   },
@@ -272,12 +394,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statusValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#171717',
+    fontSize: 28,
+    fontWeight: '800',
+    color: Colors.primary,
   },
   statusLabel: {
     fontSize: 12,
+    fontWeight: '600',
     color: '#6B7280',
     textAlign: 'center',
   },
@@ -292,49 +415,40 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 2,
   },
 
-  // Actions
-  actionsSection: {
-    paddingHorizontal: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#171717',
-    marginBottom: 16,
-    textAlign: 'right', // RTL
-  },
-  actionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  // Actions Row
+  actionsRow: {
+    flexDirection: 'row-reverse',
     gap: 12,
+    paddingHorizontal: 20,
+    marginBottom: 24,
   },
   actionCard: {
-    width: (width - 40 - 12) / 2, // 2 cols
-    aspectRatio: 1.3, // Rectangular
-    backgroundColor: '#ffffff',
+    flex: 1,
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E5E5E5', // Subtle border
+    borderColor: '#E5E7EB',
     padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
     shadowColor: '#000',
-    shadowOpacity: 0.02, // Very subtle lift
     shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
     shadowRadius: 4,
     elevation: 1,
+    minHeight: 100,
   },
   actionIconContainer: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'transparent',
+    backgroundColor: `${Colors.primary}08`,
     alignItems: 'center',
     justifyContent: 'center',
   },
   actionTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     color: '#171717',
     textAlign: 'center',

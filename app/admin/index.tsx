@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
-import RevenueWidget from '@/components/admin/dashboard/RevenueWidget';
+import { StatusBar } from 'expo-status-bar';
+import DashboardStatsCarousel from '@/components/admin/dashboard/DashboardStatsCarousel';
 import LeadFunnelWidget from '@/components/admin/dashboard/LeadFunnelWidget';
 import DailyClassesWidget from '@/components/admin/dashboard/DailyClassesWidget';
 import StatsGrid from '@/components/admin/dashboard/StatsGrid';
@@ -8,7 +9,7 @@ import { useAdminDashboardData } from '@/hooks/admin/useAdminDashboardData';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 
 export default function AdminDashboard() {
-  const { revenue, funnel, stats, todaysClasses, loading, refresh } = useAdminDashboardData();
+  const { funnel, stats, todaysClasses, refresh } = useAdminDashboardData();
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = React.useCallback(async () => {
@@ -19,15 +20,12 @@ export default function AdminDashboard() {
 
   // Transform Stats for Grid
   const statsGridData = [
-    { key: 'debts', label: `חייבים (₪${stats.debts.total})`, value: stats.debts.count, icon: 'card' as const, color: '#EF4444', route: '/admin/financial/debts' as any },
-    { key: 'frozen', label: 'מנויים בהקפאה', value: stats.frozen, icon: 'snow' as const, color: '#3B82F6', route: '/admin/clients/frozen' as any },
-    { key: 'active', label: 'מנויים פעילים', value: stats.active, icon: 'people' as const, color: '#10B981', route: '/admin/clients/active' as any },
-    { key: 'tasks', label: 'לטיפול דחוף', value: stats.tasks, icon: 'alert-circle' as const, color: '#F97316', route: '/admin-alerts' as any },
     { key: 'exercises', label: 'ניהול תרגילים', value: '', icon: 'barbell' as const, color: '#8B5CF6', route: '/admin/exercises' as any },
   ];
 
   return (
     <View style={styles.container}>
+      <StatusBar style="light" />
       <AdminHeader title="מסך ניהול" />
 
       <ScrollView
@@ -36,13 +34,8 @@ export default function AdminDashboard() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
       >
-        {/* 1. Revenue Hero */}
-        <RevenueWidget
-          revenue={revenue.total}
-          trend={revenue.trend}
-          trendUp={revenue.trendUp}
-          data={revenue.chartData}
-        />
+        {/* 1. New Horizontal Stats Carousel (Revenue, Urgent, Subscriptions) */}
+        <DashboardStatsCarousel />
 
         {/* 2. Lead Funnel */}
         <LeadFunnelWidget
@@ -54,7 +47,7 @@ export default function AdminDashboard() {
         {/* 3. Daily Studio */}
         <DailyClassesWidget classes={todaysClasses} />
 
-        {/* 4. Stats Grid */}
+        {/* 4. Stats Grid (Remaining Items) */}
         <StatsGrid stats={statsGridData} />
 
         <View style={{ height: 120 }} />

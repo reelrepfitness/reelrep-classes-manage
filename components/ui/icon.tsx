@@ -1,34 +1,55 @@
-import { useColor } from '@/hooks/useColor';
-import { LucideProps } from 'lucide-react-native';
-import React from 'react';
+import { Platform, ViewStyle } from 'react-native';
+import { SymbolView } from 'expo-symbols';
+import * as LucideIcons from 'lucide-react-native';
+import { ICON_MAP } from '@/constants/iconMap';
 
-export type Props = LucideProps & {
-  lightColor?: string;
-  darkColor?: string;
-  name: React.ComponentType<LucideProps>;
-};
+interface IconProps {
+  name: string;
+  size?: number;
+  color?: string;
+  strokeWidth?: number;
+  style?: ViewStyle;
+}
 
-export function Icon({
-  lightColor,
-  darkColor,
-  name: IconComponent,
-  color,
+export const Icon = ({
+  name,
   size = 24,
-  strokeWidth = 1.8,
-  ...rest
-}: Props) {
-  const themedColor = useColor('icon', { light: lightColor, dark: darkColor });
+  color = '#000',
+  strokeWidth = 2,
+  style
+}: IconProps) => {
+  const iconConfig = ICON_MAP[name];
 
-  // Use provided color prop if available, otherwise use themed color
-  const iconColor = color || themedColor;
+  if (!iconConfig) {
+    console.warn(`Icon "${name}" not found in ICON_MAP`);
+    return null;
+  }
+
+  if (Platform.OS === 'ios') {
+    return (
+      <SymbolView
+        name={iconConfig.ios}
+        size={size}
+        type="monochrome"
+        tintColor={color}
+        style={[{ width: size, height: size }, style]}
+      />
+    );
+  }
+
+  const LucideIcon = LucideIcons[iconConfig.android as keyof typeof LucideIcons];
+
+  if (!LucideIcon) {
+    console.warn(`Lucide icon "${iconConfig.android}" not found`);
+    return null;
+  }
 
   return (
-    <IconComponent
-      color={iconColor}
+    <LucideIcon
       size={size}
+      color={color}
       strokeWidth={strokeWidth}
-      strokeLinecap='round'
-      {...rest}
+      style={style}
     />
   );
-}
+};

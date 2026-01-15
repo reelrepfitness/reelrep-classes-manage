@@ -40,7 +40,6 @@ interface Client {
   classes_used: number;
   block_end_date?: string;
   late_cancellations: number;
-  plate_balance: number;
   total_workouts: number;
 }
 
@@ -213,16 +212,14 @@ export default function ClientManagement() {
                     <Text style={styles.footerLabel}>שיעורים החודש</Text>
                     <Text style={styles.footerValue}>{client.classes_used || 0}/{client.classes_per_month || 0}</Text>
                   </View>
-                  <View style={styles.footerDivider} />
-                  <View style={styles.footerStat}>
-                    <Text style={styles.footerLabel}>פלטות</Text>
-                    <Text style={styles.footerValue}>{client.plate_balance || 0}</Text>
-                  </View>
                   {blocked && (
-                    <View style={styles.blockedIndicator}>
-                      <Ban size={12} color="#EF4444" />
-                      <Text style={styles.blockedText}>חסום</Text>
-                    </View>
+                    <>
+                      <View style={styles.footerDivider} />
+                      <View style={styles.blockedIndicator}>
+                        <Ban size={12} color="#EF4444" />
+                        <Text style={styles.blockedText}>חסום</Text>
+                      </View>
+                    </>
                   )}
                 </View>
               </TouchableOpacity>

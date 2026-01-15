@@ -10,16 +10,18 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { 
-    Home, 
-    Calendar, 
-    User, 
+import {
+    Home,
+    Calendar,
+    User,
     Dumbbell,
     ClipboardList,
-    Receipt // Import Receipt
+    Receipt
 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/constants/supabase';
 
 // --- Icons Mapping ---
 const getIcon = (routeName: string, color: string, size: number) => {
@@ -29,11 +31,11 @@ const getIcon = (routeName: string, color: string, size: number) => {
             return <Home color={color} size={size} />;
         case 'classes':
             return <Calendar color={color} size={size} />;
-        case 'register': // Updated from shop
+        case 'register':
             return <Receipt color={color} size={size} />;
         case 'profile':
             return <User color={color} size={size} />;
-        case 'admin': 
+        case 'admin':
             return <ClipboardList color={color} size={size} />;
         default:
             return <Home color={color} size={size} />;
@@ -43,7 +45,7 @@ const getIcon = (routeName: string, color: string, size: number) => {
 const TAB_ITEMS = [
     { name: 'index', label: 'בית', route: '/(tabs)' },
     { name: 'classes', label: 'שיעורים', route: '/(tabs)/classes' },
-    { name: 'register', label: 'קופה', route: '/(tabs)/register', adminOnly: true }, // Updated to register
+    { name: 'register', label: 'קופה', route: '/(tabs)/register', adminOnly: true },
     { name: 'profile', label: 'פרופיל', route: '/(tabs)/profile' },
     { name: 'admin', label: 'ניהול', route: '/admin', adminOnly: true },
 ];
@@ -52,9 +54,10 @@ interface TabBadgeProps {
     item: typeof TAB_ITEMS[0];
     isSelected: boolean;
     onSelect: () => void;
+    badgeCount?: number;
 }
 
-const TabBadge = ({ item, isSelected, onSelect }: TabBadgeProps) => {
+const TabBadge = ({ item, isSelected, onSelect, badgeCount }: TabBadgeProps) => {
     const progress = useDerivedValue(() => {
         return withTiming(isSelected ? 1 : 0, { duration: 250 });
     });
@@ -70,8 +73,11 @@ const TabBadge = ({ item, isSelected, onSelect }: TabBadgeProps) => {
         };
     });
 
-    const activeColor = '#1c1c1c';
+    const activeColor = '#da4477';
     const inactiveColor = '#9CA3AF';
+
+    // Convert badgeCount to number and ensure it's valid
+    const validBadgeCount = typeof badgeCount === 'number' && badgeCount > 0 ? badgeCount : null;
 
     return (
         <TouchableOpacity
@@ -84,6 +90,11 @@ const TabBadge = ({ item, isSelected, onSelect }: TabBadgeProps) => {
         >
             <View style={styles.iconContainer}>
                 {getIcon(item.name, isSelected ? activeColor : inactiveColor, 24)}
+                {validBadgeCount !== null && (
+                    <View style={styles.badge}>
+                        <Text style={styles.badgeText}>{validBadgeCount > 9 ? '9+' : String(validBadgeCount)}</Text>
+                    </View>
+                )}
             </View>
 
             <Animated.View style={[styles.textContainer, textContainerStyle]}>
@@ -99,7 +110,25 @@ export function CustomTabBar() {
     const router = useRouter();
     const pathname = usePathname();
     const insets = useSafeAreaInsets();
-    const { isAdmin } = useAuth(); // Get isAdmin status
+    const { isAdmin, user } = useAuth(); // Get isAdmin status and user
+
+    // Query for unread notifications
+    const unreadQuery = useQuery({
+        queryKey: ['unread-notifications', user?.id],
+        queryFn: async () => {
+            if (!user) return 0;
+
+            const { count } = await supabase
+                .from('purchase_notifications')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', user.id)
+                .eq('is_read', false);
+
+            return count || 0;
+        },
+        enabled: !!user,
+        refetchInterval: 30000, // רענון כל 30 שניות
+    });
 
     // Determine selected tab based on pathname
     const getSelectedTab = () => {
@@ -107,7 +136,7 @@ export function CustomTabBar() {
         if (pathname.startsWith('/admin')) return 'admin';
         if (pathname.includes('/admin')) return 'admin';
         if (pathname.includes('/classes')) return 'classes';
-        if (pathname.includes('/register')) return 'register'; // Updated check
+        if (pathname.includes('/register')) return 'register';
         if (pathname.includes('/profile')) return 'profile';
         return 'index'; // Default to home
     };
@@ -138,6 +167,7 @@ export function CustomTabBar() {
                         item={item}
                         isSelected={selectedTab === item.name}
                         onSelect={() => handlePress(item.route)}
+                        badgeCount={item.name === 'profile' ? (unreadQuery.data || 0) : undefined}
                     />
                 ))}
             </View>
@@ -187,6 +217,7 @@ const styles = StyleSheet.create({
         zIndex: 2,
         alignItems: 'center',
         justifyContent: 'center',
+        position: 'relative',
     },
     textContainer: {
         overflow: 'hidden',
@@ -197,5 +228,24 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#1c1c1c',
         textAlign: 'left',
+    },
+    badge: {
+        position: 'absolute',
+        top: -4,
+        right: -8,
+        backgroundColor: '#EF4444',
+        borderRadius: 10,
+        minWidth: 18,
+        height: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 4,
+        borderWidth: 2,
+        borderColor: '#FFFFFF',
+    },
+    badgeText: {
+        color: '#FFFFFF',
+        fontSize: 10,
+        fontWeight: '700',
     }
 });

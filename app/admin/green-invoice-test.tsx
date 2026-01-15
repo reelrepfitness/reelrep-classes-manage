@@ -16,16 +16,13 @@ import { supabase } from '@/constants/supabase';
 
 export default function GreenInvoiceTestScreen() {
   const {
-    syncClient,
-    createInvoice,
-    getDashboardStats,
-    isUserSynced,
+    syncFinancialData,
+    getDashboardSummary,
     loading,
     error,
   } = useGreenInvoice();
 
-  const [synced, setSynced] = useState(false);
-  const [stats, setStats] = useState<any>(null);
+  const [results, setResults] = useState<any>({});
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
@@ -35,84 +32,58 @@ export default function GreenInvoiceTestScreen() {
   const loadUserData = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     setUser(user);
-
-    if (user) {
-      const isSynced = await isUserSynced(user.id);
-      setSynced(isSynced);
-    }
   };
 
-  const handleSyncClient = async () => {
+  const testAuth = async () => {
     try {
-      const result = await syncClient({
-        name: user?.user_metadata?.full_name || 'Test User',
-        phone: '0501234567',
-        city: 'Tel Aviv',
-      });
+      const { data, error } = await supabase.functions.invoke('green-invoice-auth');
+      if (error) throw error;
 
-      Alert.alert('✅ הצלחה!', 'הלקוח סונכרן ל-Green Invoice');
-      console.log('Sync result:', result);
-      setSynced(true);
+      setResults((prev: any) => ({
+        ...prev,
+        auth: { success: true, tokenLength: data?.token?.length },
+      }));
+
+      Alert.alert('הצלחה ✅', `JWT Token התקבל: ${data?.token?.length} תווים`);
     } catch (err: any) {
-      Alert.alert('❌ שגיאה', err.message);
-      console.error('Sync error:', err);
+      setResults((prev: any) => ({
+        ...prev,
+        auth: { success: false, error: err.message },
+      }));
+      Alert.alert('שגיאה ❌', err.message);
     }
   };
 
-  const handleCreateTestInvoice = async () => {
-    if (!synced) {
-      Alert.alert('שים לב', 'קודם צריך לסנכרן את הלקוח');
-      return;
-    }
-
+  const testSync = async () => {
     try {
-      const result = await createInvoice({
-        amount: 99,
-        description: 'מנוי חודשי פרימיום - בדיקה',
-        subscriptionType: 'Premium Monthly Test',
-        paymentMethod: 'credit_card',
-        documentType: 'invoice_receipt',
-      });
+      const result = await syncFinancialData();
+      setResults((prev: any) => ({ ...prev, sync: result }));
 
       Alert.alert(
-        '✅ חשבונית נוצרה!',
-        `מספר מסמך: ${result.document.gi_document_id}\nסכום: ₪${result.document.amount}`,
-        [
-          {
-            text: 'הצג PDF',
-            onPress: () => {
-              console.log('PDF URL:', result.downloadUrl);
-              // You can open the URL here with Linking.openURL(result.downloadUrl)
-            },
-          },
-          { text: 'סגור' },
-        ]
+        'הצלחה ✅',
+        `סונכרנו:\n${result.invoicesCount || 0} חשבוניות\n${result.expensesCount || 0} הוצאות`
       );
-      console.log('Invoice result:', result);
     } catch (err: any) {
-      Alert.alert('❌ שגיאה', err.message);
-      console.error('Invoice error:', err);
+      Alert.alert('שגיאה ❌', err.message);
     }
   };
 
-  const handleLoadStats = async () => {
+  const testStats = async () => {
     try {
-      const dashboardStats = await getDashboardStats();
-      setStats(dashboardStats);
-      Alert.alert('✅ הצלחה!', 'הנתונים נטענו');
-      console.log('Stats:', dashboardStats);
-    } catch (err: any) {
-      Alert.alert('❌ שגיאה', err.message);
-      console.error('Stats error:', err);
-    }
-  };
+      const stats = await getDashboardSummary();
+      setResults((prev: any) => ({ ...prev, stats }));
 
-  const handleCheckSandbox = () => {
-    Alert.alert(
-      'Sandbox Green Invoice',
-      'פתח את הדפדפן והיכנס ל:\nhttps://app.sandbox.d.greeninvoice.co.il\n\nבדוק:\n- לקוחות (Clients)\n- מסמכים (Documents)',
-      [{ text: 'אישור' }]
-    );
+      if (stats) {
+        Alert.alert(
+          'סטטיסטיקות ✅',
+          `הכנסות החודש: ₪${stats.currentMonth.income.toLocaleString()}\n` +
+          `הוצאות החודש: ₪${stats.currentMonth.expenses.toLocaleString()}\n` +
+          `רווח נקי: ₪${stats.currentMonth.profit.toLocaleString()}`
+        );
+      }
+    } catch (err: any) {
+      Alert.alert('שגיאה ❌', err.message);
+    }
   };
 
   return (
@@ -127,11 +98,8 @@ export default function GreenInvoiceTestScreen() {
         <Text style={styles.sectionTitle}>סטטוס משתמש</Text>
         {user && (
           <View style={styles.infoBox}>
-            <Text style={styles.infoText}>User ID: {user.id.slice(0, 8)}...</Text>
             <Text style={styles.infoText}>Email: {user.email}</Text>
-            <Text style={[styles.infoText, synced && styles.successText]}>
-              {synced ? '✅ מסונכרן ל-Green Invoice' : '⏳ לא מסונכרן'}
-            </Text>
+            <Text style={styles.infoText}>User ID: {user.id?.slice(0, 8)}...</Text>
           </View>
         )}
       </View>
@@ -142,84 +110,79 @@ export default function GreenInvoiceTestScreen() {
 
         <TouchableOpacity
           style={[styles.button, styles.primaryButton]}
-          onPress={handleSyncClient}
-          disabled={loading || synced}
+          onPress={testAuth}
+          disabled={loading}
         >
           {loading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>
-              {synced ? '✅ כבר מסונכרן' : '1. סנכרן לקוח'}
-            </Text>
+            <Text style={styles.buttonText}>1. בדוק Auth Token</Text>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.button, styles.secondaryButton, !synced && styles.disabledButton]}
-          onPress={handleCreateTestInvoice}
-          disabled={loading || !synced}
-        >
-          {loading ? (
-            <ActivityIndicator color="#da4477" />
-          ) : (
-            <Text style={[styles.buttonText, styles.secondaryButtonText]}>
-              2. צור חשבונית בדיקה (₪99)
+        {results.auth && (
+          <View style={[styles.infoBox, { marginBottom: 10, backgroundColor: results.auth.success ? '#22c55e20' : '#ef444420' }]}>
+            <Text style={[styles.infoText, { color: results.auth.success ? '#4ade80' : '#ef4444' }]}>
+              {results.auth.success
+                ? `✅ Token: ${results.auth.tokenLength} תווים`
+                : `❌ ${results.auth.error}`}
             </Text>
-          )}
-        </TouchableOpacity>
+          </View>
+        )}
 
         <TouchableOpacity
           style={[styles.button, styles.secondaryButton]}
-          onPress={handleLoadStats}
+          onPress={testSync}
           disabled={loading}
         >
           {loading ? (
             <ActivityIndicator color="#da4477" />
           ) : (
             <Text style={[styles.buttonText, styles.secondaryButtonText]}>
-              3. טען נתונים סטטיסטיים
+              2. סנכרן נתונים פיננסיים
             </Text>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.button, styles.outlineButton]}
-          onPress={handleCheckSandbox}
-        >
-          <Text style={[styles.buttonText, styles.outlineButtonText]}>
-            4. פתח Sandbox בדפדפן
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Stats Display */}
-      {stats && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>נתונים פיננסיים</Text>
-          <View style={styles.statsBox}>
-            <View style={styles.statRow}>
-              <Text style={styles.statLabel}>סך הכנסות:</Text>
-              <Text style={styles.statValue}>₪{stats.totalRevenue.toFixed(2)}</Text>
-            </View>
-            <View style={styles.statRow}>
-              <Text style={styles.statLabel}>חשבוניות:</Text>
-              <Text style={styles.statValue}>{stats.totalInvoices}</Text>
-            </View>
-            <View style={styles.statRow}>
-              <Text style={styles.statLabel}>קבלות:</Text>
-              <Text style={styles.statValue}>{stats.totalReceipts}</Text>
-            </View>
-            <View style={styles.statRow}>
-              <Text style={styles.statLabel}>לקוחות:</Text>
-              <Text style={styles.statValue}>{stats.clientCount}</Text>
-            </View>
-            <View style={styles.statRow}>
-              <Text style={styles.statLabel}>ממוצע עסקה:</Text>
-              <Text style={styles.statValue}>₪{stats.averageTransactionValue.toFixed(2)}</Text>
-            </View>
+        {results.sync && (
+          <View style={[styles.infoBox, { marginBottom: 10, backgroundColor: '#22c55e20' }]}>
+            <Text style={[styles.infoText, { color: '#4ade80' }]}>
+              ✅ {results.sync.invoicesCount} חשבוניות, {results.sync.expensesCount} הוצאות
+            </Text>
           </View>
-        </View>
-      )}
+        )}
+
+        <TouchableOpacity
+          style={[styles.button, styles.secondaryButton]}
+          onPress={testStats}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#da4477" />
+          ) : (
+            <Text style={[styles.buttonText, styles.secondaryButtonText]}>
+              3. בדוק Dashboard Stats
+            </Text>
+          )}
+        </TouchableOpacity>
+
+        {results.stats && !results.stats.error && (
+          <View style={[styles.infoBox, { marginBottom: 10, backgroundColor: '#22c55e20' }]}>
+            <Text style={[styles.infoText, { color: '#4ade80', fontWeight: 'bold' }]}>
+              ✅ נתונים התקבלו:
+            </Text>
+            <Text style={[styles.infoText, { color: '#4ade80' }]}>
+              הכנסות: ₪{results.stats.currentMonth?.income?.toLocaleString() || 0}
+            </Text>
+            <Text style={[styles.infoText, { color: '#4ade80' }]}>
+              הוצאות: ₪{results.stats.currentMonth?.expenses?.toLocaleString() || 0}
+            </Text>
+            <Text style={[styles.infoText, { color: '#4ade80' }]}>
+              רווח: ₪{results.stats.currentMonth?.profit?.toLocaleString() || 0}
+            </Text>
+          </View>
+        )}
+      </View>
 
       {/* Error Display */}
       {error && (

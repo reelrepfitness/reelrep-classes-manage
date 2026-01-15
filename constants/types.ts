@@ -24,7 +24,6 @@ export interface User {
   };
   lateCancellations?: number;
   blockEndDate?: string;
-  plateBalance?: number;
 }
 
 export interface UserSubscription {
@@ -155,6 +154,7 @@ export interface SubscriptionPackage {
   planType?: string;
   totalClasses?: number;
   expiryDays?: number;
+  greenInvoiceUrl?: string;
 }
 
 export interface CartItem {

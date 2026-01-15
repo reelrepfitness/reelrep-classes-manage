@@ -28,7 +28,7 @@ const { width } = Dimensions.get('window');
 // --- Icons Helper ---
 const RenderIcon = ({ name, iosName, size = 24, color = '#000', style }: { name: any, iosName: string, size?: number, color?: string, style?: any }) => {
     if (Platform.OS === 'ios') {
-        return <SymbolView name={iosName} size={size} tintColor={color} resizeMode="scaleAspectFit" style={style} />;
+        return <SymbolView name={iosName as any} size={size} tintColor={color} resizeMode="scaleAspectFit" style={style} />;
     }
     return <Ionicons name={name} size={size} color={color} style={style} />;
 };

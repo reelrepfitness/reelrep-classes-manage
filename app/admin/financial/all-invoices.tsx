@@ -19,14 +19,19 @@ import Colors from '@/constants/colors';
 
 interface Invoice {
   id: string;
-  gi_document_id: string;
-  amount: number;
+  green_invoice_id: string;
+  total_amount: number;
   description: string;
-  status: string;
-  document_type: string;
+  payment_status: 'pending' | 'paid' | 'cancelled';
+  payment_type: number;
   created_at: string;
-  user_id: string;
+  client_id: string;
   user_name?: string;
+  profiles?: {
+    name: string;
+    email: string;
+    phone: string;
+  };
 }
 
 type FilterStatus = 'all' | 'paid' | 'pending' | 'cancelled';
@@ -56,28 +61,20 @@ export default function AllInvoices() {
       setLoading(true);
 
       const { data, error } = await supabase
-        .from('green_invoice_documents')
-        .select('*')
+        .from('invoices')
+        .select(`
+          *,
+          profiles:client_id(name, email, phone)
+        `)
         .order('created_at', { ascending: false })
         .limit(100);
 
       if (error) throw error;
 
-      // Fetch user names separately
-      const invoicesWithNames = await Promise.all(
-        (data || []).map(async (inv) => {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('full_name')
-            .eq('id', inv.user_id)
-            .single();
-
-          return {
-            ...inv,
-            user_name: profile?.full_name || 'משתמש לא ידוע',
-          };
-        })
-      );
+      const invoicesWithNames = (data || []).map(inv => ({
+        ...inv,
+        user_name: inv.profiles?.name || 'משתמש לא ידוע',
+      }));
 
       setInvoices(invoicesWithNames);
     } catch (error) {
@@ -92,13 +89,13 @@ export default function AllInvoices() {
 
     // Apply status filter
     if (statusFilter !== 'all') {
-      filtered = filtered.filter((inv) => inv.status === statusFilter);
+      filtered = filtered.filter((inv) => inv.payment_status === statusFilter);
     }
 
-    // Apply type filter
-    if (typeFilter !== 'all') {
-      filtered = filtered.filter((inv) => inv.document_type === typeFilter);
-    }
+    // Apply type filter (skip for now since invoices table doesn't have document_type)
+    // if (typeFilter !== 'all') {
+    //   filtered = filtered.filter((inv) => inv.document_type === typeFilter);
+    // }
 
     // Apply search
     if (searchQuery.trim()) {
@@ -107,7 +104,7 @@ export default function AllInvoices() {
         (inv) =>
           inv.user_name?.toLowerCase().includes(query) ||
           inv.description?.toLowerCase().includes(query) ||
-          inv.gi_document_id?.toLowerCase().includes(query)
+          inv.green_invoice_id?.toLowerCase().includes(query)
       );
     }
 
@@ -163,9 +160,20 @@ export default function AllInvoices() {
     }
   };
 
+  const getPaymentTypeLabel = (type: number): string => {
+    const labels: Record<number, string> = {
+      1: 'מזומן',
+      2: 'אשראי',
+      4: 'העברה',
+      6: 'Bit',
+      11: 'הוראת קבע',
+    };
+    return labels[type] || 'אחר';
+  };
+
   const totalAmount = filteredInvoices
-    .filter((inv) => inv.status === 'paid')
-    .reduce((sum, inv) => sum + (inv.amount || 0), 0);
+    .filter((inv) => inv.payment_status === 'paid')
+    .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -284,24 +292,24 @@ export default function AllInvoices() {
               <View style={styles.invoiceHeader}>
                 <View style={styles.invoiceInfo}>
                   <Text style={styles.invoiceName}>{invoice.user_name}</Text>
-                  <Text style={styles.invoiceDescription}>{invoice.description}</Text>
+                  <Text style={styles.invoiceDescription}>{invoice.description || 'אין תיאור'}</Text>
                   <Text style={styles.invoiceDate}>{formatDate(invoice.created_at)}</Text>
-                  <Text style={styles.invoiceId}>מסמך: {invoice.gi_document_id}</Text>
+                  <Text style={styles.invoiceId}>מסמך: {invoice.green_invoice_id}</Text>
                 </View>
                 <View style={styles.invoiceAmount}>
-                  <Text style={styles.amountValue}>₪{invoice.amount.toFixed(2)}</Text>
+                  <Text style={styles.amountValue}>₪{invoice.total_amount.toFixed(2)}</Text>
                   <View
                     style={[
                       styles.statusBadge,
-                      { backgroundColor: getStatusColor(invoice.status) + '20' },
+                      { backgroundColor: getStatusColor(invoice.payment_status) + '20' },
                     ]}
                   >
-                    <Text style={[styles.statusText, { color: getStatusColor(invoice.status) }]}>
-                      {getStatusText(invoice.status)}
+                    <Text style={[styles.statusText, { color: getStatusColor(invoice.payment_status) }]}>
+                      {getStatusText(invoice.payment_status)}
                     </Text>
                   </View>
                   <View style={styles.typeBadge}>
-                    <Text style={styles.typeText}>{getTypeText(invoice.document_type)}</Text>
+                    <Text style={styles.typeText}>{getPaymentTypeLabel(invoice.payment_type)}</Text>
                   </View>
                 </View>
               </View>

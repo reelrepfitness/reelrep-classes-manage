@@ -11,7 +11,6 @@ const CART_STORAGE_KEY = '@reelrep_cart';
 export const [ShopProvider, useShop] = createContextHook(() => {
   const { user, refreshUser } = useAuth(); // Destructure refreshUser
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [platesToUse, setPlatesToUse] = useState<number>(0);
 
   const plansQuery = useQuery({
     queryKey: ['subscription-plans'],
@@ -19,7 +18,7 @@ export const [ShopProvider, useShop] = createContextHook(() => {
       console.log('[Shop] Fetching subscription plans...');
       const { data, error } = await supabase
         .from('subscription_plans')
-        .select('id,name,type,sessions_per_week,description,"price-3-months","price-6-months"')
+        .select('id,name,type,sessions_per_week,description,full_price_in_advance,"price-per-month",green_invoice_URL')
         .eq('is_active', true)
         .order('type', { ascending: true });
       if (error) {
@@ -51,27 +50,23 @@ export const [ShopProvider, useShop] = createContextHook(() => {
 
   const packages: SubscriptionPackage[] = useMemo(() => {
     const subscriptions = !plansQuery.data ? [] : plansQuery.data.flatMap(plan => {
-      // Only show 6-month subscriptions
-      const key = 'price-6-months' as const;
+      // Use full_price_in_advance for 6-month upfront payment
       const months = 6;
-
-      // Explicitly access the column using bracket notation because of the hyphens
-      const priceValue = plan[key];
+      const priceValue = plan.full_price_in_advance;
       const price = priceValue ? Number(priceValue) : null;
 
       if (price === null || price === undefined || Number.isNaN(price)) return [];
 
       const isUnlimited = plan.type === 'unlimited';
-      const highlight = plan.name?.includes('חופשי');
+      const highlight = plan.name?.includes('ELITE') || plan.name?.includes('ONE');
       const classesPerMonth = plan.sessions_per_week ? plan.sessions_per_week * 4 : 0;
       const durationLabel = `${months} חודשים`;
 
       const baseFeatures: string[] = [];
-      if (plan.description) baseFeatures.push(plan.description);
-      if (isUnlimited) {
-        baseFeatures.push('אימונים ללא הגבלה');
-      } else if (plan.sessions_per_week) {
-        baseFeatures.push(`${plan.sessions_per_week} אימונים בשבוע (~${classesPerMonth} בחודש)`);
+      if (plan.description) {
+        // Split description by newlines and add each as a feature
+        const descriptionLines = plan.description.split('\n').filter((line: string) => line.trim());
+        baseFeatures.push(...descriptionLines);
       }
 
       return [{
@@ -87,8 +82,9 @@ export const [ShopProvider, useShop] = createContextHook(() => {
         durationMonths: months,
         features: baseFeatures,
         classesPerMonth,
-        popular: highlight && months === 6,
+        popular: highlight,
         highlight,
+        greenInvoiceUrl: plan.green_invoice_URL || undefined,
       } as SubscriptionPackage];
     });
 
@@ -111,6 +107,7 @@ export const [ShopProvider, useShop] = createContextHook(() => {
       totalClasses: plan.total_sessions,
       expiryDays: plan.validity_days,
       popular: plan.total_sessions === 20,
+      greenInvoiceUrl: plan.green_invoice_URL || undefined,
     } as SubscriptionPackage));
 
     return [...subscriptions, ...tickets];
@@ -189,29 +186,24 @@ export const [ShopProvider, useShop] = createContextHook(() => {
     syncCart([]);
   }, [syncCart]);
 
+  const forceResetCart = useCallback(async () => {
+    setCart([]);
+    try {
+      if (user) {
+        await AsyncStorage.removeItem(`${CART_STORAGE_KEY}_${user.id}`);
+      }
+    } catch (error) {
+      console.error('Error clearing cart from storage:', error);
+    }
+  }, [user]);
+
   const getTotal = useCallback(() => {
     return cart.reduce((total, item) => total + item.package.price * item.quantity, 0);
   }, [cart]);
 
   const getDiscountedTotal = useCallback(() => {
-    const total = getTotal();
-    return Math.max(0, total - platesToUse);
-  }, [getTotal, platesToUse]);
-
-  const getMaxPlatesUsable = useCallback(() => {
-    const total = getTotal();
-    const userPlateBalance = user?.plateBalance || 0;
-    return Math.min(userPlateBalance, total);
-  }, [getTotal, user?.plateBalance]);
-
-  const applyPlates = useCallback((amount: number) => {
-    const maxUsable = getMaxPlatesUsable();
-    setPlatesToUse(Math.min(Math.max(0, amount), maxUsable));
-  }, [getMaxPlatesUsable]);
-
-  const resetPlates = useCallback(() => {
-    setPlatesToUse(0);
-  }, []);
+    return getTotal();
+  }, [getTotal]);
 
   const checkoutMutation = useMutation({
     mutationFn: async (paymentData: {
@@ -308,17 +300,13 @@ export const [ShopProvider, useShop] = createContextHook(() => {
     packages,
     isLoading: cartQuery.isLoading || plansQuery.isLoading || ticketPlansQuery.isLoading,
     isProcessing: checkoutMutation.isPending,
-    platesToUse,
-    totalPlates: user?.plateBalance || 0,
     addToCart,
     removeFromCart,
     updateQuantity,
     clearCart,
+    forceResetCart,
     getTotal,
     getDiscountedTotal,
-    getMaxPlatesUsable,
-    applyPlates,
-    resetPlates,
     checkout,
-  }), [cart, packages, cartQuery.isLoading, plansQuery.isLoading, ticketPlansQuery.isLoading, checkoutMutation.isPending, platesToUse, user?.plateBalance, addToCart, removeFromCart, updateQuantity, clearCart, getTotal, getDiscountedTotal, getMaxPlatesUsable, applyPlates, resetPlates, checkout]);
+  }), [cart, packages, cartQuery.isLoading, plansQuery.isLoading, ticketPlansQuery.isLoading, checkoutMutation.isPending, addToCart, removeFromCart, updateQuantity, clearCart, forceResetCart, getTotal, getDiscountedTotal, checkout]);
 });

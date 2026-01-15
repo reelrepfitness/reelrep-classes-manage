@@ -23,6 +23,7 @@ export default function AdminDashboard() {
     { key: 'frozen', label: 'מנויים בהקפאה', value: stats.frozen, icon: 'snow' as const, color: '#3B82F6', route: '/admin/clients/frozen' as any },
     { key: 'active', label: 'מנויים פעילים', value: stats.active, icon: 'people' as const, color: '#10B981', route: '/admin/clients/active' as any },
     { key: 'tasks', label: 'לטיפול דחוף', value: stats.tasks, icon: 'alert-circle' as const, color: '#F97316', route: '/admin-alerts' as any },
+    { key: 'exercises', label: 'ניהול תרגילים', value: '', icon: 'barbell' as const, color: '#8B5CF6', route: '/admin/exercises' as any },
   ];
 
   return (

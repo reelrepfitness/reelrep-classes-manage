@@ -3,7 +3,6 @@
 
 import { Platform } from 'react-native';
 import { supabase } from '@/constants/supabase';
-import { PlatesManager } from '@/lib/plates-manager';
 import { PushNotificationService } from './push-notifications';
 
 // NOTE: For iOS HealthKit, you'll need to install: npx expo install expo-apple-healthkit
@@ -296,23 +295,10 @@ export class HealthIntegrationService {
           healthData.date
         );
 
-        if (!alreadyAwarded) {
-          await PlatesManager.addPlates(
-            userId,
-            20,
-            'health_sync',
-            '🚶 10,000 צעדים ביום!'
-          );
-
-          // Send notification
-          const prefs = await PushNotificationService.getNotificationPreferences(userId);
-          if (prefs.plates_earned) {
-            await PushNotificationService.notifyPlatesEarned(20, 'עבור 10,000 צעדים');
-          }
-        }
+        // Plates system removed - achievements tracked in database only
       }
 
-      // Award plates for active minutes
+      // Track active minutes milestone
       if (healthData.activeMinutes >= 30) {
         const alreadyAwarded = await this.checkIfPlatesAwarded(
           userId,
@@ -320,19 +306,7 @@ export class HealthIntegrationService {
           healthData.date
         );
 
-        if (!alreadyAwarded) {
-          await PlatesManager.addPlates(
-            userId,
-            15,
-            'health_sync',
-            '⏱️ 30 דקות פעילות!'
-          );
-
-          const prefs = await PushNotificationService.getNotificationPreferences(userId);
-          if (prefs.plates_earned) {
-            await PushNotificationService.notifyPlatesEarned(15, 'עבור 30 דקות פעילות');
-          }
-        }
+        // Milestone tracked in database
       }
 
       this.lastSyncDate = new Date();
@@ -372,31 +346,8 @@ export class HealthIntegrationService {
 
       if (saveError) throw saveError;
 
-      // Award plates based on workout duration
-      let platesAmount = 10; // Base amount
-
-      if (workout.duration >= 30) {
-        platesAmount = 15;
-      }
-      if (workout.duration >= 60) {
-        platesAmount = 25;
-      }
-
-      await PlatesManager.addPlates(
-        userId,
-        platesAmount,
-        'health_workout',
-        `🏃 אימון ${workout.type} - ${workout.duration} דקות`
-      );
-
-      // Send notification
-      const prefs = await PushNotificationService.getNotificationPreferences(userId);
-      if (prefs.plates_earned) {
-        await PushNotificationService.notifyPlatesEarned(
-          platesAmount,
-          `עבור אימון ${workout.type}`
-        );
-      }
+      // Plates system removed - workouts tracked in database only
+      console.log(`[Health] Workout tracked: ${workout.type} - ${workout.duration} minutes`);
     } catch (error) {
       console.error('Error processing workout:', error);
     }

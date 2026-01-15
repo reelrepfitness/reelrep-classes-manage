@@ -17,18 +17,10 @@ export default function AdminStoreScreen() {
         addToCart,
         removeFromCart,
         getTotal,
-        totalPlates,
-        platesToUse,
-        getDiscountedTotal,
-        getMaxPlatesUsable,
-        applyPlates,
-        resetPlates,
         checkout,
         isProcessing,
     } = useShop();
 
-    const [showPlateInput, setShowPlateInput] = useState<boolean>(false);
-    const [platesInput, setPlatesInput] = useState<string>('');
     const [selectedCategory, setSelectedCategory] = useState<'subscriptions' | 'tickets'>('subscriptions');
 
     const shopTabs = [

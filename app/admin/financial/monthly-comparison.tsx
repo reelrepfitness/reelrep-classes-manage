@@ -52,10 +52,10 @@ export default function MonthlyComparison() {
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
       const { data, error } = await supabase
-        .from('green_invoice_documents')
-        .select('*')
+        .from('invoices')
+        .select('total_amount, payment_status, created_at')
+        .eq('payment_status', 'paid')
         .gte('created_at', sixMonthsAgo.toISOString())
-        .eq('status', 'paid')
         .order('created_at', { ascending: true });
 
       if (error) throw error;
@@ -63,8 +63,8 @@ export default function MonthlyComparison() {
       // Group by month
       const monthlyMap = new Map<string, { revenue: number; count: number }>();
 
-      data?.forEach((doc) => {
-        const date = new Date(doc.created_at);
+      data?.forEach((invoice) => {
+        const date = new Date(invoice.created_at);
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
         if (!monthlyMap.has(monthKey)) {
@@ -72,7 +72,7 @@ export default function MonthlyComparison() {
         }
 
         const current = monthlyMap.get(monthKey)!;
-        current.revenue += doc.amount || 0;
+        current.revenue += invoice.total_amount || 0;
         current.count += 1;
       });
 

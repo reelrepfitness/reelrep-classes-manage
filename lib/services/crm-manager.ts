@@ -15,7 +15,6 @@ import {
   LeadFilters,
   LeadStats,
 } from '@/constants/crm-types';
-import { PlatesManager } from '../plates-manager';
 
 export class CRMManager {
   /**

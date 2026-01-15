@@ -33,7 +33,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('id, name, full_name, avatar_url, is_admin, is_coach, plate_balance, classes_used, total_workouts, gender')
+          .select('id, name, full_name, avatar_url, is_admin, is_coach, classes_used, total_workouts, gender')
           .eq('id', sessionId)
           .single();
         if (error) {
@@ -158,7 +158,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         profileImage: profile?.avatar_url || session.user.user_metadata?.avatar_url || '',
         gender: profile?.gender || undefined,
         subscription: userSubscription,
-        plateBalance: profile?.plate_balance || 0,
         stats: {
           totalWorkouts: profile?.total_workouts || 0,
           totalMinutes: 0,

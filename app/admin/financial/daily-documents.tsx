@@ -44,26 +44,34 @@ export default function DailyDocuments() {
   const loadDailyDocuments = async () => {
     try {
       setLoading(true);
-      const dateStr = selectedDate.toISOString().split('T')[0];
+
+      const startOfDay = new Date(selectedDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(selectedDate);
+      endOfDay.setHours(23, 59, 59, 999);
 
       const { data, error } = await supabase
-        .from('green_invoice_documents')
+        .from('invoices')
         .select(`
           *,
-          profiles:user_id (
-            full_name
-          )
+          profiles:client_id(name, email)
         `)
-        .gte('created_at', dateStr)
-        .lt('created_at', new Date(selectedDate.getTime() + 86400000).toISOString().split('T')[0])
+        .gte('created_at', startOfDay.toISOString())
+        .lte('created_at', endOfDay.toISOString())
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      const docsWithNames = data?.map(doc => ({
-        ...doc,
-        user_name: doc.profiles?.full_name || 'משתמש לא ידוע',
-      })) || [];
+      const docsWithNames = (data || []).map(doc => ({
+        id: doc.id,
+        gi_document_id: doc.green_invoice_id,
+        amount: doc.total_amount,
+        description: doc.description || '',
+        status: doc.payment_status,
+        created_at: doc.created_at,
+        user_id: doc.client_id,
+        user_name: doc.profiles?.name || 'משתמש לא ידוע',
+      }));
 
       setDocuments(docsWithNames);
 

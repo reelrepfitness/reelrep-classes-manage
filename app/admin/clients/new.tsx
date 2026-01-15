@@ -26,6 +26,16 @@ interface CreateClientRequest {
     city?: string;
     taxId?: string;
     remarks?: string;
+    // NEW FIELDS
+    gender: 'male' | 'female';
+    role: 'user' | 'coach' | 'admin';
+    isAdmin: boolean;
+    isCoach: boolean;
+    subscriptionType: 'basic' | 'premium' | 'vip' | 'unlimited' | 'cancelled';
+    subscriptionStatus: 'active' | 'cancelled';
+    subscriptionStart?: string;
+    subscriptionEnd?: string;
+    classesPerMonth: number;
 }
 
 export default function NewClientScreen() {
@@ -42,6 +52,17 @@ export default function NewClientScreen() {
     const [city, setCity] = useState('');
     const [taxId, setTaxId] = useState('');
     const [remarks, setRemarks] = useState('');
+
+    // NEW FIELDS
+    const [gender, setGender] = useState<'male' | 'female' | ''>('');
+    const [role, setRole] = useState<'user' | 'coach' | 'admin'>('user');
+    const [isAdmin, setIsAdmin] = useState(false);
+    const [isCoach, setIsCoach] = useState(false);
+    const [subscriptionType, setSubscriptionType] = useState<'basic' | 'premium' | 'vip' | 'unlimited' | 'cancelled'>('cancelled');
+    const [subscriptionStatus, setSubscriptionStatus] = useState<'active' | 'cancelled'>('cancelled');
+    const [subscriptionStart, setSubscriptionStart] = useState('');
+    const [subscriptionEnd, setSubscriptionEnd] = useState('');
+    const [classesPerMonth, setClassesPerMonth] = useState(0);
 
     const validateForm = (): boolean => {
         if (!fullName.trim()) {
@@ -60,6 +81,24 @@ export default function NewClientScreen() {
             Alert.alert('שגיאה', 'סיסמה חייבת להכיל לפחות 6 תווים');
             return false;
         }
+        // NEW: Gender validation
+        if (!gender) {
+            Alert.alert('שגיאה', 'נא לבחור מגדר');
+            return false;
+        }
+        // NEW: Subscription dates validation
+        if (subscriptionType !== 'cancelled' && subscriptionStatus === 'active') {
+            if (!subscriptionStart || !subscriptionEnd) {
+                Alert.alert('שגיאה', 'נא למלא תאריכי מנוי עבור מנוי פעיל');
+                return false;
+            }
+            const startDate = new Date(subscriptionStart);
+            const endDate = new Date(subscriptionEnd);
+            if (endDate <= startDate) {
+                Alert.alert('שגיאה', 'תאריך סיום המנוי חייב להיות אחרי תאריך ההתחלה');
+                return false;
+            }
+        }
         return true;
     };
 
@@ -77,6 +116,16 @@ export default function NewClientScreen() {
                 city: city.trim() || undefined,
                 taxId: taxId.trim() || undefined,
                 remarks: remarks.trim() || undefined,
+                // NEW FIELDS
+                gender: gender as 'male' | 'female',
+                role,
+                isAdmin,
+                isCoach,
+                subscriptionType,
+                subscriptionStatus,
+                subscriptionStart: subscriptionStart || undefined,
+                subscriptionEnd: subscriptionEnd || undefined,
+                classesPerMonth,
             };
 
             // Get session for auth
@@ -188,6 +237,77 @@ export default function NewClientScreen() {
                         />
                     </View>
 
+                    {/* Gender Selector */}
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>מגדר *</Text>
+                        <View style={styles.radioGroup}>
+                            <TouchableOpacity
+                                style={[styles.radioButton, gender === 'male' && styles.radioButtonSelected]}
+                                onPress={() => setGender('male')}
+                                disabled={loading}
+                            >
+                                <Text style={[styles.radioText, gender === 'male' && styles.radioTextSelected]}>
+                                    זכר
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.radioButton, gender === 'female' && styles.radioButtonSelected]}
+                                onPress={() => setGender('female')}
+                                disabled={loading}
+                            >
+                                <Text style={[styles.radioText, gender === 'female' && styles.radioTextSelected]}>
+                                    נקבה
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+
+                    {/* Role Selector */}
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>תפקידים</Text>
+                        <View style={styles.checkboxGroup}>
+                            <TouchableOpacity
+                                style={styles.checkbox}
+                                onPress={() => {
+                                    setIsAdmin(!isAdmin);
+                                    if (!isAdmin) {
+                                        setRole('admin');
+                                    } else if (isCoach) {
+                                        setRole('coach');
+                                    } else {
+                                        setRole('user');
+                                    }
+                                }}
+                                disabled={loading}
+                            >
+                                <View style={[styles.checkboxBox, isAdmin && styles.checkboxBoxChecked]}>
+                                    {isAdmin && <Check size={16} color="#fff" />}
+                                </View>
+                                <Text style={styles.checkboxLabel}>מנהל</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.checkbox}
+                                onPress={() => {
+                                    setIsCoach(!isCoach);
+                                    if (!isCoach && !isAdmin) {
+                                        setRole('coach');
+                                    } else if (isAdmin) {
+                                        setRole('admin');
+                                    } else {
+                                        setRole('user');
+                                    }
+                                }}
+                                disabled={loading}
+                            >
+                                <View style={[styles.checkboxBox, isCoach && styles.checkboxBoxChecked]}>
+                                    {isCoach && <Check size={16} color="#fff" />}
+                                </View>
+                                <Text style={styles.checkboxLabel}>מאמן</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+
                     <View style={styles.inputGroup}>
                         <Text style={styles.label}>סיסמה זמנית *</Text>
                         <TextInput
@@ -262,6 +382,119 @@ export default function NewClientScreen() {
                             textAlign="right"
                         />
                     </View>
+                </View>
+
+                {/* Subscription Section */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>פרטי מנוי (אופציונלי)</Text>
+
+                    {/* Subscription Type */}
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>סוג מנוי</Text>
+                        <View style={styles.subscriptionTypeContainer}>
+                            {['cancelled', 'basic', 'premium', 'vip', 'unlimited'].map((type) => (
+                                <TouchableOpacity
+                                    key={type}
+                                    style={[
+                                        styles.subscriptionTypeButton,
+                                        subscriptionType === type && styles.subscriptionTypeButtonSelected,
+                                    ]}
+                                    onPress={() => {
+                                        setSubscriptionType(type as any);
+                                        if (type === 'cancelled') {
+                                            setSubscriptionStatus('cancelled');
+                                        }
+                                    }}
+                                    disabled={loading}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.subscriptionTypeText,
+                                            subscriptionType === type && styles.subscriptionTypeTextSelected,
+                                        ]}
+                                    >
+                                        {type === 'cancelled' ? 'ללא מנוי' :
+                                         type === 'basic' ? 'בסיסי' :
+                                         type === 'premium' ? 'פרימיום' :
+                                         type === 'vip' ? 'VIP' : 'ללא הגבלה'}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
+
+                    {/* Conditional: Show subscription details only if not cancelled */}
+                    {subscriptionType !== 'cancelled' && (
+                        <>
+                            {/* Subscription Status */}
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>סטטוס מנוי</Text>
+                                <View style={styles.radioGroup}>
+                                    <TouchableOpacity
+                                        style={[styles.radioButton, subscriptionStatus === 'active' && styles.radioButtonSelected]}
+                                        onPress={() => setSubscriptionStatus('active')}
+                                        disabled={loading}
+                                    >
+                                        <Text style={[styles.radioText, subscriptionStatus === 'active' && styles.radioTextSelected]}>
+                                            פעיל
+                                        </Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.radioButton, subscriptionStatus === 'cancelled' && styles.radioButtonSelected]}
+                                        onPress={() => setSubscriptionStatus('cancelled')}
+                                        disabled={loading}
+                                    >
+                                        <Text style={[styles.radioText, subscriptionStatus === 'cancelled' && styles.radioTextSelected]}>
+                                            בוטל
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            {/* Subscription Start Date */}
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>תאריך התחלה</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    value={subscriptionStart}
+                                    onChangeText={setSubscriptionStart}
+                                    placeholder="YYYY-MM-DD (לדוגמא: 2025-01-15)"
+                                    placeholderTextColor="#94A3B8"
+                                    editable={!loading}
+                                    textAlign="right"
+                                />
+                            </View>
+
+                            {/* Subscription End Date */}
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>תאריך סיום</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    value={subscriptionEnd}
+                                    onChangeText={setSubscriptionEnd}
+                                    placeholder="YYYY-MM-DD (לדוגמא: 2025-07-15)"
+                                    placeholderTextColor="#94A3B8"
+                                    editable={!loading}
+                                    textAlign="right"
+                                />
+                            </View>
+
+                            {/* Classes Per Month */}
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>מספר אימונים בחודש</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    value={classesPerMonth > 0 ? classesPerMonth.toString() : ''}
+                                    onChangeText={(text) => setClassesPerMonth(Number(text) || 0)}
+                                    keyboardType="number-pad"
+                                    placeholder="8"
+                                    placeholderTextColor="#94A3B8"
+                                    editable={!loading}
+                                    textAlign="right"
+                                />
+                            </View>
+                        </>
+                    )}
                 </View>
             </ScrollView>
 
@@ -383,5 +616,84 @@ const styles = StyleSheet.create({
         fontSize: 17,
         fontWeight: '700',
         color: '#fff',
+    },
+    // NEW STYLES
+    radioGroup: {
+        flexDirection: 'row-reverse',
+        gap: 12,
+    },
+    radioButton: {
+        flex: 1,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderWidth: 2,
+        borderColor: '#E2E8F0',
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    radioButtonSelected: {
+        borderColor: Colors.primary,
+        backgroundColor: '#FCE4EC',
+    },
+    radioText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#64748B',
+    },
+    radioTextSelected: {
+        color: Colors.primary,
+    },
+    checkboxGroup: {
+        flexDirection: 'row-reverse',
+        gap: 16,
+    },
+    checkbox: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        gap: 8,
+    },
+    checkboxBox: {
+        width: 24,
+        height: 24,
+        borderWidth: 2,
+        borderColor: '#E2E8F0',
+        borderRadius: 6,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    checkboxBoxChecked: {
+        backgroundColor: Colors.primary,
+        borderColor: Colors.primary,
+    },
+    checkboxLabel: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#475569',
+    },
+    subscriptionTypeContainer: {
+        flexDirection: 'column',
+        gap: 8,
+    },
+    subscriptionTypeButton: {
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderWidth: 2,
+        borderColor: '#E2E8F0',
+        borderRadius: 12,
+        backgroundColor: '#fff',
+        alignItems: 'center',
+    },
+    subscriptionTypeButtonSelected: {
+        borderColor: Colors.primary,
+        backgroundColor: '#FCE4EC',
+    },
+    subscriptionTypeText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#64748B',
+        textAlign: 'center',
+    },
+    subscriptionTypeTextSelected: {
+        color: Colors.primary,
     },
 });

@@ -50,6 +50,20 @@ function RootLayoutNav() {
       <Stack.Screen name="admin-alerts" options={{ headerShown: false }} />
       <Stack.Screen name="admin/alerts-menu" options={{ headerShown: false }} />
       <Stack.Screen name="admin/push-automation" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="shop"
+        options={{
+          headerShown: false,
+          presentation: "modal",
+        }}
+      />
+      <Stack.Screen
+        name="payment"
+        options={{
+          headerShown: false,
+          presentation: "modal",
+        }}
+      />
     </Stack>
   );
 }

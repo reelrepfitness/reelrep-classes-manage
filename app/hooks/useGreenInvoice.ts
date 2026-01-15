@@ -520,6 +520,64 @@ export function useGreenInvoice() {
     getProducts,
     getFinancialStats,
     getDashboardSummary,
+    createPaymentForm: async (
+      invoiceId: string,
+      amount: number,
+      description: string,
+      clientName?: string,
+      clientEmail?: string,
+      cartItems?: any[]
+    ) => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        console.log('[useGreenInvoice] Creating payment form...');
+
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (!session) {
+          throw new Error('No active session');
+        }
+
+        const { data, error: fnError } = await supabase.functions.invoke(
+          'create-payment-form',
+          {
+            body: { invoiceId, amount, description, clientName, clientEmail, cartItems },
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          }
+        );
+
+        console.log('[useGreenInvoice] Response:', { data, fnError });
+
+        // Check if Edge Function returned an error response
+        if (fnError) {
+          console.error('[useGreenInvoice] Function invoke error:', fnError);
+
+          // Try to extract detailed error from response
+          if (data && !data.success) {
+            const errorDetails = data.details ? `\n\nDetailed Error:\n${JSON.stringify(data.details, null, 2)}` : '';
+            throw new Error(`${data.error || 'Payment form creation failed'}${errorDetails}`);
+          }
+
+          throw new Error(fnError.message || 'Edge Function returned a non-2xx status code.');
+        }
+
+        if (!data?.success) {
+          const errorDetails = data?.details ? `\n\nDetailed Error:\n${JSON.stringify(data.details, null, 2)}` : '';
+          throw new Error(`${data?.error || 'Failed to create payment form'}${errorDetails}`);
+        }
+
+        return { formUrl: data.formUrl, paymentId: data.paymentId };
+      } catch (err: any) {
+        console.error('[useGreenInvoice] Payment form error:', err);
+        const errorMsg = err.message || 'Failed to create payment form';
+        setError(errorMsg);
+        throw new Error(errorMsg);
+      } finally {
+        setLoading(false);
+      }
+    },
   };
 }
 

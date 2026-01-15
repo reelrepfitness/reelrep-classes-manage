@@ -18,6 +18,16 @@ interface CreateClientRequest {
   city?: string
   taxId?: string
   remarks?: string
+  // NEW FIELDS
+  gender: 'male' | 'female'
+  role: 'user' | 'coach' | 'admin'
+  isAdmin: boolean
+  isCoach: boolean
+  subscriptionType: 'basic' | 'premium' | 'vip' | 'unlimited' | 'cancelled'
+  subscriptionStatus: 'active' | 'cancelled'
+  subscriptionStart?: string
+  subscriptionEnd?: string
+  classesPerMonth: number
 }
 
 serve(async (req: Request) => {
@@ -79,9 +89,43 @@ serve(async (req: Request) => {
 
     // 2. PARSE REQUEST
     const body: CreateClientRequest = await req.json()
-    const { fullName, email, phone, password, address, city, taxId, remarks } = body
+    const {
+      fullName,
+      email,
+      phone,
+      password,
+      address,
+      city,
+      taxId,
+      remarks,
+      // NEW FIELDS
+      gender,
+      role,
+      isAdmin,
+      isCoach,
+      subscriptionType,
+      subscriptionStatus,
+      subscriptionStart,
+      subscriptionEnd,
+      classesPerMonth,
+    } = body
 
     console.log("[create-client] Creating user:", email)
+
+    // NEW: Validation
+    if (!gender || !['male', 'female'].includes(gender)) {
+      return new Response(
+        JSON.stringify({ error: 'Gender is required and must be male or female' }),
+        { status: 400, headers: corsHeaders }
+      )
+    }
+
+    if (!role || !['user', 'coach', 'admin'].includes(role)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid role' }),
+        { status: 400, headers: corsHeaders }
+      )
+    }
 
     // 3. CREATE SUPABASE AUTH USER
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
@@ -154,10 +198,22 @@ serve(async (req: Request) => {
     const greenInvoiceData = await createResponse.json()
     console.log("[create-client] Green Invoice client created:", greenInvoiceData.id)
 
-    // 6. UPDATE PROFILE WITH GREEN INVOICE ID
+    // 6. UPDATE PROFILE WITH ALL FIELDS
     const { error: updateError } = await supabase
       .from("profiles")
       .update({
+        full_name: fullName,
+        phone: phone,
+        gender: gender,
+        role: role,
+        is_admin: isAdmin || false,
+        is_coach: isCoach || false,
+        subscription_type: subscriptionType || 'cancelled',
+        subscription_status: subscriptionStatus || 'cancelled',
+        subscription_start: subscriptionStart || null,
+        subscription_end: subscriptionEnd || null,
+        classes_per_month: classesPerMonth || 0,
+        classes_used: 0,
         green_invoice_client_id: greenInvoiceData.id,
       })
       .eq("id", authData.user.id)

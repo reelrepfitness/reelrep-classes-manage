@@ -116,7 +116,7 @@ export default function FinancialAnalyticsScreen() {
 
   // --- Pie Chart Data (Payment Breakdown) ---
   const paymentBreakdown = dashboardData?.paymentBreakdown || [];
-  const totalPayments = paymentBreakdown.reduce((sum, item) => sum + item.amount, 0) || 1;
+  const totalPayments = paymentBreakdown.reduce((sum: number, item: any) => sum + item.amount, 0) || 1;
 
   const getPaymentColor = (type: number) => {
     const colors: Record<number, string> = {
@@ -129,13 +129,13 @@ export default function FinancialAnalyticsScreen() {
     return colors[type] || '#6B7280';
   };
 
-  const pieData = paymentBreakdown.slice(0, 5).map((item) => ({
+  const pieData = paymentBreakdown.slice(0, 5).map((item: any) => ({
     value: Math.round((item.amount / totalPayments) * 100),
     color: getPaymentColor(item.type),
     text: `${Math.round((item.amount / totalPayments) * 100)}%`,
   }));
 
-  const legendData = paymentBreakdown.slice(0, 5).map((item) => ({
+  const legendData = paymentBreakdown.slice(0, 5).map((item: any) => ({
     label: item.label,
     color: getPaymentColor(item.type),
     percentage: `${Math.round((item.amount / totalPayments) * 100)}%`,
@@ -278,46 +278,46 @@ export default function FinancialAnalyticsScreen() {
       <View style={styles.chartCard}>
         <Text style={styles.sectionTitle}>התפלגות תשלומים</Text>
         <View style={styles.pieContainer}>
-        {/* Legend */}
-        <View style={styles.legendContainer}>
-          {legendData.map((item, index) => (
-            <View key={index} style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-              <Text style={styles.legendLabel}>{item.label}</Text>
-              <Text style={styles.legendPercent}>{item.percentage}</Text>
-            </View>
-          ))}
-        </View>
+          {/* Legend */}
+          <View style={styles.legendContainer}>
+            {legendData.map((item: any, index: number) => (
+              <View key={index} style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+                <Text style={styles.legendLabel}>{item.label}</Text>
+                <Text style={styles.legendPercent}>{item.percentage}</Text>
+              </View>
+            ))}
+          </View>
 
-        {/* Chart */}
-        {pieData.length > 0 && (
-          <PieChart
-            data={pieData}
-            donut
-            sectionAutoFocus
-            radius={70}
-            innerRadius={50}
-            innerCircleColor={'#fff'}
-            centerLabelComponent={() => {
-              const topCategory = pieData.reduce((max, item) =>
-                item.value > max.value ? item : max
-              );
-              const topIndex = pieData.indexOf(topCategory);
-              return (
-                <View style={{ justifyContent: 'center', alignItems: 'center' }}>
-                  <Text style={{ fontSize: 22, color: '#111', fontWeight: 'bold' }}>
-                    {topCategory.text || '0%'}
-                  </Text>
-                  <Text style={{ fontSize: 10, color: '#888' }}>
-                    {legendData[topIndex]?.label || ''}
-                  </Text>
-                </View>
-              );
-            }}
-          />
-        )}
+          {/* Chart */}
+          {pieData.length > 0 && (
+            <PieChart
+              data={pieData}
+              donut
+              sectionAutoFocus
+              radius={70}
+              innerRadius={50}
+              innerCircleColor={'#fff'}
+              centerLabelComponent={() => {
+                const topCategory = pieData.reduce((max: any, item: any) =>
+                  item.value > max.value ? item : max
+                );
+                const topIndex = pieData.indexOf(topCategory);
+                return (
+                  <View style={{ justifyContent: 'center', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 22, color: '#111', fontWeight: 'bold' }}>
+                      {topCategory.text || '0%'}
+                    </Text>
+                    <Text style={{ fontSize: 10, color: '#888' }}>
+                      {legendData[topIndex]?.label || ''}
+                    </Text>
+                  </View>
+                );
+              }}
+            />
+          )}
+        </View>
       </View>
-    </View>
     );
   };
 

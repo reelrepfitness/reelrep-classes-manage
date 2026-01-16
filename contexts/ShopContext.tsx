@@ -18,7 +18,7 @@ export const [ShopProvider, useShop] = createContextHook(() => {
       console.log('[Shop] Fetching subscription plans...');
       const { data, error } = await supabase
         .from('subscription_plans')
-        .select('id,name,type,sessions_per_week,description,full_price_in_advance,"price-per-month",green_invoice_URL')
+        .select('id,name,type,sessions_per_week,description,full_price_in_advance,"price-per-month",green_invoice_URL,desclaimers')
         .eq('is_active', true)
         .order('type', { ascending: true });
       if (error) {
@@ -76,6 +76,7 @@ export const [ShopProvider, useShop] = createContextHook(() => {
         planType: plan.type,
         name: plan.name,
         price,
+        pricePerMonth: plan['price-per-month'] ? Number(plan['price-per-month']) : undefined,
         currency: '₪',
         duration: 'monthly',
         durationLabel,
@@ -85,6 +86,7 @@ export const [ShopProvider, useShop] = createContextHook(() => {
         popular: highlight,
         highlight,
         greenInvoiceUrl: plan.green_invoice_URL || undefined,
+        disclaimer: plan.desclaimers || undefined,
       } as SubscriptionPackage];
     });
 
@@ -101,16 +103,23 @@ export const [ShopProvider, useShop] = createContextHook(() => {
       durationMonths: 0,
       features: [
         plan.description || '',
-        `תקף ל-${plan.validity_days} יום`,
       ].filter(Boolean),
       classesPerMonth: plan.total_sessions,
       totalClasses: plan.total_sessions,
       expiryDays: plan.validity_days,
       popular: plan.total_sessions === 20,
       greenInvoiceUrl: plan.green_invoice_URL || undefined,
+      disclaimer: plan.disclaimer || undefined,
     } as SubscriptionPackage));
 
-    return [...subscriptions, ...tickets];
+    // Sort subscriptions: ELITE before ONE
+    const sortedSubscriptions = subscriptions.sort((a, b) => {
+      const aIsElite = a.name?.toUpperCase().includes('ELITE') ? 0 : 1;
+      const bIsElite = b.name?.toUpperCase().includes('ELITE') ? 0 : 1;
+      return aIsElite - bIsElite;
+    });
+
+    return [...sortedSubscriptions, ...tickets];
   }, [plansQuery.data, ticketPlansQuery.data]);
 
   const cartQuery = useQuery({

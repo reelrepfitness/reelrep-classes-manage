@@ -32,6 +32,7 @@ function RootLayoutNav() {
       headerBackTitle: "חזור",
       animation: 'slide_from_right',
     }}>
+      <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="auth" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="admin" options={{ headerShown: false }} />
@@ -57,7 +58,15 @@ function RootLayoutNav() {
         name="shop"
         options={{
           headerShown: false,
-          presentation: "modal",
+          presentation: "card",
+        }}
+      />
+      <Stack.Screen
+        name="cart"
+        options={{
+          headerShown: false,
+          presentation: "card",
+          animation: 'slide_from_bottom', // Optional: nice animation for cart
         }}
       />
       <Stack.Screen

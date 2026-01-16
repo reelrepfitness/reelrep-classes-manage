@@ -151,6 +151,9 @@ serve(async (req: Request) => {
             const expiryDate = new Date()
             expiryDate.setDate(expiryDate.getDate() + (item.validity_days || 90))
 
+            // For cash payments, set outstanding_balance so they appear in admin debts screen
+            const isCashOrDebt = approval.payment_method === 'debt' || approval.payment_method === 'cash';
+
             const { data: ticket, error: ticketError } = await supabase
               .from('user_tickets')
               .insert({
@@ -164,8 +167,9 @@ serve(async (req: Request) => {
                 payment_method: approval.payment_method,
                 payment_reference: `MANUAL-${approvalId}`,
                 invoice_id: invoice.id,
-                has_debt: approval.payment_method === 'debt',
-                debt_amount: approval.payment_method === 'debt' ? approval.amount : null,
+                has_debt: isCashOrDebt,
+                debt_amount: isCashOrDebt ? approval.amount : null,
+                outstanding_balance: approval.payment_method === 'cash' ? approval.amount : 0,
               })
               .select()
               .single()
@@ -189,6 +193,9 @@ serve(async (req: Request) => {
             const endDate = new Date()
             endDate.setMonth(endDate.getMonth() + (item.duration_months || 1))
 
+            // For cash payments, set outstanding_balance so they appear in admin debts screen
+            const isCashOrDebtSub = approval.payment_method === 'debt' || approval.payment_method === 'cash';
+
             const { data: subscription, error: subError } = await supabase
               .from('user_subscriptions')
               .insert({
@@ -201,8 +208,9 @@ serve(async (req: Request) => {
                 payment_reference: `MANUAL-${approvalId}`,
                 sessions_used_this_week: 0,
                 invoice_id: invoice.id,
-                has_debt: approval.payment_method === 'debt',
-                debt_amount: approval.payment_method === 'debt' ? approval.amount : null,
+                has_debt: isCashOrDebtSub,
+                debt_amount: isCashOrDebtSub ? approval.amount : null,
+                outstanding_balance: approval.payment_method === 'cash' ? approval.amount : 0,
               })
               .select()
               .single()

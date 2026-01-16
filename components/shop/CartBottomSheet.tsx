@@ -14,6 +14,7 @@ import Colors from '@/constants/colors';
 interface CartBottomSheetProps {
   bottomSheetRef: RefObject<BottomSheet>;
   onCheckout: (paymentType: number) => void;
+  onChange?: (index: number) => void;
 }
 
 // Payment type constants from Green Invoice
@@ -47,7 +48,7 @@ const PAYMENT_OPTIONS = [
   },
 ];
 
-export function CartBottomSheet({ bottomSheetRef, onCheckout }: CartBottomSheetProps) {
+export function CartBottomSheet({ bottomSheetRef, onCheckout, onChange }: CartBottomSheetProps) {
   const { cart, removeFromCart, getTotal } = useShop();
   const snapPoints = useMemo(() => ['50%', '85%'], []);
 
@@ -63,6 +64,7 @@ export function CartBottomSheet({ bottomSheetRef, onCheckout }: CartBottomSheetP
       ref={bottomSheetRef}
       snapPoints={snapPoints}
       index={-1}
+      onChange={onChange}
       enablePanDownToClose
       backgroundStyle={styles.bottomSheetBackground}
       handleIndicatorStyle={styles.handleIndicator}

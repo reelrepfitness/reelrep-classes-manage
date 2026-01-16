@@ -156,6 +156,8 @@ export interface SubscriptionPackage {
   totalClasses?: number;
   expiryDays?: number;
   greenInvoiceUrl?: string;
+  disclaimer?: string;
+  pricePerMonth?: number;
 }
 
 export interface CartItem {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,12 +11,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { UpcomingWorkoutsStack } from '@/components/home/UpcomingWorkoutsStack';
+import { UpcomingWorkoutsWidget } from '@/components/home/UpcomingWorkoutsWidget';
 import Colors from '@/constants/colors';
 import { supabase } from '@/constants/supabase';
 import { Icon } from '@/components/ui/icon';
+import { DumbbellIcon, TrophyIcon, ShoppingCartIcon } from '@/components/QuickToolsIcons';
 
 const { width } = Dimensions.get('window');
+const cardWidth = (width - 52) / 2; // splitRow padding (20*2) + gap (12)
 
 // --- Helper Functions ---
 const getHebrewDate = () => {
@@ -33,123 +35,107 @@ const getHebrewDate = () => {
 
 // --- Components ---
 
-const WorkoutsCard = ({ thisMonth, lastMonth }: { thisMonth: number; lastMonth: number }) => {
-  const change = thisMonth - lastMonth;
-  const isPositive = change >= 0;
-
-  return (
-    <View style={styles.workoutsCard}>
-      <View style={styles.workoutsCardHeader}>
-        <View style={styles.iconBadge}>
-          <Icon name="dumbbell" size={20} color={Colors.primary} strokeWidth={2.5} />
-        </View>
-        <Text style={styles.workoutsCardTitle}>אימונים</Text>
-      </View>
-
-      <View style={styles.workoutsStats}>
-        <View style={styles.workoutsStat}>
-          <Text style={styles.workoutsMainValue}>{thisMonth}</Text>
-          <Text style={styles.workoutsMainLabel}>החודש</Text>
-        </View>
-
-        <View style={styles.workoutsDivider} />
-
-        <View style={styles.workoutsStat}>
-          <Text style={styles.workoutsSecondaryValue}>{lastMonth}</Text>
-          <Text style={styles.workoutsSecondaryLabel}>חודש שעבר</Text>
-        </View>
-      </View>
-
-      {change !== 0 && (
-        <View style={[styles.changeBadge, { backgroundColor: isPositive ? '#ECFDF5' : '#FEF2F2' }]}>
-          <Icon
-            name="trending-up"
-            size={12}
-            color={isPositive ? '#10B981' : '#EF4444'}
-            strokeWidth={2.5}
-            style={{ transform: [{ rotate: isPositive ? '0deg' : '180deg' }] }}
-          />
-          <Text style={[styles.changeText, { color: isPositive ? '#10B981' : '#EF4444' }]}>
-            {Math.abs(change)} {isPositive ? 'יותר' : 'פחות'}
-          </Text>
-        </View>
-      )}
-    </View>
-  );
-};
-
-const StatusCard = ({ label, value }: { label: string; value: string | number }) => (
-  <View style={styles.statusCard}>
-    <View style={styles.statusContent}>
-      <Text style={styles.statusValue}>{value}</Text>
-      <Text style={styles.statusLabel}>{label}</Text>
-    </View>
-    <View style={styles.statusAccent} />
-  </View>
-);
-
-const ActionCard = ({ title, iconName, onPress }: { title: string; iconName: string; onPress: () => void }) => (
-  <TouchableOpacity
-    style={styles.actionCard}
-    activeOpacity={0.7}
-    onPress={onPress}
-  >
-    <View style={styles.actionIconContainer}>
-      <Icon name={iconName} size={24} color={Colors.primary} strokeWidth={2.5} />
-    </View>
-    <Text style={styles.actionTitle}>{title}</Text>
-  </TouchableOpacity>
-);
+// --- Components ---
+// Previous components (WorkoutsCard, StatusCard, ActionCard) removed in redesign
 
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
-  const [workoutsThisMonth, setWorkoutsThisMonth] = useState(0);
-  const [workoutsLastMonth, setWorkoutsLastMonth] = useState(0);
-  const [totalWorkouts, setTotalWorkouts] = useState(0);
+  /* 
+   * Dynamic Weekly Goal Logic 
+   */
+  const [workoutsThisWeek, setWorkoutsThisWeek] = useState(0);
+  const [workoutsLastWeek, setWorkoutsLastWeek] = useState(0);
+  const [motivationText, setMotivationText] = useState('');
+  const [toolsActiveIndex, setToolsActiveIndex] = useState(0);
+  const toolsScrollRef = useRef<ScrollView>(null);
+
+  // Helper to get random message based on count & gender
+  const getMotivationMessage = (count: number, gender: string = 'male', name: string = '') => {
+    // Default to 'male' if undefined, but check specific string
+    const isFemale = gender?.toLowerCase() === 'female';
+    const messages: Record<number | string, string[]> = {
+      0: [
+        "וואלה?",
+        "לא הבנתי...",
+        isFemale ? "חכי כשאיוון ישמע על זה" : "חכה כשאיוון ישמע על זה",
+        "נראה לי זה הזמן לקבוע"
+      ],
+      1: [
+        "זהו? פחחח",
+        "יאללה, קל עוד אחד",
+        "וזה מספיק? לא נראה לי.",
+        "דוואי, עוד אחד השבוע!"
+      ],
+      2: [
+        "דיבור. אבל אפשר עוד.",
+        "ככה מגיעים לתוצאות, שאפו."
+      ],
+      3: [
+        `רמה גבוהה, ${name}`,
+        "היידה ככה אני אוהב!"
+      ],
+      // 4, 5, 6+
+      'high': [
+        isFemale ? "את נכנסת איתי בשכירות, כן?" : "אתה נכנס איתי בשכירות, כן?",
+        isFemale ? "יום מנוחה, מכירה?" : "יום מנוחה, מכיר?",
+        isFemale ? "עף עלייך ברמות!" : "עף עליך ברמות!"
+      ]
+    };
+
+    let options = [];
+    if (count >= 4) {
+      options = messages['high'];
+    } else {
+      options = messages[count] || messages[0];
+    }
+
+    // Pick random
+    return options[Math.floor(Math.random() * options.length)];
+  };
 
   useEffect(() => {
     if (!user?.id) return;
 
-    const fetchAttendedWorkouts = async () => {
+    const fetchWeeklyWorkouts = async () => {
       const now = new Date();
-      const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+      // Start of this week (Sunday)
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - now.getDay());
+      startOfWeek.setHours(0, 0, 0, 0);
 
-      // This month
-      const { count: thisMonthCount } = await supabase
+      // Start and end of last week
+      const startOfLastWeek = new Date(startOfWeek);
+      startOfLastWeek.setDate(startOfLastWeek.getDate() - 7);
+      const endOfLastWeek = new Date(startOfWeek);
+
+      // Fetch this week
+      const { count } = await supabase
         .from('class_bookings')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .eq('status', 'completed')
-        .gte('attended_at', firstDayThisMonth.toISOString());
+        .gte('attended_at', startOfWeek.toISOString());
 
-      // Last month
-      const { count: lastMonthCount } = await supabase
+      // Fetch last week
+      const { count: lastWeekCount } = await supabase
         .from('class_bookings')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .eq('status', 'completed')
-        .gte('attended_at', firstDayLastMonth.toISOString())
-        .lte('attended_at', lastDayLastMonth.toISOString());
+        .gte('attended_at', startOfLastWeek.toISOString())
+        .lt('attended_at', endOfLastWeek.toISOString());
 
-      // Total all time
-      const { count: totalCount } = await supabase
-        .from('class_bookings')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('status', 'completed');
-
-      setWorkoutsThisMonth(thisMonthCount || 0);
-      setWorkoutsLastMonth(lastMonthCount || 0);
-      setTotalWorkouts(totalCount || 0);
+      const countVal = count || 0;
+      setWorkoutsThisWeek(countVal);
+      setWorkoutsLastWeek(lastWeekCount || 0);
+      setMotivationText(getMotivationMessage(countVal, user.gender, user.name?.split(' ')[0]));
     };
 
-    fetchAttendedWorkouts();
-  }, [user?.id])
+    fetchWeeklyWorkouts();
+  }, [user?.id, user?.gender]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -159,48 +145,108 @@ export default function HomeScreen() {
       >
         {/* 1. Header */}
         <View style={styles.header}>
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.greetingTitle}>היי, {user?.name?.split(' ')[0] || 'אורח'}</Text>
-            <Text style={styles.dateSubtitle}>{getHebrewDate()}</Text>
-          </View>
-
           <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.avatarContainer}>
-            {(user as any)?.avatar_url ? (
-              <Image source={{ uri: (user as any).avatar_url }} style={styles.avatar} />
+            {user?.profileImage ? (
+              <Image source={{ uri: user.profileImage }} style={styles.avatar} />
             ) : (
               <View style={[styles.avatar, styles.avatarPlaceholder]}>
                 <Text style={styles.avatarInitials}>{user?.name?.slice(0, 1).toUpperCase() || '?'}</Text>
               </View>
             )}
           </TouchableOpacity>
+
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.greetingTitle}>היי, {user?.name?.split(' ')[0] || 'אורח'}</Text>
+            <Text style={styles.dateSubtitle}>{getHebrewDate()}</Text>
+          </View>
         </View>
 
-        {/* 2. Upcoming Classes Stack */}
+        {/* 2. Upcoming Classes Widget */}
         <View style={styles.heroSection}>
-          <UpcomingWorkoutsStack />
+          <UpcomingWorkoutsWidget />
         </View>
 
         {/* Divider after upcoming classes */}
         <View style={styles.divider} />
 
-        {/* 3. Stats Row */}
-        <View style={styles.statsRow}>
-          <WorkoutsCard thisMonth={workoutsThisMonth} lastMonth={workoutsLastMonth} />
-          <StatusCard label="סה״כ אימונים" value={totalWorkouts} />
+        {/* 3. Membership Status Widget */}
+        <View style={styles.membershipCard}>
+          <View style={styles.membershipHeader}>
+            <Text style={styles.membershipTitle}>הסטטוס שלי</Text>
+            <View style={styles.activeBadge}>
+              <View style={styles.activeDot} />
+              <Text style={styles.activeText}>פעיל</Text>
+            </View>
+          </View>
+
+          <View style={styles.punchProgressContainer}>
+            <View style={styles.punchTrack}>
+              <View style={[styles.punchFill, { width: '70%' }]} />
+            </View>
+            <Text style={styles.punchText}>7 / 10 כניסות נותרו</Text>
+          </View>
+
+          <View style={styles.membershipFooter}>
+            <Text style={styles.validUntilText}>בתוקף עד 20 אוק׳</Text>
+            <TouchableOpacity style={styles.renewButton} onPress={() => router.push('/subscription-management' as any)}>
+              <Text style={styles.renewButtonText}>ניהול מנוי</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* 4. Quick Actions */}
-        <View style={styles.actionsRow}>
-          <ActionCard
-            title="יומן ביצועים"
-            iconName="calendar"
-            onPress={() => router.push('/performance' as any)}
-          />
-          <ActionCard
-            title="חנות והטבות"
-            iconName="shopping-bag"
-            onPress={() => router.push('/shop' as any)}
-          />
+        {/* 4. Split Row: Weekly Goal & Quick Actions */}
+        <View style={styles.splitRow}>
+          {/* Weekly Goal (Left) */}
+          <View style={styles.weeklyCard}>
+            <View style={styles.weeklyHeader}>
+              <Text style={styles.weeklyLabel}>אימונים השבוע</Text>
+              <Icon name="fire" size={16} color="#F59E0B" />
+            </View>
+            <View style={styles.weeklyContent}>
+              <Text style={styles.weeklyValue}>{workoutsThisWeek}</Text>
+              <Text style={styles.weeklySubtext}>{motivationText}</Text>
+            </View>
+            <View style={styles.lastWeekRow}>
+              <Text style={styles.lastWeekLabel}>שבוע שעבר:</Text>
+              <Text style={styles.lastWeekValue}>{workoutsLastWeek}</Text>
+            </View>
+          </View>
+
+          {/* Quick Actions (Right) */}
+          <View style={styles.toolsCard}>
+            <ScrollView
+              ref={toolsScrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(e) => {
+                const index = Math.round(e.nativeEvent.contentOffset.x / (cardWidth - 32));
+                setToolsActiveIndex(index);
+              }}
+              style={styles.toolsCarousel}
+            >
+              <TouchableOpacity style={[styles.carouselPage, { width: cardWidth - 32 }]} onPress={() => router.push('/performance' as any)}>
+                <DumbbellIcon size={48} />
+                <Text style={styles.toolName} numberOfLines={1}>יומן ביצועים</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.carouselPage, { width: cardWidth - 32 }]} onPress={() => router.push('/shop' as any)}>
+                <ShoppingCartIcon size={48} />
+                <Text style={styles.toolName}>חנות</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.carouselPage, { width: cardWidth - 32 }]} onPress={() => router.push('/achievements' as any)}>
+                <TrophyIcon size={48} />
+                <Text style={styles.toolName}>הישגים</Text>
+              </TouchableOpacity>
+            </ScrollView>
+
+            <View style={styles.pagination}>
+              {[0, 1, 2].map((i) => (
+                <View key={i} style={[styles.dot, toolsActiveIndex === i && styles.dotActive]} />
+              ))}
+            </View>
+          </View>
         </View>
 
         <View style={{ height: 120 }} />
@@ -221,14 +267,16 @@ const styles = StyleSheet.create({
   // Header
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     paddingHorizontal: 24,
     paddingVertical: 20,
     marginTop: 6,
+    gap: 12,
   },
   headerTextContainer: {
     justifyContent: 'center',
+    alignItems: 'flex-start',
   },
   greetingTitle: {
     fontSize: 24,
@@ -292,165 +340,217 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
 
-  // Workouts Card
-  workoutsCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    gap: 12,
-  },
-  workoutsCardHeader: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 8,
-  },
-  iconBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: `${Colors.primary}12`,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  workoutsCardTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#171717',
-  },
-  workoutsStats: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    gap: 12,
-  },
-  workoutsStat: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 4,
-  },
-  workoutsMainValue: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: Colors.primary,
-  },
-  workoutsMainLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  workoutsSecondaryValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#9CA3AF',
-  },
-  workoutsSecondaryLabel: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#9CA3AF',
-  },
-  workoutsDivider: {
-    width: 1,
-    height: '70%',
-    backgroundColor: '#E5E7EB',
-  },
-  changeBadge: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  changeText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
-  // Status Card (Points)
-  statusCard: {
-    flex: 1,
+  // Membership Status Widget
+  membershipCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 20,
+    padding: 20,
+    marginHorizontal: 20,
+    marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    minHeight: 120,
-    justifyContent: 'center',
-    position: 'relative',
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  membershipHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  membershipTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  activeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#ECFDF5',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  activeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#10B981',
+  },
+  punchProgressContainer: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  punchTrack: {
+    height: 8,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 4,
     overflow: 'hidden',
   },
-  statusContent: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  statusValue: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: Colors.primary,
-  },
-  statusLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  statusAccent: {
-    position: 'absolute',
-    left: 0,
-    top: 12,
-    bottom: 12,
-    width: 3,
+  punchFill: {
+    height: '100%',
     backgroundColor: Colors.primary,
-    borderTopRightRadius: 2,
-    borderBottomRightRadius: 2,
+    borderRadius: 4,
   },
-
-  // Actions Row
-  actionsRow: {
-    flexDirection: 'row-reverse',
-    gap: 12,
-    paddingHorizontal: 20,
-    marginBottom: 24,
+  punchText: {
+    fontSize: 14,
+    color: '#4B5563',
+    textAlign: 'left',
+    fontWeight: '500',
   },
-  actionCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 16,
+  membershipFooter: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.02,
-    shadowRadius: 4,
-    elevation: 1,
-    minHeight: 100,
+    justifyContent: 'space-between',
+    marginTop: 4,
   },
-  actionIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: `${Colors.primary}08`,
-    alignItems: 'center',
-    justifyContent: 'center',
+  validUntilText: {
+    fontSize: 13,
+    color: '#9CA3AF',
   },
-  actionTitle: {
+  renewButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  renewButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#171717',
-    textAlign: 'center',
+    color: Colors.primary,
+  },
+
+  // Split Row
+  splitRow: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 20,
+  },
+  weeklyCard: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+    justifyContent: 'space-between',
+  },
+  weeklyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  weeklyLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  weeklyContent: {
+    gap: 4,
+  },
+  weeklyValue: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#111827',
+    textAlign: 'left',
+  },
+  weeklySubtext: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#4B5563',
+    textAlign: 'left',
+  },
+  lastWeekRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  lastWeekLabel: {
+    fontSize: 11,
+    color: '#9CA3AF',
+  },
+  lastWeekValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+
+  // Tools Card
+  toolsCard: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  toolsLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4B5563',
+    marginBottom: 16,
+    textAlign: 'left',
+  },
+  toolsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  toolItem: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  toolIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  toolName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4B5563',
+    marginTop: 8,
+  },
+  toolsCarousel: {
+    flexGrow: 0,
+  },
+  carouselPage: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+  },
+  pagination: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 12,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#D1D5DB',
+  },
+  dotActive: {
+    backgroundColor: Colors.primary,
+    width: 16,
   },
 });

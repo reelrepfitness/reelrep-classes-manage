@@ -33,8 +33,8 @@ const { width } = Dimensions.get('window');
 
 // --- Config ---
 const PAYMENT_METHODS = [
-    { id: 'credit_card', label: 'כרטיס אשראי', icon: 'card', iosIcon: 'creditcard.fill', color: '#2563EB', bg: '#EFF6FF', image: require('@/assets/images/credit-card-icon.svg') },
-    { id: 'cash', label: 'מזומן', icon: 'cash', iosIcon: 'banknote.fill', color: '#059669', bg: '#ECFDF5', image: require('@/assets/images/cash-icon.svg') },
+    { id: 'credit_card', label: 'כרטיס אשראי', icon: 'card', iosIcon: 'creditcard.fill', color: '#2563EB', bg: '#EFF6FF' },
+    { id: 'cash', label: 'מזומן', icon: 'cash', iosIcon: 'banknote.fill', color: '#059669', bg: '#ECFDF5' },
     { id: 'bit', label: 'ביט / אפליקציה', icon: 'phone-portrait', iosIcon: 'iphone.circle.fill', color: '#7C3AED', bg: '#F5F3FF', image: require('@/assets/images/bit-icon.png') },
     { id: 'debt', label: 'רשום כחוב', icon: 'document-text', iosIcon: 'signature', color: '#DC2626', bg: '#FEF2F2' },
 ];
@@ -65,7 +65,7 @@ export default function POSPaymentScreen() {
     const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
-    
+
     // Modal State
     const [modalVisible, setModalVisible] = useState(false);
     const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
@@ -79,8 +79,8 @@ export default function POSPaymentScreen() {
     const isFullyPaid = remainingAmount < 0.1;
 
     // Mock Suggestions
-    const suggestions = searchQuery.length > 0 
-        ? ['ישראל ישראלי', 'אבי כהן', 'דני לוי', 'רוני דואני', 'אלירן סבג'].filter(s => s.includes(searchQuery)) 
+    const suggestions = searchQuery.length > 0
+        ? ['ישראל ישראלי', 'אבי כהן', 'דני לוי', 'רוני דואני', 'אלירן סבג'].filter(s => s.includes(searchQuery))
         : [];
 
     const handleMethodPress = (methodId: string) => {
@@ -112,7 +112,7 @@ export default function POSPaymentScreen() {
 
     return (
         <View style={styles.container}>
-            
+
             {/* --- 1. Header Section --- */}
             <View style={[styles.header, { paddingTop: insets.top }]}>
                 <View style={styles.headerTop}>
@@ -144,7 +144,7 @@ export default function POSPaymentScreen() {
 
             {/* --- 2. Main Content --- */}
             <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 200 }]} showsVerticalScrollIndicator={false}>
-                
+
                 {/* Hero Amount */}
                 <View style={styles.heroCard}>
                     <Text style={styles.heroLabel}>יתרה לתשלום</Text>
@@ -162,8 +162,8 @@ export default function POSPaymentScreen() {
                 <Text style={styles.sectionHeader}>איך תרצה לשלם?</Text>
                 <View style={styles.gridContainer}>
                     {PAYMENT_METHODS.map((method) => (
-                        <TouchableOpacity 
-                            key={method.id} 
+                        <TouchableOpacity
+                            key={method.id}
                             style={[styles.card, { backgroundColor: method.bg }, remainingAmount <= 0 && styles.disabledCard]}
                             onPress={() => handleMethodPress(method.id)}
                             activeOpacity={0.7}
@@ -212,8 +212,8 @@ export default function POSPaymentScreen() {
             {showSuggestions && suggestions.length > 0 && (
                 <View style={[styles.suggestionsLayer, { top: insets.top + 120 }]}>
                     {suggestions.map((item, idx) => (
-                        <TouchableOpacity 
-                            key={idx} 
+                        <TouchableOpacity
+                            key={idx}
                             style={styles.suggestionRow}
                             onPress={() => { setSearchQuery(item); setShowSuggestions(false); }}
                         >
@@ -239,8 +239,8 @@ export default function POSPaymentScreen() {
                 </View>
 
                 {/* Main Action Button */}
-                <TouchableOpacity 
-                    style={[styles.mainButton, (!isFullyPaid || loading) && styles.btnDisabled]} 
+                <TouchableOpacity
+                    style={[styles.mainButton, (!isFullyPaid || loading) && styles.btnDisabled]}
                     onPress={handleFinish}
                     disabled={!isFullyPaid || loading}
                 >
@@ -285,13 +285,13 @@ export default function POSPaymentScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F9FAFB' },
-    
+
     // Header
     header: { backgroundColor: '#fff', paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderColor: '#F3F4F6', zIndex: 10 },
     headerTop: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
     headerTitle: { fontSize: 18, fontWeight: '700', color: '#111' },
     iconButton: { width: 40, height: 40, backgroundColor: '#F3F4F6', borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-    
+
     // Search
     searchContainer: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: '#F9FAFB', borderRadius: 12, paddingHorizontal: 12, height: 44, borderWidth: 1, borderColor: '#E5E7EB' },
     searchInput: { flex: 1, textAlign: 'right', fontSize: 16, color: '#111', marginRight: 8, height: '100%' },

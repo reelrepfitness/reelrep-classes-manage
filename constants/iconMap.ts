@@ -116,4 +116,9 @@ export const ICON_MAP: Record<string, { ios: string; android: string }> = {
   'battery': { ios: 'battery.100', android: 'Battery' },
   'activity': { ios: 'waveform.path.ecg', android: 'Activity' },
   'barbell': { ios: 'figure.strengthtraining.traditional', android: 'Dumbbell' },
+
+  // New Dashboard Icons
+  'fire': { ios: 'flame.fill', android: 'Flame' },
+  'scale': { ios: 'scalemass.fill', android: 'Scale' },
+  'sparkles': { ios: 'sparkles', android: 'Sparkles' },
 };

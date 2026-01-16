@@ -16,7 +16,8 @@ import {
     User,
     Dumbbell,
     ClipboardList,
-    Receipt
+    Receipt,
+    Bell
 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
@@ -33,6 +34,8 @@ const getIcon = (routeName: string, color: string, size: number) => {
             return <Calendar color={color} size={size} />;
         case 'register':
             return <Receipt color={color} size={size} />;
+        case 'notifications':
+            return <Bell color={color} size={size} />;
         case 'profile':
             return <User color={color} size={size} />;
         case 'admin':
@@ -44,7 +47,8 @@ const getIcon = (routeName: string, color: string, size: number) => {
 
 const TAB_ITEMS = [
     { name: 'index', label: 'בית', route: '/(tabs)' },
-    { name: 'classes', label: 'שיעורים', route: '/(tabs)/classes' },
+    { name: 'classes', label: 'יומן', route: '/(tabs)/classes' },
+    { name: 'notifications', label: 'התראות', route: '/(tabs)/notifications' },
     { name: 'register', label: 'קופה', route: '/(tabs)/register', adminOnly: true },
     { name: 'profile', label: 'פרופיל', route: '/(tabs)/profile' },
     { name: 'admin', label: 'ניהול', route: '/admin', adminOnly: true },
@@ -112,19 +116,26 @@ export function CustomTabBar() {
     const insets = useSafeAreaInsets();
     const { isAdmin, user } = useAuth(); // Get isAdmin status and user
 
-    // Query for unread notifications
+    // Query for unread notifications (admin sees admin_notifications, users see purchase_notifications)
     const unreadQuery = useQuery({
-        queryKey: ['unread-notifications', user?.id],
+        queryKey: ['unread-notifications', user?.id, isAdmin],
         queryFn: async () => {
             if (!user) return 0;
 
-            const { count } = await supabase
-                .from('purchase_notifications')
-                .select('*', { count: 'exact', head: true })
-                .eq('user_id', user.id)
-                .eq('is_read', false);
-
-            return count || 0;
+            if (isAdmin) {
+                const { count } = await supabase
+                    .from('admin_notifications')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('is_read', false);
+                return count || 0;
+            } else {
+                const { count } = await supabase
+                    .from('purchase_notifications')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('user_id', user.id)
+                    .eq('is_read', false);
+                return count || 0;
+            }
         },
         enabled: !!user,
         refetchInterval: 30000, // רענון כל 30 שניות
@@ -135,6 +146,7 @@ export function CustomTabBar() {
         // Admin screens - check first since they're most specific
         if (pathname.startsWith('/admin')) return 'admin';
         if (pathname.includes('/admin')) return 'admin';
+        if (pathname.includes('/notifications')) return 'notifications';
         if (pathname.includes('/classes')) return 'classes';
         if (pathname.includes('/register')) return 'register';
         if (pathname.includes('/profile')) return 'profile';
@@ -149,7 +161,8 @@ export function CustomTabBar() {
 
     // Hide tab bar only on specific screens that need full screen (like payment flow)
     const hideTabBarPaths = [
-        '/admin/pos/payment'
+        '/admin/pos/payment',
+        '/admin/classes/',  // Hide on class details and workout content screens
     ];
 
     if (hideTabBarPaths.some(path => pathname.startsWith(path))) {
@@ -167,7 +180,7 @@ export function CustomTabBar() {
                         item={item}
                         isSelected={selectedTab === item.name}
                         onSelect={() => handlePress(item.route)}
-                        badgeCount={item.name === 'profile' ? (unreadQuery.data || 0) : undefined}
+                        badgeCount={item.name === 'notifications' ? (unreadQuery.data || 0) : undefined}
                     />
                 ))}
             </View>

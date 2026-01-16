@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { View, Text, ScrollView, TouchableOpacity, Alert, Image, Dimensions, Modal, PanResponder, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert, Image, Dimensions, PanResponder, Platform } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Calendar from 'expo-calendar';
 import { Calendar as CalendarIcon, Users, Trophy, Lock, Check, X, Clock, ChevronLeft, ChevronRight, MapPin } from 'lucide-react-native';
@@ -14,10 +15,10 @@ import { cn } from '@/lib/utils';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { AvatarCircles } from '@/components/ui/AvatarCircles';
-import { ClassRegistrationCard } from '@/components/ui/ClassRegistrationCard';
 import { ClassAttendeesSheet } from '@/components/ui/ClassAttendeesSheet';
 import { CalendarSyncBar } from '@/components/ui/CalendarSyncBar';
 import { CalendarSelectionModal } from '@/components/ui/CalendarSelectionModal';
+import { Progress } from '@tamagui/progress';
 
 // --- Logic & Helpers (KEPT 100% INTACT) ---
 
@@ -119,29 +120,25 @@ const MOCK_WAITLIST_USERS = [
 
 export default function ClassesScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { user, isAdmin, updateUser } = useAuth();
   const { classes, bookClass, isClassBooked, getClassBookings, cancelBooking, getClassBooking } = useClasses();
   const { updateProgress } = useAchievements();
 
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedClass, setSelectedClass] = useState<any>(null);
-  const [enrolledUsers, setEnrolledUsers] = useState<any[]>([]);
-  const [loadingEnrolled, setLoadingEnrolled] = useState(false);
-  const [classBookingsMap, setClassBookingsMap] = useState<Record<string, any[]>>({});
 
   // Attendees Sheet Ref
   const attendeesSheetRef = useRef<any>(null);
 
   const handleOpenAttendees = (item: any) => {
-    // If we want dynamic data, we'd set it here. For now, using mocks as requested.
-    // We ensure selectedClass is what the sheet refers to if needed.
+    setSelectedClass(item);
     attendeesSheetRef.current?.present();
   };
 
   const lateCancellations = user?.lateCancellations || 0;
   const blockEndDate = user?.blockEndDate || null;
 
-  const [modalVisible, setModalVisible] = useState(false);
   const [countdown, setCountdown] = useState<string>('');
   const [weekOffset, setWeekOffset] = useState(0); // 0 = current week, 1 = next week
 
@@ -264,55 +261,11 @@ export default function ClassesScreen() {
     return () => clearInterval(interval);
   }, [subscriptionType]);
 
-  const handleBookClass = async (classId: string) => {
-    console.log('[Classes] Opening modal for classId:', classId);
-
-    // 1. Try to find the class immediately
-    const classItem = filteredClasses.find(c => c.id === classId) || classes.find(c => c.id === classId);
-
-    if (classItem) {
-      setSelectedClass(classItem);
-    } else {
-      console.warn('[Classes] Class item not found via find(), will attempt to load...');
-      setSelectedClass(null);
-    }
-
-    // 2. Open modal immediately
-    setLoadingEnrolled(true);
-    setModalVisible(true);
-
-    if (!classItem) {
-      console.error('[Classes] Class item really not found for id:', classId);
-      setModalVisible(false);
-      Alert.alert('שגיאה', 'לא ניתן לטעון את פרטי השיעור (זיהוי שגוי)');
-      setLoadingEnrolled(false);
-      return;
-    }
-
-    try {
-      const bookings = await getClassBookings(classId);
-      setEnrolledUsers(bookings);
-    } catch (error) {
-      console.error('Error fetching enrolled users:', error);
-      setEnrolledUsers([]);
-    } finally {
-      setLoadingEnrolled(false);
-    }
+  const handleBookClass = (classId: string) => {
+    router.push(`/class/${classId}`);
   };
 
-  const handleConfirmBooking = async () => {
-    if (!selectedClass) return;
-    try {
-      await bookClass(selectedClass.id);
-      const bookings = await getClassBookings(selectedClass.id);
-      setEnrolledUsers(bookings);
-      setModalVisible(false);
-      setSelectedClass(null);
-      Alert.alert(hebrew.common.success, 'נרשמת לשיעור בהצלחה!');
-    } catch (error) {
-      Alert.alert(hebrew.common.error, (error as Error).message);
-    }
-  };
+
 
   // --- Helper Functions ---
 
@@ -396,11 +349,6 @@ export default function ClassesScreen() {
 
       if (error) throw error;
       if (status === 'attended') await updateProgress(booking.user_id, 'classes_attended', 1);
-
-      if (selectedClass) {
-        const bookings = await getClassBookings(selectedClass.id);
-        setEnrolledUsers(bookings);
-      }
     } catch (err) {
       Alert.alert('שגיאה', 'לא ניתן לעדכן נוכחות');
     }
@@ -682,15 +630,22 @@ export default function ClassesScreen() {
                     <Text className="text-[10px] text-gray-400 font-bold">רשומים</Text>
                     <Text className="text-[10px] text-gray-400 font-bold">{classItem.enrolled}/{classItem.capacity}</Text>
                   </View>
-                  <View className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden mb-3">
-                    <View
-                      className={cn("h-full rounded-full",
-                        percent >= 90 ? "bg-red-500" : percent >= 70 ? "bg-orange-500" : "bg-emerald-500"
-                      )}
-                      style={{ width: `${percent}%` }}
+                  <Progress
+                    value={percent}
+                    size="$2"
+                    backgroundColor="$gray3"
+                    borderRadius="$4"
+                    marginBottom={12}
+                  >
+                    <Progress.Indicator
+                      animation="bouncy"
+                      backgroundColor={
+                        percent >= 90 ? '$red10' :
+                          percent >= 70 ? '$orange10' : '$green10'
+                      }
+                      borderRadius="$4"
                     />
-                  </View>
-
+                  </Progress>
                   <View className="flex-row items-center justify-start">
                     <TouchableOpacity onPress={() => handleOpenAttendees(classItem)} activeOpacity={0.7}>
                       <AvatarCircles
@@ -753,50 +708,6 @@ export default function ClassesScreen() {
           })
         )}
       </ScrollView>
-
-      {/* 3. Modal (Class Info & Booking) */}
-      <Modal
-        visible={modalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View className="flex-1 bg-black/60 justify-center items-center px-4">
-          {!selectedClass ? (
-            <View className="bg-white rounded-3xl p-8 items-center">
-              <Text className="text-gray-500">טוען פרטי שיעור...</Text>
-            </View>
-          ) : (
-            <ClassRegistrationCard
-              title={selectedClass.title}
-              date={selectedClass.date}
-              time={selectedClass.time}
-              instructor={selectedClass.instructor}
-              enrolled={selectedClass.enrolled}
-              capacity={selectedClass.capacity}
-              waitingListCount={selectedClass.waitingListCount}
-              enrolledAvatars={selectedClass.enrolledAvatars || []}
-              isBooked={isClassBooked(selectedClass)}
-              isAdmin={isAdmin}
-              onRegister={handleConfirmBooking}
-              onCancel={() => {
-                setModalVisible(false);
-                setSelectedClass(null);
-              }}
-              onCancelClass={() => {
-                setModalVisible(false);
-                handleCancelClass(selectedClass);
-              }}
-              onSwitch={() => {
-                setModalVisible(false);
-                handleSwitchClass(selectedClass);
-              }}
-              onOpenAttendees={() => handleOpenAttendees(selectedClass)}
-              className="w-full"
-            />
-          )}
-        </View>
-      </Modal>
 
       {/* 4. Calendar Selection Modal */}
       <CalendarSelectionModal

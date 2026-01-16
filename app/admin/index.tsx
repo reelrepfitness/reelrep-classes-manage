@@ -4,7 +4,6 @@ import { StatusBar } from 'expo-status-bar';
 import DashboardStatsCarousel from '@/components/admin/dashboard/DashboardStatsCarousel';
 import LeadFunnelWidget from '@/components/admin/dashboard/LeadFunnelWidget';
 import DailyClassesWidget from '@/components/admin/dashboard/DailyClassesWidget';
-import StatsGrid from '@/components/admin/dashboard/StatsGrid';
 import { useAdminDashboardData } from '@/hooks/admin/useAdminDashboardData';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 
@@ -17,11 +16,6 @@ export default function AdminDashboard() {
     await refresh();
     setRefreshing(false);
   }, [refresh]);
-
-  // Transform Stats for Grid
-  const statsGridData = [
-    { key: 'exercises', label: 'ניהול תרגילים', value: '', icon: 'barbell' as const, color: '#8B5CF6', route: '/admin/exercises' as any },
-  ];
 
   return (
     <View style={styles.container}>
@@ -47,9 +41,6 @@ export default function AdminDashboard() {
         {/* 3. Daily Studio */}
         <DailyClassesWidget classes={todaysClasses} />
 
-        {/* 4. Stats Grid (Remaining Items) */}
-        <StatsGrid stats={statsGridData} />
-
         <View style={{ height: 120 }} />
       </ScrollView>
     </View>
@@ -65,7 +56,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 24,
-    paddingTop: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+    paddingTop: 20,
   },
 });

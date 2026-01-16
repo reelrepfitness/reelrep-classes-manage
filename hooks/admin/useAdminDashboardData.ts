@@ -8,6 +8,7 @@ export interface RevenueData {
     trend: string;
     trendUp: boolean;
     chartData: { value: number; label?: string }[];
+    lastMonthTotal?: string;
 }
 
 export interface FunnelData {
@@ -127,7 +128,8 @@ export function useAdminDashboardData() {
             total: `₪${currentTotal.toLocaleString()}`,
             trend: `${Math.abs(trendPercent).toFixed(1)}% ${trendPercent >= 0 ? 'עלייה' : 'ירידה'}`,
             trendUp: trendPercent >= 0,
-            chartData
+            chartData,
+            lastMonthTotal: lastTotal.toLocaleString()
         });
     };
 

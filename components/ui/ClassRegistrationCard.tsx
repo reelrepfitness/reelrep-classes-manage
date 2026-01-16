@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, Image, TouchableOpacity, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Calendar, Clock, Users, MapPin, Trophy, XCircle, ArrowLeftRight } from 'lucide-react-native';
+import { Progress } from '@tamagui/progress';
 import { cn } from '@/lib/utils';
 import Colors from '@/constants/colors';
 import { AvatarCircles } from '@/components/ui/AvatarCircles';
@@ -193,16 +194,21 @@ export function ClassRegistrationCard({
 
                 {/* Progress Bar */}
                 <View className="mt-4">
-                    <View className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-                        <View
-                            className={cn(
-                                "h-full rounded-full",
-                                capacityPercent >= 90 ? "bg-red-500" :
-                                    capacityPercent >= 70 ? "bg-orange-500" : "bg-emerald-500"
-                            )}
-                            style={{ width: `${capacityPercent}%` }}
+                    <Progress
+                        value={capacityPercent}
+                        size="$2"
+                        backgroundColor="$gray3"
+                        borderRadius="$4"
+                    >
+                        <Progress.Indicator
+                            animation="bouncy"
+                            backgroundColor={
+                                capacityPercent >= 90 ? '$red10' :
+                                    capacityPercent >= 70 ? '$orange10' : '$green10'
+                            }
+                            borderRadius="$4"
                         />
-                    </View>
+                    </Progress>
                     <Text className="text-[10px] text-gray-400 text-center mt-1">
                         {capacityPercent}% רשומים
                     </Text>

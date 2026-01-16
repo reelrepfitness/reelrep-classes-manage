@@ -6,6 +6,8 @@ import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { I18nManager, Platform } from "react-native";
+import { TamaguiProvider } from 'tamagui';
+import tamaguiConfig from '../tamagui.config';
 import { AuthProvider } from "@/contexts/AuthContext";
 import { WorkoutProvider } from "@/contexts/WorkoutContext";
 import { ShopProvider } from "@/contexts/ShopContext";
@@ -22,6 +24,7 @@ if (Platform.OS !== 'web') {
 }
 
 const queryClient = new QueryClient();
+
 
 function RootLayoutNav() {
   return (
@@ -76,22 +79,24 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <BottomSheetModalProvider>
-          <AuthProvider>
-            <WorkoutProvider>
-              <ShopProvider>
-                <ClassesProvider>
-                  <AchievementsProvider>
-                    <RootLayoutNav />
-                  </AchievementsProvider>
-                </ClassesProvider>
-              </ShopProvider>
-            </WorkoutProvider>
-          </AuthProvider>
-        </BottomSheetModalProvider>
-      </GestureHandlerRootView>
-    </QueryClientProvider>
+    <TamaguiProvider config={tamaguiConfig}>
+      <QueryClientProvider client={queryClient}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <BottomSheetModalProvider>
+            <AuthProvider>
+              <WorkoutProvider>
+                <ShopProvider>
+                  <ClassesProvider>
+                    <AchievementsProvider>
+                      <RootLayoutNav />
+                    </AchievementsProvider>
+                  </ClassesProvider>
+                </ShopProvider>
+              </WorkoutProvider>
+            </AuthProvider>
+          </BottomSheetModalProvider>
+        </GestureHandlerRootView>
+      </QueryClientProvider>
+    </TamaguiProvider>
   );
 }

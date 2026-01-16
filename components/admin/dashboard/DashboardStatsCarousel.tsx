@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from '@/components/ui/icon';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
@@ -25,196 +26,314 @@ export default function DashboardStatsCarousel() {
 
   const revenueTotal = revenue?.total?.replace('₪', '') || '0';
   const trendText = revenue?.trend || '0% עלייה';
+  const isTrendUp = revenue?.trendUp ?? true;
+
+  // Calculate this month's total and last month's total from revenue data
+  const thisMonthTotal = revenue?.total?.replace('₪', '') || '0';
+  const lastMonthTotal = revenue?.lastMonthTotal || '0';
 
   return (
     <View style={styles.wrapper}>
-      {/* Row 1: Revenue Cards */}
-      <View style={styles.row}>
-        <TouchableOpacity
-          style={[styles.card, styles.revenueCard]}
-          activeOpacity={0.9}
-          onPress={() => router.push('/admin/financial')}
+      {/* Hero Card: Today's Income + Quick Stats */}
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={() => router.push('/admin/financial')}
+      >
+        <LinearGradient
+          colors={['#0F172A', '#334155']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.heroCard}
         >
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitleWhite}>הכנסות היום</Text>
-            <View style={styles.iconBadgeWhite}>
-              <Icon name="trending-up" size={18} color="#FFFFFF" strokeWidth={2.5} />
+          <View style={styles.heroRow}>
+            <View style={styles.heroSection}>
+              <View style={styles.heroHeader}>
+                <View style={styles.heroIconCircle}>
+                  <Icon name="trending-up" size={20} color="#FFFFFF" strokeWidth={2.5} />
+                </View>
+                <Text style={styles.heroLabel}>הכנסות היום</Text>
+              </View>
+              <Text style={styles.heroValue}>₪{revenueTotal}</Text>
             </View>
-          </View>
-          <Text style={styles.bigAmountWhite}>₪{revenueTotal}</Text>
-          <Text style={styles.subtextWhite}>לחץ לפרטים</Text>
-        </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.card, styles.trendCard]}
-          activeOpacity={0.9}
-          onPress={() => router.push('/admin/financial/monthly-comparison')}
-        >
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitleDark}>מגמת חודש</Text>
-            <View style={styles.iconBadgeLight}>
-              <Icon name="bar-chart" size={18} color={Colors.primary} strokeWidth={2.5} />
+            <View style={styles.heroDivider} />
+
+            <View style={styles.heroSection}>
+              <View style={styles.heroHeaderLeft}>
+                <Text style={styles.heroLabelLeft}>הכנסות החודש</Text>
+              </View>
+              <Text style={styles.heroValue}>₪{thisMonthTotal}</Text>
             </View>
           </View>
-          <Text style={styles.bigAmountPrimary}>{trendText}</Text>
-          <View style={styles.trendBadge}>
-            <Icon
-              name="trending-up"
-              size={12}
-              color={revenue?.trendUp ? '#10B981' : '#EF4444'}
-              strokeWidth={2.5}
-              style={{ transform: [{ rotate: revenue?.trendUp ? '0deg' : '180deg' }] }}
-            />
-            <Text style={[styles.trendText, { color: revenue?.trendUp ? '#10B981' : '#EF4444' }]}>
-              לעומת חודש שעבר
+          <Text style={styles.heroSubtextCenter}>לחץ לפרטים</Text>
+        </LinearGradient>
+      </TouchableOpacity>
+
+      {/* Stats Grid: 2 Columns × 2.5 Rows (5 Cards) */}
+      <View style={styles.statsGrid}>
+        {/* Row 1: Monthly Trend + Urgent Tasks */}
+        <View style={styles.statsRow}>
+          {/* Last Month Income (Right in RTL) */}
+          <TouchableOpacity
+            style={styles.statCard}
+            activeOpacity={0.9}
+            onPress={() => router.push('/admin/financial/monthly-comparison')}
+          >
+            <View style={styles.cardHeader}>
+              <View style={[styles.iconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
+                <Icon name="bar-chart" size={20} color="#10B981" strokeWidth={2.5} />
+              </View>
+              <Text style={styles.cardLabel}>חודש שעבר</Text>
+            </View>
+            <Text style={[styles.cardValue, { color: '#10B981' }]}>
+              ₪{lastMonthTotal}
             </Text>
-          </View>
-        </TouchableOpacity>
-      </View>
+          </TouchableOpacity>
 
-      {/* Row 2: Urgent Tasks */}
-      <View style={styles.row}>
-        <TouchableOpacity
-          style={[styles.card, styles.urgentCard]}
-          activeOpacity={0.9}
-          onPress={() => router.push('/admin/clients/needs-attention')}
-        >
-          <View style={[styles.iconCircle, { backgroundColor: '#FEE2E2' }]}>
-            <Icon name="alert-circle" size={24} color="#DC2626" strokeWidth={2.5} />
-          </View>
-          <Text style={styles.bigNumberRed}>{stats?.tasks || 0}</Text>
-          <Text style={styles.labelRed}>לטיפול דחוף</Text>
-        </TouchableOpacity>
+          {/* Urgent Tasks (Left in RTL) */}
+          <TouchableOpacity
+            style={styles.statCard}
+            activeOpacity={0.9}
+            onPress={() => router.push('/admin/clients/needs-attention')}
+          >
+            <View style={styles.cardHeader}>
+              <View style={[styles.iconCircle, { backgroundColor: 'rgba(220, 38, 38, 0.1)' }]}>
+                <Icon name="alert-circle" size={20} color="#DC2626" strokeWidth={2.5} />
+                {(stats?.tasks || 0) > 0 && <View style={styles.notificationDot} />}
+              </View>
+              <Text style={styles.cardLabel}>לטיפול דחוף</Text>
+            </View>
+            <Text style={[styles.cardValue, { color: '#DC2626' }]}>
+              {stats?.tasks || 0}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity
-          style={[styles.card, styles.debtCard]}
-          activeOpacity={0.9}
-          onPress={() => router.push('/admin/clients/debts')}
-        >
-          <View style={[styles.iconCircle, { backgroundColor: '#FEE2E2' }]}>
-            <Icon name="credit-card" size={24} color="#DC2626" strokeWidth={2.5} />
-          </View>
-          <Text style={styles.bigNumberRed}>{stats?.debts?.count || 0}</Text>
-          <Text style={styles.debtAmount}>₪{stats?.debts?.total || 0}</Text>
-          <Text style={styles.labelRed}>חייבים</Text>
-        </TouchableOpacity>
-      </View>
+        {/* Row 2: Debtors + Active Subscriptions */}
+        <View style={styles.statsRow}>
+          {/* Debtors (Right in RTL) */}
+          <TouchableOpacity
+            style={styles.statCard}
+            activeOpacity={0.9}
+            onPress={() => router.push('/admin/clients/debts')}
+          >
+            <View style={styles.cardHeader}>
+              <View style={[styles.iconCircle, { backgroundColor: 'rgba(220, 38, 38, 0.1)' }]}>
+                <Icon name="credit-card" size={20} color="#DC2626" strokeWidth={2.5} />
+              </View>
+              <Text style={styles.cardLabel}>חייבים</Text>
+            </View>
+            <Text style={[styles.cardValue, { color: '#DC2626' }]}>
+              ₪{stats?.debts?.total || 0}
+            </Text>
+          </TouchableOpacity>
 
-      {/* Row 3: Subscriptions */}
-      <View style={styles.row}>
-        <TouchableOpacity
-          style={[styles.card, styles.activeCard]}
-          activeOpacity={0.9}
-          onPress={() => router.push('/admin/clients/active')}
-        >
-          <View style={[styles.iconCircle, { backgroundColor: '#D1FAE5' }]}>
-            <Icon name="user-check" size={24} color="#059669" strokeWidth={2.5} />
-          </View>
-          <Text style={styles.bigNumberGreen}>{stats?.active || 0}</Text>
-          <Text style={styles.labelGreen}>מנויים פעילים</Text>
-        </TouchableOpacity>
+          {/* Active Subscriptions (Left in RTL) */}
+          <TouchableOpacity
+            style={styles.statCard}
+            activeOpacity={0.9}
+            onPress={() => router.push('/admin/clients/active')}
+          >
+            <View style={styles.cardHeader}>
+              <View style={[styles.iconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
+                <Icon name="user-check" size={20} color="#10B981" strokeWidth={2.5} />
+              </View>
+              <Text style={styles.cardLabel}>מנויים פעילים</Text>
+            </View>
+            <Text style={[styles.cardValue, { color: '#10B981' }]}>
+              {stats?.active || 0}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
+        {/* Row 3: Frozen Subscriptions (Single Card) */}
         <TouchableOpacity
-          style={[styles.card, styles.frozenCard]}
+          style={[styles.statCard, styles.fullWidthCard]}
           activeOpacity={0.9}
           onPress={() => router.push('/admin/clients/frozen')}
         >
-          <View style={[styles.iconCircle, { backgroundColor: '#DBEAFE' }]}>
-            <Icon name="snowflake" size={24} color="#2563EB" strokeWidth={2.5} />
+          <View style={styles.cardHeader}>
+            <View style={[styles.iconCircle, { backgroundColor: 'rgba(37, 99, 235, 0.1)' }]}>
+              <Icon name="snowflake" size={20} color="#2563EB" strokeWidth={2.5} />
+            </View>
+            <Text style={styles.cardLabel}>מנויים בהקפאה</Text>
           </View>
-          <Text style={styles.bigNumberBlue}>{stats?.frozen || 0}</Text>
-          <Text style={styles.labelBlue}>מנויים בהקפאה</Text>
+          <Text style={[styles.cardValue, { color: '#2563EB' }]}>
+            {stats?.frozen || 0}
+          </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Divider */}
+      <View style={styles.sectionDivider} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrapper: {
-    backgroundColor: '#F8FAFC',
-    gap: 12,
-    paddingHorizontal: 16,
+    gap: 20,
   },
   loadingContainer: {
     height: 200,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-  },
-  row: {
-    flexDirection: 'row-reverse',
-    gap: 12,
-    height: 150,
-  },
-  card: {
-    flex: 1,
-    borderRadius: 14,
-    padding: 16,
-    justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
+    backgroundColor: '#F9FAFB',
   },
 
-  // Revenue Cards
-  revenueCard: {
-    backgroundColor: Colors.primary,
+  // Hero Card (Today's Income - Black Gradient)
+  heroCard: {
+    borderRadius: 16,
+    padding: 18,
+    minHeight: 110,
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  trendCard: {
+  heroRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 16,
+    marginBottom: 8,
+  },
+  heroSection: {
+    flex: 1,
+    gap: 8,
+  },
+  heroDivider: {
+    width: 1,
+    height: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  heroHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  heroHeaderLeft: {
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    marginBottom: 4,
+    minHeight: 40,
+  },
+  heroIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    textAlign: 'right',
+  },
+  heroLabelLeft: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    textAlign: 'left',
+  },
+  heroValue: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'left',
+    marginVertical: 4,
+  },
+  heroSubtext: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'right',
+  },
+  heroSubtextCenter: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
+  },
+
+  // Stats Grid
+  statsGrid: {
+    gap: 10,
+  },
+  statsRow: {
+    flexDirection: 'row-reverse',
+    gap: 10,
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 10,
+  },
+
+  // Stat Cards (White, Minimal)
+  statCard: {
+    flex: 1,
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    padding: 14,
+    minHeight: 100,
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  fullWidthCard: {
+    flex: undefined,
+    width: '100%',
   },
   cardHeader: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 8,
   },
-  iconBadgeWhite: {
-    width: 34,
-    height: 34,
+  iconCircle: {
+    width: 36,
+    height: 36,
     borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
   },
-  iconBadgeLight: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: `${Colors.primary}12`,
-    justifyContent: 'center',
-    alignItems: 'center',
+  notificationDot: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#DC2626',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
   },
-  cardTitleWhite: {
+  cardLabel: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  cardTitleDark: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  bigAmountWhite: {
-    fontSize: 30,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    textAlign: 'right',
-  },
-  bigAmountPrimary: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: Colors.primary,
-    textAlign: 'right',
-  },
-  subtextWhite: {
-    fontSize: 10,
     fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.75)',
+    color: '#6B7280',
+    textAlign: 'right',
+  },
+  cardValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    textAlign: 'left',
+    marginVertical: 4,
+  },
+  cardSubtext: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#EF4444',
     textAlign: 'right',
   },
   trendBadge: {
@@ -223,85 +342,8 @@ const styles = StyleSheet.create({
     gap: 4,
     justifyContent: 'flex-end',
   },
-  trendText: {
+  trendBadgeText: {
     fontSize: 9,
     fontWeight: '600',
-  },
-
-  // Icon Circle
-  iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    alignSelf: 'flex-end',
-  },
-
-  // Urgent & Debt Cards
-  urgentCard: {
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
-  },
-  debtCard: {
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
-  },
-  bigNumberRed: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: '#DC2626',
-    textAlign: 'right',
-  },
-  debtAmount: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#EF4444',
-    textAlign: 'right',
-    opacity: 0.85,
-  },
-  labelRed: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#991B1B',
-    textAlign: 'right',
-  },
-
-  // Active & Frozen Cards
-  activeCard: {
-    backgroundColor: '#ECFDF5',
-    borderWidth: 1,
-    borderColor: '#6EE7B7',
-  },
-  frozenCard: {
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#93C5FD',
-  },
-  bigNumberGreen: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: '#059669',
-    textAlign: 'right',
-  },
-  bigNumberBlue: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: '#2563EB',
-    textAlign: 'right',
-  },
-  labelGreen: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#065F46',
-    textAlign: 'right',
-  },
-  labelBlue: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1E40AF',
-    textAlign: 'right',
   },
 });

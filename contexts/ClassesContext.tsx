@@ -66,11 +66,7 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
     },
   });
 
-  useEffect(() => {
-    if (schedulesQuery.data) {
-      setClasses(schedulesQuery.data);
-    }
-  }, [schedulesQuery.data]);
+
 
   // Fetch all bookings to calculate accurate enrolled counts
   const allBookingsQuery = useQuery({
@@ -93,53 +89,57 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
 
   // Update enrolled counts based on all bookings
   useEffect(() => {
-    if (classes.length > 0 && allBookingsQuery.data) {
-      const updatedClasses = classes.map(classItem => {
-        // Count bookings that match this schedule and date
-        const classBookings = allBookingsQuery.data.filter((b: any) => {
-          if (!b.classes) return false;
+    if (!schedulesQuery.data || schedulesQuery.data.length === 0) {
+      return;
+    }
 
-          // Match by schedule_id
-          const matchesSchedule = b.classes.schedule_id === classItem.scheduleId;
+    // If bookings haven't loaded yet, show classes with enrolled: 0
+    if (!allBookingsQuery.data) {
+      setClasses(schedulesQuery.data);
+      return;
+    }
 
-          // Match by date (compare date strings)
-          const bookingDate = formatDateKey(new Date(b.classes.class_date));
-          const classDate = classItem.date;
-          const matchesDate = bookingDate === classDate;
+    // Use schedulesQuery.data as base to avoid stale closure issues
+    const updatedClasses = schedulesQuery.data.map(classItem => {
+      // Count bookings that match this schedule and date
+      const classBookings = allBookingsQuery.data.filter((b: any) => {
+        if (!b.classes) return false;
 
-          return matchesSchedule && matchesDate;
-        });
+        // Match by schedule_id
+        const matchesSchedule = b.classes.schedule_id === classItem.scheduleId;
 
-        const enrolledBookings = classBookings.filter((b: any) =>
-          ['confirmed', 'completed', 'no_show'].includes(b.status)
-        );
-        const waitingListBookings = classBookings.filter((b: any) =>
-          b.status === 'waiting_list'
-        );
+        // Match by date (compare date strings)
+        const bookingDate = formatDateKey(new Date(b.classes.class_date));
+        const classDate = classItem.date;
+        const matchesDate = bookingDate === classDate;
 
-        const enrolledCount = enrolledBookings.length;
-        const waitingListCount = waitingListBookings.length;
-        const enrolledAvatars = enrolledBookings
-          .map((b: any) => b.profiles?.avatar_url as string | undefined)
-          .filter((url): url is string => !!url);
-
-        return {
-          ...classItem,
-          enrolled: enrolledCount,
-          waitingListCount,
-          enrolledAvatars,
-        };
+        return matchesSchedule && matchesDate;
       });
 
-      // Only update if the enrolled counts or waiting list counts actually changed
-      const hasChanges = updatedClasses.some((c, i) =>
-        c.enrolled !== classes[i].enrolled || c.waitingListCount !== classes[i].waitingListCount
+      const enrolledBookings = classBookings.filter((b: any) =>
+        ['confirmed', 'completed', 'no_show'].includes(b.status)
       );
-      if (hasChanges) {
-        setClasses(updatedClasses);
-      }
-    }
-  }, [allBookingsQuery.data]);
+      const waitingListBookings = classBookings.filter((b: any) =>
+        b.status === 'waiting_list'
+      );
+
+      const enrolledCount = enrolledBookings.length;
+      const waitingListCount = waitingListBookings.length;
+      const enrolledAvatars = enrolledBookings
+        .map((b: any) => b.profiles?.avatar_url as string | undefined)
+        .filter((url): url is string => !!url);
+
+      return {
+        ...classItem,
+        enrolled: enrolledCount,
+        waitingListCount,
+        enrolledAvatars,
+      };
+    });
+
+    // Always update classes with the computed enrolled counts
+    setClasses(updatedClasses);
+  }, [schedulesQuery.data, allBookingsQuery.data]);
 
   const bookingsQuery = useQuery({
     queryKey: ['bookings', user?.id],
@@ -274,6 +274,18 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
       actualClassId = newClass.id;
     }
 
+    // Check if user is already booked for this class in database
+    const { data: existingDbBooking } = await supabase
+      .from('class_bookings')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('class_id', actualClassId)
+      .single();
+
+    if (existingDbBooking) {
+      throw new Error('כבר רשום לשיעור זה');
+    }
+
     // Now book with the actual class UUID
     const { data, error } = await supabase
       .from('class_bookings')
@@ -287,6 +299,10 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
 
     if (error) {
       console.error('Error booking class:', error);
+      // Check if it's a duplicate booking error
+      if (error.code === '23505') {
+        throw new Error('כבר רשום לשיעור זה');
+      }
       throw new Error('שגיאה בהזמנת השיעור');
     }
 
@@ -435,13 +451,27 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
     allBookingsQuery.refetch();
   }, [allBookingsQuery]);
 
-  const cancelBooking = useCallback((bookingId: string) => {
-    const updated = bookings.map(b =>
-      b.id === bookingId ? { ...b, status: 'cancelled' as const } : b
-    );
+  const cancelBooking = useCallback(async (bookingId: string) => {
+    // Delete from Supabase
+    const { error } = await supabase
+      .from('class_bookings')
+      .delete()
+      .eq('id', bookingId);
+
+    if (error) {
+      console.error('Error canceling booking:', error);
+      throw new Error('Failed to cancel booking');
+    }
+
+    // Update local state
+    const updated = bookings.filter(b => b.id !== bookingId);
     setBookings(updated);
     syncBookings(updated);
-  }, [bookings, syncBookings]);
+
+    // Refetch to update enrolled counts
+    allBookingsQuery.refetch();
+    bookingsQuery.refetch();
+  }, [bookings, syncBookings, allBookingsQuery, bookingsQuery]);
 
   const getMyClasses = useCallback(() => {
     const confirmedBookings = bookings.filter(b => b.status === 'confirmed');
@@ -503,32 +533,37 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
 
   const getClassBookings = useCallback(async (classId: string) => {
     try {
-      // classId is the schedule UUID, we need to find the actual class instance
+      // classId could be a schedule UUID or a class instance ID
+      // First try to find it in our classes array
       const classItem = classes.find(c => c.id === classId);
-      if (!classItem) {
-        console.error('Class not found:', classId);
-        return [];
-      }
 
-      // Find the actual class instance ID from the classes table
-      const classDateTime = new Date(`${classItem.date}T${classItem.time}`);
-      const { data: classInstance, error: classError } = await supabase
-        .from('classes')
-        .select('id')
-        .eq('schedule_id', classItem.scheduleId)
-        .eq('class_date', classDateTime.toISOString())
-        .single();
+      let classInstanceId: string;
 
-      if (classError || !classInstance) {
-        // No class instance yet - return empty array silently
-        return [];
+      if (classItem) {
+        // Found in classes array - need to get the instance ID
+        const classDateTime = new Date(`${classItem.date}T${classItem.time}`);
+        const { data: classInstance, error: classError } = await supabase
+          .from('classes')
+          .select('id')
+          .eq('schedule_id', classItem.scheduleId)
+          .eq('class_date', classDateTime.toISOString())
+          .single();
+
+        if (classError || !classInstance) {
+          // No class instance yet - return empty array silently
+          return [];
+        }
+        classInstanceId = classInstance.id;
+      } else {
+        // Not in classes array - try using classId directly as instance ID
+        classInstanceId = classId;
       }
 
       // Now get the bookings with profile data using the actual class instance ID
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('class_bookings')
         .select('*, profiles:user_id(id, name, email, avatar_url, full_name)')
-        .eq('class_id', classInstance.id)
+        .eq('class_id', classInstanceId)
         .in('status', ['confirmed', 'completed', 'no_show', 'late', 'waiting_list']);
 
       if (bookingsError) {

@@ -14,6 +14,7 @@ import { ChevronDown, X, Check } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export interface PickerOption {
     label: string;
@@ -83,22 +84,39 @@ export function Picker({
             );
         }
 
+        const isTopAnchor = anchor === 'top';
+
         return (
             <TouchableOpacity
-                style={[styles.optionItem, isSelected && styles.optionItemActive]}
+                style={[
+                    styles.optionItem,
+                    isSelected && styles.optionItemActive,
+                    isTopAnchor && styles.optionItemDark,
+                    isTopAnchor && isSelected && styles.optionItemActiveDark
+                ]}
                 onPress={() => handleSelect(item.value)}
             >
                 <View style={styles.optionContent}>
                     {item.icon && (
                         <View style={styles.optionIcon}>
-                            {item.icon({ size: 20, color: isSelected ? Colors.primary : '#666' })}
+                            {item.icon({
+                                size: 20,
+                                color: isTopAnchor
+                                    ? (isSelected ? Colors.primary : '#9CA3AF')
+                                    : (isSelected ? Colors.primary : '#666')
+                            })}
                         </View>
                     )}
-                    <Text style={[styles.optionLabel, isSelected && styles.optionLabelActive]}>
+                    <Text style={[
+                        styles.optionLabel,
+                        isSelected && styles.optionLabelActive,
+                        isTopAnchor && styles.optionLabelLight,
+                        isTopAnchor && isSelected && styles.optionLabelActiveLight
+                    ]}>
                         {item.label}
                     </Text>
                 </View>
-                {isSelected && <Check size={20} color={Colors.primary} />}
+                {isSelected && <Check size={20} color={isTopAnchor ? '#FFFFFF' : Colors.primary} />}
             </TouchableOpacity>
         );
     };
@@ -145,33 +163,56 @@ export function Picker({
                     <BlurView intensity={20} style={StyleSheet.absoluteFill} />
                     <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setVisible(false)} />
 
-                    <View style={[
-                        styles.modalContent,
-                        isTop ? styles.modalTop : { paddingBottom: insets.bottom + 20 },
-                        // For top, we might need top padding/safe area handling if header is part of it or not.
-                        // The user usage in AdminHeader handles "renderCustomModalHeader" which includes the safe area padding.
-                        // So we just strict top: 0 behavior if top anchor.
-                    ]}>
-                        {renderCustomModalHeader ? (
-                            renderCustomModalHeader(() => setVisible(false))
-                        ) : (
-                            <View style={styles.modalHeader}>
-                                <Text style={styles.modalTitle}>{modalTitle || placeholder}</Text>
-                                <TouchableOpacity onPress={() => setVisible(false)} style={styles.closeButton}>
-                                    <X size={24} color="#333" />
-                                </TouchableOpacity>
-                            </View>
-                        )}
+{isTop ? (
+                        <LinearGradient
+                            colors={['#0F172A', '#1E293B']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={[styles.modalContent, styles.modalTop]}
+                        >
+                            {renderCustomModalHeader ? (
+                                renderCustomModalHeader(() => setVisible(false))
+                            ) : (
+                                <View style={[styles.modalHeader, styles.modalHeaderDark]}>
+                                    <Text style={[styles.modalTitle, styles.modalTitleLight]}>{modalTitle || placeholder}</Text>
+                                    <TouchableOpacity onPress={() => setVisible(false)} style={styles.closeButton}>
+                                        <X size={24} color="#FFFFFF" />
+                                    </TouchableOpacity>
+                                </View>
+                            )}
 
-                        <FlatList
-                            data={options}
-                            renderItem={renderOption}
-                            keyExtractor={(item) => item.value}
-                            numColumns={grid ? 3 : 1}
-                            contentContainerStyle={styles.listContent}
-                            columnWrapperStyle={grid ? styles.columnWrapper : undefined}
-                        />
-                    </View>
+                            <FlatList
+                                data={options}
+                                renderItem={renderOption}
+                                keyExtractor={(item) => item.value}
+                                numColumns={grid ? 3 : 1}
+                                contentContainerStyle={styles.listContent}
+                                columnWrapperStyle={grid ? styles.columnWrapper : undefined}
+                            />
+                        </LinearGradient>
+                    ) : (
+                        <View style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}>
+                            {renderCustomModalHeader ? (
+                                renderCustomModalHeader(() => setVisible(false))
+                            ) : (
+                                <View style={styles.modalHeader}>
+                                    <Text style={styles.modalTitle}>{modalTitle || placeholder}</Text>
+                                    <TouchableOpacity onPress={() => setVisible(false)} style={styles.closeButton}>
+                                        <X size={24} color="#333" />
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+
+                            <FlatList
+                                data={options}
+                                renderItem={renderOption}
+                                keyExtractor={(item) => item.value}
+                                numColumns={grid ? 3 : 1}
+                                contentContainerStyle={styles.listContent}
+                                columnWrapperStyle={grid ? styles.columnWrapper : undefined}
+                            />
+                        </View>
+                    )}
                 </View>
             </Modal>
         </>
@@ -235,10 +276,16 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#F3F4F6',
     },
+    modalHeaderDark: {
+        borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    },
     modalTitle: {
         fontSize: 18,
         fontWeight: '700',
         color: '#111827',
+    },
+    modalTitleLight: {
+        color: '#FFFFFF',
     },
     closeButton: {
         padding: 4,
@@ -257,6 +304,12 @@ const styles = StyleSheet.create({
     optionItemActive: {
         backgroundColor: '#F9FAFB',
     },
+    optionItemDark: {
+        borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    optionItemActiveDark: {
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    },
     optionContent: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -273,6 +326,13 @@ const styles = StyleSheet.create({
     },
     optionLabelActive: {
         color: Colors.primary,
+        fontWeight: '700',
+    },
+    optionLabelLight: {
+        color: '#E5E7EB',
+    },
+    optionLabelActiveLight: {
+        color: '#FFFFFF',
         fontWeight: '700',
     },
     // Grid Styles

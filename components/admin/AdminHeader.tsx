@@ -11,6 +11,7 @@ import {
 import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -32,6 +33,7 @@ const MENU_ITEMS = [
     { label: 'דשבורד', value: '/admin', icon: 'speedometer' },
     { label: 'ניהול שיעורים', value: '/admin/classes', icon: 'calendar' },
     { label: 'ניהול לקוחות', value: '/admin/clients', icon: 'people' },
+    { label: 'ניהול תרגילים', value: '/admin/exercises', icon: 'barbell' },
     { label: 'ניהול טפסים', value: '/admin/forms', icon: 'document-text' },
     { label: 'דוחות', value: '/admin/financial', icon: 'bar-chart' },
     { label: 'הגדרות', value: '/admin/settings', icon: 'settings' },
@@ -112,6 +114,7 @@ export function AdminHeader({ title, disabled = false }: AdminHeaderProps) {
             case 'speedometer': return 'speedometer-outline';
             case 'calendar': return 'calendar-outline';
             case 'people': return 'people-outline';
+            case 'barbell': return 'barbell-outline';
             case 'document-text': return 'document-text-outline';
             case 'bar-chart': return 'stats-chart-outline';
             case 'settings': return 'settings-outline';
@@ -136,42 +139,54 @@ export function AdminHeader({ title, disabled = false }: AdminHeaderProps) {
                 style={[styles.menuContainer, { top: insets.top + 60 }]}
                 pointerEvents={isOpen ? 'auto' : 'none'}
             >
-                <Animated.View style={[styles.dropdown, menuStyle]}>
-                    {MENU_ITEMS.map((item, index) => {
-                        const isSelected = pathname === item.value;
-                        return (
-                            <TouchableOpacity
-                                key={index}
-                                style={[
-                                    styles.menuItem,
-                                    index === MENU_ITEMS.length - 1 && styles.lastMenuItem
-                                ]}
-                                onPress={() => handleNavigation(item.value)}
-                            >
-                                <View style={styles.menuItemContent}>
-                                    <Ionicons
-                                        name={getIoniconsName(item.icon)}
-                                        size={22}
-                                        color={
-                                            item.isDestructive ? '#EF4444' : '#FFFFFF'
-                                        }
-                                    />
-                                    <Text style={[
-                                        styles.menuItemText,
-                                        isSelected && styles.selectedText,
-                                        item.isDestructive && styles.destructiveText
-                                    ]}>
-                                        {item.label}
-                                    </Text>
-                                </View>
-                            </TouchableOpacity>
-                        )
-                    })}
+                <Animated.View style={[menuStyle]}>
+                    <LinearGradient
+                        colors={['#0F172A', '#1E293B']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.dropdown}
+                    >
+                        {MENU_ITEMS.map((item, index) => {
+                            const isSelected = pathname === item.value;
+                            return (
+                                <TouchableOpacity
+                                    key={index}
+                                    style={[
+                                        styles.menuItem,
+                                        index === MENU_ITEMS.length - 1 && styles.lastMenuItem
+                                    ]}
+                                    onPress={() => handleNavigation(item.value)}
+                                >
+                                    <View style={styles.menuItemContent}>
+                                        <Ionicons
+                                            name={getIoniconsName(item.icon)}
+                                            size={22}
+                                            color={
+                                                item.isDestructive ? '#EF4444' : '#FFFFFF'
+                                            }
+                                        />
+                                        <Text style={[
+                                            styles.menuItemText,
+                                            isSelected && styles.selectedText,
+                                            item.isDestructive && styles.destructiveText
+                                        ]}>
+                                            {item.label}
+                                        </Text>
+                                    </View>
+                                </TouchableOpacity>
+                            )
+                        })}
+                    </LinearGradient>
                 </Animated.View>
             </View>
 
             {/* Header Bar */}
-            <View style={[styles.header, { paddingTop: insets.top }]}>
+            <LinearGradient
+                colors={['#0F172A', '#1E293B']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.header, { paddingTop: insets.top }]}
+            >
                 <TouchableOpacity
                     activeOpacity={0.9}
                     onPress={toggleMenu}
@@ -179,30 +194,28 @@ export function AdminHeader({ title, disabled = false }: AdminHeaderProps) {
                 >
                     <Text style={styles.headerTitle}>{currentTitle}</Text>
                     <Animated.View style={chevronStyle}>
-                        <Ionicons name="chevron-down" size={16} color="#ffffff" />
+                        <Ionicons name="chevron-down" size={16} color="#FFFFFF" />
                     </Animated.View>
                 </TouchableOpacity>
-            </View>
+            </LinearGradient>
         </>
     );
 }
 
 const styles = StyleSheet.create({
     header: {
-        backgroundColor: '#000000',
         paddingBottom: 16,
         paddingHorizontal: 20,
-        borderBottomLeftRadius: 24,
-        borderBottomRightRadius: 24,
+        borderBottomLeftRadius: 20,
+        borderBottomRightRadius: 20,
         zIndex: 100, // Highest priority
         alignItems: 'center',
         justifyContent: 'center',
-        // Shadow for the header itself
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.15,
         shadowRadius: 8,
-        elevation: 10,
+        elevation: 5,
     },
     headerTouchable: {
         alignItems: 'center',
@@ -228,25 +241,21 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         zIndex: 95, // Below header (100), above backdrop (90)
-        alignItems: 'center', // Center the menu horizontally if we wanted, but we want full width or constrained? 
-        // Request said: "Floating Surface appearing from underneath the header"
     },
     dropdown: {
-        backgroundColor: '#000000',
         width: '100%',
         paddingHorizontal: 20,
         paddingVertical: 12,
         paddingBottom: 24,
-        borderBottomLeftRadius: 32,
-        borderBottomRightRadius: 32,
+        borderBottomLeftRadius: 20,
+        borderBottomRightRadius: 20,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 10 },
         shadowOpacity: 0.3,
         shadowRadius: 20,
         elevation: 10,
-        // Pull it up initially so it slides down from "under" the header visually
         marginTop: -20,
-        paddingTop: 30, // Add padding to push content down below the overlap
+        paddingTop: 30,
     },
     menuItem: {
         paddingVertical: 14,

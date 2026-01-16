@@ -18,7 +18,7 @@ import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 
 export default function DuplicateContentScreen() {
-    const { content } = useLocalSearchParams<{ content: string }>();
+    const { sourceClassId } = useLocalSearchParams<{ sourceClassId: string }>();
     const router = useRouter();
     const insets = useSafeAreaInsets();
 
@@ -26,10 +26,23 @@ export default function DuplicateContentScreen() {
     const [loading, setLoading] = useState(true);
     const [selectedClasses, setSelectedClasses] = useState<Set<string>>(new Set());
     const [saving, setSaving] = useState(false);
+    const [sourceData, setSourceData] = useState<{ description: string | null, workout_data: any | null } | null>(null);
 
     const fetchClasses = useCallback(async () => {
         try {
             setLoading(true);
+            // Fetch source data first
+            if (sourceClassId) {
+                const { data: source, error: sourceError } = await supabase
+                    .from('classes')
+                    .select('description, workout_data')
+                    .eq('id', sourceClassId)
+                    .single();
+
+                if (sourceError) throw sourceError;
+                setSourceData(source);
+            }
+
             // Fetch future classes
             const now = new Date().toISOString();
 
@@ -44,11 +57,11 @@ export default function DuplicateContentScreen() {
             setClasses(data || []);
         } catch (error) {
             console.error('Error fetching classes:', error);
-            Alert.alert('שגיאה', 'לא ניתן לטעון שיעורים');
+            Alert.alert('שגיאה', 'לא ניתן לטעון נתונים');
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [sourceClassId]);
 
     useEffect(() => {
         fetchClasses();
@@ -70,11 +83,19 @@ export default function DuplicateContentScreen() {
             return;
         }
 
+        if (!sourceData) {
+            Alert.alert('שגיאה', 'לא נמצא תוכן לשכפול');
+            return;
+        }
+
         setSaving(true);
         try {
             const { error } = await supabase
                 .from('classes')
-                .update({ description: content })
+                .update({
+                    description: sourceData.description,
+                    workout_data: sourceData.workout_data
+                })
                 .in('id', Array.from(selectedClasses));
 
             if (error) throw error;
@@ -82,6 +103,7 @@ export default function DuplicateContentScreen() {
             Alert.alert('הצלחה', 'התוכן שוכפל בהצלחה');
             router.back();
         } catch (error) {
+            console.error('Error duplicating content:', error);
             Alert.alert('שגיאה', 'לא ניתן לשמור את השינויים');
         } finally {
             setSaving(false);

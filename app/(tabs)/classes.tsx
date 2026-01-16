@@ -19,11 +19,63 @@ import { ClassAttendeesSheet } from '@/components/ui/ClassAttendeesSheet';
 import { CalendarSyncBar } from '@/components/ui/CalendarSyncBar';
 import { CalendarSelectionModal } from '@/components/ui/CalendarSelectionModal';
 import { Progress } from '@tamagui/progress';
+import CustomDialog, { DialogButton } from '@/components/ui/CustomDialog';
 
-// --- Logic & Helpers (KEPT 100% INTACT) ---
+// --- Logic & Helpers ---
 
 const { width } = Dimensions.get('window');
 
+/**
+ * Returns the MOST RECENT Thursday at noon (for unlock check)
+ * If today is Thu and before noon -> returns last week's Thursday
+ * If today is Thu after noon or Fri-Wed -> returns this week's Thursday
+ */
+function getMostRecentThursdayNoon(): Date {
+  const now = new Date();
+  const currentDay = now.getDay(); // 0=Sun, 4=Thu
+  const currentHour = now.getHours();
+
+  // How many days since last Thursday?
+  let daysSinceThursday = (currentDay - 4 + 7) % 7;
+
+  // If it's Thursday but before noon, treat as if Thursday hasn't happened yet
+  if (currentDay === 4 && currentHour < 12) {
+    daysSinceThursday = 7; // Go back to last week's Thursday
+  }
+
+  const recentThursday = new Date(now);
+  recentThursday.setDate(now.getDate() - daysSinceThursday);
+  recentThursday.setHours(12, 0, 0, 0);
+  return recentThursday;
+}
+
+/**
+ * Returns the MOST RECENT Wednesday at noon (for premium users unlock check)
+ * If today is Wed and before noon -> returns last week's Wednesday
+ * If today is Wed after noon or Thu-Tue -> returns this week's Wednesday
+ */
+function getMostRecentWednesdayNoon(): Date {
+  const now = new Date();
+  const currentDay = now.getDay(); // 0=Sun, 3=Wed
+  const currentHour = now.getHours();
+
+  // How many days since last Wednesday?
+  let daysSinceWednesday = (currentDay - 3 + 7) % 7;
+
+  // If it's Wednesday but before noon, treat as if Wednesday hasn't happened yet
+  if (currentDay === 3 && currentHour < 12) {
+    daysSinceWednesday = 7; // Go back to last week's Wednesday
+  }
+
+  const recentWednesday = new Date(now);
+  recentWednesday.setDate(now.getDate() - daysSinceWednesday);
+  recentWednesday.setHours(12, 0, 0, 0);
+  return recentWednesday;
+}
+
+/**
+ * Returns the NEXT upcoming Thursday at noon (for countdown display)
+ */
 function getNextThursdayNoon(): Date {
   const now = new Date();
   const currentDay = now.getDay();
@@ -37,6 +89,9 @@ function getNextThursdayNoon(): Date {
   return nextThursday;
 }
 
+/**
+ * Returns the NEXT upcoming Wednesday at noon (for premium countdown display)
+ */
 function getNextWednesdayNoon(): Date {
   const now = new Date();
   const currentDay = now.getDay();
@@ -52,14 +107,27 @@ function getNextWednesdayNoon(): Date {
 
 function getUnlockTime(subscriptionType?: string): Date {
   // reel.ONE and reel.ELITE are 'unlimited' type - get early Wednesday unlock
+  // This returns NEXT unlock time for countdown purposes
   const isPremiumUser = subscriptionType === 'unlimited';
   return isPremiumUser ? getNextWednesdayNoon() : getNextThursdayNoon();
 }
 
+/**
+ * Checks if next week is currently unlocked for booking
+ * Premium users (unlimited): unlocked from Wednesday noon until next Wednesday noon
+ * Regular users: unlocked from Thursday noon until next Thursday noon
+ */
 function isNextWeekUnlocked(subscriptionType?: string): boolean {
   const now = new Date();
-  const unlockTime = getUnlockTime(subscriptionType);
-  return now >= unlockTime;
+  const isPremiumUser = subscriptionType === 'unlimited';
+
+  // Get the most recent unlock time (when booking opened)
+  const mostRecentUnlock = isPremiumUser
+    ? getMostRecentWednesdayNoon()
+    : getMostRecentThursdayNoon();
+
+  // Next week is unlocked if we've passed the most recent unlock time
+  return now >= mostRecentUnlock;
 }
 
 function getWeekRange(date: Date): { start: Date; end: Date } {
@@ -122,7 +190,7 @@ export default function ClassesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, isAdmin, updateUser } = useAuth();
-  const { classes, bookClass, isClassBooked, getClassBookings, cancelBooking, getClassBooking } = useClasses();
+  const { classes, bookClass, isClassBooked, getClassBookings, cancelBooking, getClassBooking, bookings } = useClasses();
   const { updateProgress } = useAchievements();
 
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -147,6 +215,28 @@ export default function ClassesScreen() {
   const [availableCalendars, setAvailableCalendars] = useState<any[]>([]);
   const [syncedCalendarId, setSyncedCalendarId] = useState<string | null>(null);
 
+  // Custom Dialog State
+  const [dialogVisible, setDialogVisible] = useState(false);
+  const [dialogConfig, setDialogConfig] = useState<{
+    type?: 'success' | 'warning' | 'error' | 'confirm';
+    title?: string;
+    message?: string;
+    buttons?: DialogButton[];
+    showSuccessGif?: boolean;
+    showWarningGif?: boolean;
+    showCancelGif?: boolean;
+    autoCloseAfterGif?: boolean;
+  }>({});
+
+  const showDialog = (config: typeof dialogConfig) => {
+    setDialogConfig(config);
+    setDialogVisible(true);
+  };
+
+  const hideDialog = () => {
+    setDialogVisible(false);
+  };
+
   // Load Synced Calendar ID
   useEffect(() => {
     AsyncStorage.getItem('@reelrep_synced_calendar').then(id => {
@@ -154,7 +244,7 @@ export default function ClassesScreen() {
     });
   }, []);
 
-  // --- Data Preparation (MOVED UP FOR SCOPE) ---
+  // --- Data Preparation ---
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -265,8 +355,6 @@ export default function ClassesScreen() {
     router.push(`/class/${classId}`);
   };
 
-
-
   // --- Helper Functions ---
 
   const canCancelClass = (classItem: any) => {
@@ -286,58 +374,108 @@ export default function ClassesScreen() {
     if (!booking) return;
 
     if (blockEndDate && new Date(blockEndDate) > new Date()) {
-      Alert.alert('חשבון חסום', 'לא ניתן לבטל שיעורים כרגע. החשבון שלך חסום עד ' + new Date(blockEndDate).toLocaleDateString('he-IL'));
+      showDialog({
+        type: 'error',
+        title: 'חשבון חסום',
+        message: 'לא ניתן לבטל שיעורים כרגע. החשבון שלך חסום עד ' + new Date(blockEndDate).toLocaleDateString('he-IL'),
+        buttons: [{ text: 'אישור', onPress: hideDialog, style: 'default' }],
+      });
       return;
     }
 
     const isLateCancellation = !canCancelClass(classItem);
 
+    const performCancellation = async () => {
+      try {
+        await cancelBooking(booking.id);
+        // Success - no dialog needed, UI will update automatically
+      } catch (error) {
+        showDialog({
+          type: 'error',
+          title: 'שגיאה',
+          message: 'לא ניתן לבטל את השיעור',
+          buttons: [{ text: 'אישור', onPress: hideDialog, style: 'default' }],
+        });
+      }
+    };
+
     if (isLateCancellation) {
       // Late Cancel Logic
-      const onConfirm = () => {
-        cancelBooking(booking.id);
-        if (user?.ticket) {
-          Alert.alert('בוטל', 'השיעור בוטל. האימון נוקב מהכרטיסייה שלך.');
-        } else {
-          const newLate = lateCancellations + 1;
-          if (newLate >= 3) {
-            const blockEnd = new Date();
-            blockEnd.setDate(blockEnd.getDate() + 3);
-            updateUser({ lateCancellations: newLate, blockEndDate: blockEnd.toISOString() });
-            Alert.alert('חשבון חסום', 'ביטלת 3 שיעורים באיחור. החשבון שלך חסום ל-3 ימים.');
-          } else {
-            updateUser({ lateCancellations: newLate });
-            Alert.alert('בוטל', `השיעור בוטל. חשבונך יחויב. ביטולים מאוחרים: ${newLate}/3`);
-          }
-        }
-      };
-
-      Alert.alert(
-        'ביטול מאוחר',
-        user?.ticket ? 'האימון ינוקב מהכרטיסייה.' : `לא ניתן לבטל פחות מ-6 שעות לפני. ביטול יגרור חיוב. (${lateCancellations}/3)`,
-        [{ text: 'ביטול', style: 'cancel' }, { text: 'אשר ביטול', style: 'destructive', onPress: onConfirm }]
-      );
+      showDialog({
+        type: 'warning',
+        title: 'ביטול מאוחר',
+        message: user?.ticket
+          ? 'אתה מבטל פחות מ-6 שעות לפני תחילת השיעור.\n\nביטול מאוחר עלול לגרור לחיוב אימון מהכרטיסייה.'
+          : `לא ניתן לבטל פחות מ-6 שעות לפני.\n\nביטול יגרור חיוב. (ביטולים מאוחרים: ${lateCancellations}/3)`,
+        showWarningGif: true,
+        buttons: [
+          { text: 'חזרה', onPress: hideDialog, style: 'cancel' },
+          {
+            text: 'בטל בכל זאת',
+            onPress: () => {
+              hideDialog();
+              performCancellation();
+              // Handle late cancellation consequences
+              if (!user?.ticket) {
+                const newLate = lateCancellations + 1;
+                if (newLate >= 3) {
+                  const blockEnd = new Date();
+                  blockEnd.setDate(blockEnd.getDate() + 3);
+                  updateUser({ lateCancellations: newLate, blockEndDate: blockEnd.toISOString() });
+                }
+              }
+            },
+            style: 'destructive',
+          },
+        ],
+      });
     } else {
       // Normal Cancel
-      Alert.alert('ביטול שיעור', 'מבטלים בוודאות?', [
-        { text: 'לא', style: 'cancel' },
-        { text: 'כן, בטל', style: 'destructive', onPress: () => { cancelBooking(booking.id); Alert.alert('בוטל', 'השיעור בוטל בהצלחה.'); } }
-      ]);
+      showDialog({
+        type: 'confirm',
+        title: 'ביטול שיעור',
+        message: 'האם לבטל את ההרשמה?',
+        showCancelGif: true,
+        buttons: [
+          { text: 'לא', onPress: hideDialog, style: 'cancel' },
+          {
+            text: 'כן, בטל',
+            onPress: () => {
+              hideDialog();
+              performCancellation();
+            },
+            style: 'destructive',
+          },
+        ],
+      });
     }
   };
 
   const handleSwitchClass = (classItem: any) => {
-    // (Switch logic kept identical)
     if (blockEndDate && new Date(blockEndDate) > new Date()) {
-      Alert.alert('חשבון חסום', 'לא ניתן להחליף שיעורים כרגע.');
+      showDialog({
+        type: 'error',
+        title: 'חשבון חסום',
+        message: 'לא ניתן להחליף שיעורים כרגע.',
+        buttons: [{ text: 'אישור', onPress: hideDialog, style: 'default' }],
+      });
       return;
     }
     if (!canSwitchClass(classItem)) {
-      Alert.alert('זמן החלפה עבר', 'לא ניתן להחליף שיעור פחות משעה לפני תחילתו.');
+      showDialog({
+        type: 'warning',
+        title: 'זמן החלפה עבר',
+        message: 'לא ניתן להחליף שיעור פחות משעה לפני תחילתו.',
+        buttons: [{ text: 'אישור', onPress: hideDialog, style: 'default' }],
+      });
       return;
     }
-    // Assuming navigation to switch logic or simple alert as per original
-    Alert.alert('החלף שיעור', 'אנא בטל את השיעור הנוכחי והירשם לשיעור אחר.');
+    showDialog({
+      type: 'confirm',
+      title: 'החלף שיעור',
+      message: 'אנא בטל את השיעור הנוכחי והירשם לשיעור אחר.',
+      buttons: [{ text: 'הבנתי', onPress: hideDialog, style: 'default' }],
+    });
   };
 
   const handleMarkAttendance = async (booking: any, status: 'attended' | 'no_show') => {
@@ -354,8 +492,6 @@ export default function ClassesScreen() {
     }
   };
 
-  // --- New Sync Function ---
-  // --- Sync Function ---
   // --- Sync Function ---
   const handleSyncPress = async () => {
     // If already synced, ask to unsync
@@ -460,8 +596,6 @@ export default function ClassesScreen() {
     }
   };
 
-
-
   // --- Render ---
 
   return (
@@ -556,71 +690,99 @@ export default function ClassesScreen() {
             <Text className="text-lg font-bold text-gray-400 mt-4">אין שיעורים זמינים ליום זה</Text>
           </View>
         ) : (
-          // ... (rest of list mapping)
           filteredClasses.map((classItem, index) => {
-            const booked = isClassBooked(classItem);
+            // Robust Booking Check
+            // 1. Try standard context check (now fixed)
+            // 2. Fallback: Check bookings array directly for matching schedule + date
+            const booked = isClassBooked(classItem) || bookings.some((b: any) => {
+              if (b.status !== 'confirmed') return false;
+              if (b.schedule_id !== classItem.scheduleId) return false;
+
+              // Compare dates (YYYY-MM-DD)
+              const bookingDatePart = b.class_date ? new Date(b.class_date).toISOString().split('T')[0] : '';
+              return bookingDatePart === classItem.date;
+            });
+
             const isFull = classItem.enrolled >= classItem.capacity;
             const percent = Math.round((classItem.enrolled / classItem.capacity) * 100);
 
             return (
               <TouchableOpacity
-                // ...
                 key={index}
                 onPress={() => handleBookClass(classItem.id)}
                 activeOpacity={0.9}
                 className={cn(
-                  "bg-white rounded-2xl p-4 mb-4 border shadow-sm active:scale-[0.99]",
-                  booked ? "border-green-500 border-l-4" : "border-gray-200",
+                  "rounded-2xl p-4 mb-4 shadow-sm active:scale-[0.99] overflow-hidden",
+                  booked
+                    ? "bg-green-50 border-2 border-green-400"
+                    : "bg-white border border-gray-200",
                 )}
+                style={booked ? {
+                  shadowColor: '#22C55E',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.2,
+                  shadowRadius: 8,
+                  elevation: 4,
+                } : undefined}
               >
-                {/* ... Card Content ... (omitted for brevity in replacement, but needs to be kept) */}
-                {/* Wait, I cannot safely omit lines inside a replace block without context matching. 
-                   I should better just replace the function body above, and then replace the render part separately 
-                   or use multi_replace.
-                   
-                   Actually, I need to REMOVE the old `syncAllClasses` function implementation which is likely lines ~280-360.
-                   Then I need to ADD the `<CalendarSelectionModal ... />` at the end of the file.
-               */}
-
-                {/* ... */}
-                <View className="flex-row justify-between">
-                  {/* Right Side: Info */}
-                  <View className="flex-1 items-start pl-4">
-                    <View className="flex-row items-center gap-2 mb-1">
-                      <Text className="text-xl font-extrabold text-[#09090B] text-left">{classItem.title}</Text>
+                {/* Left Accent Strip for Booked */}
+                {booked && (
+                  <View
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: 5,
+                      backgroundColor: '#22C55E',
+                      borderTopLeftRadius: 16,
+                      borderBottomLeftRadius: 16,
+                    }}
+                  />
+                )}
+                <View className="flex-1">
+                  {/* Row 1: Class Name + Time Badge */}
+                  <View className="flex-row items-center justify-between mb-2">
+                    <View className="flex-row items-center gap-2 flex-1">
+                      <Text className="text-lg font-extrabold text-[#09090B] text-left">{classItem.title}</Text>
                       {isFull && !booked && (
-                        <View className="bg-red-100 px-2 py-0.5 rounded text-xs">
+                        <View className="bg-red-100 px-2 py-0.5 rounded">
                           <Text className="text-red-600 text-[10px] font-bold">מלא</Text>
                         </View>
                       )}
                       {booked && (
-                        <View className="bg-green-100 px-2 py-0.5 rounded text-xs">
-                          <Text className="text-green-600 text-[10px] font-bold">רשום</Text>
+                        <View className="bg-green-500 px-2 py-0.5 rounded">
+                          <Text className="text-white text-[10px] font-bold">רשום ✓</Text>
                         </View>
                       )}
                     </View>
 
-                    <View className="flex-row items-center gap-4 mb-3">
-                      <View className="flex-row items-center gap-1">
-                        <Clock size={14} color="#71717A" />
-                        <Text className="text-gray-500 font-medium">{classItem.time}</Text>
-                      </View>
-                      <View className="w-[1px] h-3 bg-gray-300" />
-                      <View className="flex-row items-center gap-1">
-                        <Image source={require('@/assets/images/coach.webp')} style={{ width: 24, height: 24, tintColor: '#6B7280' }} resizeMode="contain" />
-                        <Text className="text-gray-500 font-medium">{classItem.instructor}</Text>
-                      </View>
-                    </View>
+                    {/* Time Badge with Black Gradient */}
+                    <LinearGradient
+                      colors={['#18181B', '#09090B']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
+                    >
+                      <Text className="text-white font-bold text-sm">{classItem.time}</Text>
+                    </LinearGradient>
                   </View>
 
-                  {/* Left Side: Actions/Status */}
-                  <View className="items-center justify-center pl-1">
-                    <View className={cn(
-                      "w-12 h-12 rounded-full items-center justify-center border",
-                      booked ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-100"
-                    )}>
-                      {booked ? <Check size={20} color={Colors.success} /> : <ChevronLeft size={20} color="#09090B" />}
-                    </View>
+                  {/* Row 2: Coach with Avatar */}
+                  <View className="flex-row items-center gap-2">
+                    {classItem.instructorAvatar ? (
+                      <Image
+                        source={{ uri: classItem.instructorAvatar }}
+                        style={{ width: 24, height: 24, borderRadius: 12 }}
+                      />
+                    ) : (
+                      <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center' }}>
+                        <Text style={{ fontSize: 10, fontWeight: '600', color: '#6B7280' }}>
+                          {classItem.instructor?.charAt(0) || '?'}
+                        </Text>
+                      </View>
+                    )}
+                    <Text className="text-gray-500 font-medium text-sm">{classItem.instructor}</Text>
                   </View>
                 </View>
 
@@ -633,7 +795,7 @@ export default function ClassesScreen() {
                   <Progress
                     value={percent}
                     size="$2"
-                    backgroundColor="$gray3"
+                    backgroundColor="#E5E7EB"
                     borderRadius="$4"
                     marginBottom={12}
                   >
@@ -727,6 +889,20 @@ export default function ClassesScreen() {
         bookedCount={selectedClass ? `${selectedClass.enrolled}/${selectedClass.capacity}` : '0/0'}
         waitlistCount={selectedClass?.waitingListCount || 0}
       />
-    </View >
+
+      {/* 6. Custom Dialog */}
+      <CustomDialog
+        visible={dialogVisible}
+        onClose={hideDialog}
+        type={dialogConfig.type}
+        title={dialogConfig.title}
+        message={dialogConfig.message}
+        buttons={dialogConfig.buttons}
+        showSuccessGif={dialogConfig.showSuccessGif}
+        showWarningGif={dialogConfig.showWarningGif}
+        showCancelGif={dialogConfig.showCancelGif}
+        autoCloseAfterGif={dialogConfig.autoCloseAfterGif}
+      />
+    </View>
   );
 }

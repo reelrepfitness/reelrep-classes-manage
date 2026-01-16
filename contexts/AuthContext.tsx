@@ -33,7 +33,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('id, name, full_name, avatar_url, is_admin, is_coach, classes_used, total_workouts, gender')
+          .select('id, name, full_name, avatar_url, is_admin, is_coach, classes_used, total_workouts, gender, phone_number, birthday')
           .eq('id', sessionId)
           .single();
         if (error) {

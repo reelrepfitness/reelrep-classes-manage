@@ -1,20 +1,24 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
-    Alert,
     TouchableOpacity,
     Image,
+    Animated,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useClasses } from '@/contexts/ClassesContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from '@/components/ui/icon';
+import SwapIcon from '@/components/SwapIcon';
+import CustomDialog, { DialogButton } from '@/components/ui/CustomDialog';
 import Colors from '@/constants/colors';
+import { supabase } from '@/constants/supabase';
 
 // --- Helper Functions ---
 const formatDate = (dateStr: string) => {
@@ -40,18 +44,35 @@ const getTimeUntilClass = (dateStr: string, timeStr: string) => {
     return `מתחיל בעוד: ${minutes}m`;
 };
 
-// --- Collapsible Training Content Card ---
-const TrainingContentCard = ({ description }: { description?: string }) => {
+// --- Interfaces ---
+interface WorkoutExercise {
+    id: string;
+    name: string;
+    repsOrTime: string;
+}
+
+interface WorkoutSection {
+    id: string;
+    title: string;
+    exercises: WorkoutExercise[];
+}
+
+// --- Workout Viewer Component ---
+const WorkoutViewer = ({ workoutData, description }: { workoutData?: WorkoutSection[] | null, description?: string }) => {
     const [isExpanded, setIsExpanded] = useState(false);
+    const hasWorkoutData = workoutData && workoutData.length > 0;
+    const hasDescription = !!description;
+
+    if (!hasWorkoutData && !hasDescription) return null;
 
     return (
-        <View style={trainingContentStyles.card}>
+        <View style={workoutViewerStyles.card}>
             <TouchableOpacity
-                style={trainingContentStyles.header}
+                style={workoutViewerStyles.header}
                 onPress={() => setIsExpanded(!isExpanded)}
                 activeOpacity={0.7}
             >
-                <Text style={trainingContentStyles.title}>תוכן האימון</Text>
+                <Text style={workoutViewerStyles.title}>תוכן האימון</Text>
                 <Icon
                     name={isExpanded ? "chevron-up" : "chevron-down"}
                     size={20}
@@ -59,18 +80,50 @@ const TrainingContentCard = ({ description }: { description?: string }) => {
                     strokeWidth={2.5}
                 />
             </TouchableOpacity>
+
             {isExpanded && (
-                <View style={trainingContentStyles.content}>
-                    <Text style={trainingContentStyles.description}>
-                        {description || 'אין תיאור לאימון זה.'}
-                    </Text>
+                <View style={workoutViewerStyles.content}>
+                    {hasWorkoutData ? (
+                        <View style={workoutViewerStyles.sectionsList}>
+                            {workoutData.map((section) => (
+                                <View key={section.id} style={workoutViewerStyles.section}>
+                                    {!!section.title && (
+                                        <Text style={workoutViewerStyles.sectionTitle}>{section.title}</Text>
+                                    )}
+                                    <View style={workoutViewerStyles.exercisesList}>
+                                        {section.exercises.map((exercise, index) => (
+                                            <View key={exercise.id}>
+                                                <View style={workoutViewerStyles.exerciseRow}>
+                                                    {/* Visual Order (LTR container): [Name] [Time] */}
+                                                    {/* "Time/Reps FIRST (Rightmost)" means it appears on the Right side.
+                                                        "Followed by Name" means Name is to its Left.
+                                                        In a flex-row (LTR default), [Name, Time] puts Name Left, Time Right.
+                                                        This matches the visual requirement.
+                                                    */}
+                                                    <Text style={workoutViewerStyles.exerciseName}>{exercise.name}</Text>
+                                                    <Text style={workoutViewerStyles.exerciseTime}>{exercise.repsOrTime}</Text>
+                                                </View>
+                                                {index < section.exercises.length - 1 && (
+                                                    <View style={workoutViewerStyles.separator} />
+                                                )}
+                                            </View>
+                                        ))}
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    ) : (
+                        <Text style={workoutViewerStyles.description}>
+                            {description}
+                        </Text>
+                    )}
                 </View>
             )}
         </View>
     );
 };
 
-const trainingContentStyles = StyleSheet.create({
+const workoutViewerStyles = StyleSheet.create({
     card: {
         backgroundColor: '#FFFFFF',
         borderRadius: 16,
@@ -98,7 +151,7 @@ const trainingContentStyles = StyleSheet.create({
         paddingBottom: 16,
         borderTopWidth: 1,
         borderTopColor: '#F3F4F6',
-        paddingTop: 12,
+        paddingTop: 16,
     },
     description: {
         fontSize: 14,
@@ -106,17 +159,75 @@ const trainingContentStyles = StyleSheet.create({
         lineHeight: 22,
         textAlign: 'right',
     },
+
+    // Workout Data Styles
+    sectionsList: {
+        gap: 20,
+    },
+    section: {
+        gap: 12,
+    },
+    sectionTitle: {
+        fontSize: 20, // Large
+        fontWeight: '800', // Heavy
+        color: '#000000', // Black
+        textAlign: 'right',
+    },
+    exercisesList: {
+        gap: 8,
+    },
+    exerciseRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between', // Puts Name left, Time right
+        paddingVertical: 4,
+    },
+    exerciseName: {
+        fontSize: 15, // Regular
+        color: '#374151', // Dark Gray
+        textAlign: 'right', // Just in case
+        flex: 1,
+        marginRight: 16,
+    },
+    exerciseTime: {
+        fontSize: 15,
+        fontWeight: '700', // Bold
+        color: Colors.primary, // Brand Color
+        textAlign: 'right',
+        minWidth: 60,
+    },
+    separator: {
+        height: 1,
+        backgroundColor: '#E5E7EB',
+        borderStyle: 'dotted', // dotted doesn't work on View borderStyle directly on Android/iOS sometimes without borderWidth
+        borderWidth: 1, // Need to use dashed for RN View usually
+        borderColor: '#F3F4F6',
+    }
 });
 
 export default function ClassDetailsScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const { classes, bookClass, isClassBooked, getClassBooking, cancelBooking, getClassBookings } = useClasses();
+    const { classes, bookClass, isClassBooked, getClassBooking, cancelBooking, getClassBookings, isLoading: classesLoading } = useClasses();
 
     const [classItem, setClassItem] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [participants, setParticipants] = useState<any[]>([]);
+    const [workoutData, setWorkoutData] = useState<WorkoutSection[] | null>(null);
+
+    // Dialog states
+    const [dialogVisible, setDialogVisible] = useState(false);
+    const [dialogConfig, setDialogConfig] = useState<{
+        type?: 'success' | 'warning' | 'error' | 'confirm';
+        title?: string;
+        message?: string;
+        buttons?: DialogButton[];
+        showSuccessGif?: boolean;
+        showWarningGif?: boolean;
+        showCancelGif?: boolean;
+        autoCloseAfterGif?: boolean;
+    }>({});
 
     const fetchParticipants = useCallback(async () => {
         if (!id) return;
@@ -128,26 +239,177 @@ export default function ClassDetailsScreen() {
         }
     }, [id, getClassBookings]);
 
+    const fetchWorkoutData = useCallback(async () => {
+        if (!id) return;
+
+        try {
+            let targetClassId = id;
+
+            // Handle Virtual ID: resolve to UUID from table
+            if (id.includes('_') && !id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+                let scheduleId = '';
+                let dateStr = '';
+
+                if (id.startsWith('virtual_')) {
+                    scheduleId = id.replace('virtual_', '');
+                    // Warning: ClassDetailsScreen usually receives scheduleId_date. 
+                    // If it receives virtual_scheduleId, it might lack date.
+                    // But if this is Client side, it likely comes from Calendar which is scheduleId_date.
+                    dateStr = new Date().toISOString().split('T')[0];
+                } else {
+                    const parts = id.split('_');
+                    dateStr = parts.pop() || '';
+                    scheduleId = parts.join('_');
+                }
+
+                if (scheduleId && dateStr) {
+                    // We need to match the start_time from schedule to find the precise class_date timestamp
+                    const { data: schedule } = await supabase
+                        .from('class_schedules')
+                        .select('start_time')
+                        .eq('id', scheduleId)
+                        .single();
+
+                    if (schedule) {
+                        const classDateTime = new Date(`${dateStr}T${schedule.start_time}`);
+                        const { data: realClass } = await supabase
+                            .from('classes')
+                            .select('id, workout_data')
+                            .eq('schedule_id', scheduleId)
+                            .eq('class_date', classDateTime.toISOString())
+                            .single();
+
+                        if (realClass?.workout_data) {
+                            setWorkoutData(realClass.workout_data as WorkoutSection[]);
+                            return; // Success
+                        }
+                        // If no real class exists, we can't have workout data anyway.
+                        return;
+                    }
+                }
+            }
+
+            // Normal UUID fetch
+            const { data, error } = await supabase
+                .from('classes')
+                .select('workout_data')
+                .eq('id', targetClassId)
+                .single();
+
+            if (data?.workout_data) {
+                setWorkoutData(data.workout_data as WorkoutSection[]);
+            }
+        } catch (error) {
+            console.error('Error fetching workout data:', error);
+        }
+    }, [id]);
+
     useEffect(() => {
-        if (id) {
+        if (id && !classesLoading) {
             const found = classes.find(c => c.id === id);
             setClassItem(found || null);
             setLoading(false);
-            fetchParticipants();
+            if (found) {
+                fetchParticipants();
+                fetchWorkoutData();
+            }
         }
-    }, [id, classes, fetchParticipants]);
+    }, [id, classes, classesLoading, fetchParticipants, fetchWorkoutData]);
 
-    const isBooked = classItem ? isClassBooked(classItem) : false;
-    const booking = classItem ? getClassBooking(classItem.id) : null;
+    const { user } = useAuth();
+    const isUserInParticipants = participants.some(p => p.profiles?.id === user?.id && ['confirmed', 'completed', 'late', 'no_show'].includes(p.status));
+    const isBooked = (classItem ? isClassBooked(classItem) : false) || isUserInParticipants;
+
+    // Attempt to find booking from context OR from participants list
+    const contextBooking = classItem ? getClassBooking(classItem.id) : null;
+    const participantBooking = participants.find(p => p.profiles?.id === user?.id);
+
+    // Prefer context booking if available (has more metadata?), otherwise construct minimal booking object
+    const booking = contextBooking || (participantBooking ? {
+        id: participantBooking.id,
+        status: participantBooking.status,
+        classId: classItem?.id, // This might be virtual ID but that's what we have
+    } : null);
     const isOnWaitingList = booking?.status === 'waiting_list';
 
+    // Animation values
+    const bookedOpacity = useRef(new Animated.Value(isBooked ? 1 : 0)).current;
+    const waitlistOpacity = useRef(new Animated.Value(isOnWaitingList ? 1 : 0)).current;
+
+    useEffect(() => {
+        Animated.timing(bookedOpacity, {
+            toValue: isBooked ? 1 : 0,
+            duration: 500,
+            useNativeDriver: true,
+        }).start();
+    }, [isBooked]);
+
+    useEffect(() => {
+        Animated.timing(waitlistOpacity, {
+            toValue: isOnWaitingList ? 1 : 0,
+            duration: 500,
+            useNativeDriver: true,
+        }).start();
+    }, [isOnWaitingList]);
+
+    const showDialog = (config: typeof dialogConfig) => {
+        setDialogConfig(config);
+        setDialogVisible(true);
+    };
+
+    const hideDialog = () => {
+        setDialogVisible(false);
+    };
+
     const handleRegister = async () => {
-        if (!classItem) return;
+        if (!classItem || !user) return;
+
+        // Immediately show success dialog and update UI (optimistic update)
+        showDialog({
+            type: 'success',
+            title: 'נרשמת בהצלחה!',
+            showSuccessGif: true,
+            autoCloseAfterGif: true,
+        });
+
+        // Optimistically update the enrolled count
+        setClassItem((prev: any) => prev ? { ...prev, enrolled: (prev.enrolled || 0) + 1 } : prev);
+
+        // Optimistically add current user to participants
+        setParticipants((prev) => [
+            ...prev,
+            {
+                id: `temp-${Date.now()}`,
+                status: 'confirmed',
+                profiles: {
+                    id: user.id,
+                    full_name: user.name,
+                    avatar_url: user.profileImage,
+                },
+            },
+        ]);
+
+        // Perform actual booking in background
         try {
             await bookClass(classItem.id);
-            Alert.alert('הצלחה', 'נרשמת לשיעור בהצלחה!');
+            // Refresh to get real data
+            fetchParticipants();
         } catch (error) {
-            Alert.alert('שגיאה', (error as Error).message);
+            // Revert optimistic updates on error
+            setClassItem((prev: any) => prev ? { ...prev, enrolled: Math.max(0, (prev.enrolled || 1) - 1) } : prev);
+            setParticipants((prev) => prev.filter((p) => p.id !== `temp-${Date.now()}`));
+            fetchParticipants();
+
+            // Hide success dialog and show error
+            hideDialog();
+            setTimeout(() => {
+                showDialog({
+                    type: 'error',
+                    title: 'שגיאה',
+                    message: (error as Error).message,
+                    buttons: [{ text: 'אישור', onPress: hideDialog, style: 'default' }],
+                });
+            }, 200);
         }
     };
 
@@ -160,44 +422,57 @@ export default function ClassDetailsScreen() {
         const hoursUntilClass = (classDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
         const isLateCancellation = hoursUntilClass < 6 && hoursUntilClass > 0;
 
+        const performCancellation = async () => {
+            try {
+                await cancelBooking(booking.id);
+                fetchParticipants();
+                // No success dialog needed - user will see they're no longer in the slot
+            } catch (error) {
+                showDialog({
+                    type: 'error',
+                    title: 'שגיאה',
+                    message: 'לא ניתן לבטל את השיעור',
+                    buttons: [{ text: 'אישור', onPress: hideDialog, style: 'default' }],
+                });
+            }
+        };
+
         if (isLateCancellation) {
-            Alert.alert(
-                '⚠️ ביטול מאוחר',
-                'אתה מבטל פחות מ-6 שעות לפני תחילת השיעור.\n\nביטול מאוחר עלול לגרור לחיוב אימון מהכרטסייה.',
-                [
-                    { text: 'חזרה', style: 'cancel' },
+            showDialog({
+                type: 'warning',
+                title: 'ביטול מאוחר',
+                message: 'אתה מבטל פחות מ-6 שעות לפני תחילת השיעור.\n\nביטול מאוחר עלול לגרור לחיוב אימון מהכרטסייה.',
+                showWarningGif: true,
+                buttons: [
+                    { text: 'חזרה', onPress: hideDialog, style: 'cancel' },
                     {
                         text: 'בטל בכל זאת',
+                        onPress: () => {
+                            hideDialog();
+                            performCancellation();
+                        },
                         style: 'destructive',
-                        onPress: async () => {
-                            try {
-                                await cancelBooking(booking.id);
-                                fetchParticipants();
-                                Alert.alert('בוטל', 'השיעור בוטל בהצלחה.');
-                            } catch (error) {
-                                Alert.alert('שגיאה', 'לא ניתן לבטל את השיעור');
-                            }
-                        }
-                    }
-                ]
-            );
+                    },
+                ],
+            });
         } else {
-            Alert.alert('ביטול שיעור', 'האם לבטל את ההרשמה?', [
-                { text: 'לא', style: 'cancel' },
-                {
-                    text: 'כן, בטל',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            await cancelBooking(booking.id);
-                            fetchParticipants();
-                            Alert.alert('בוטל', 'השיעור בוטל בהצלחה.');
-                        } catch (error) {
-                            Alert.alert('שגיאה', 'לא ניתן לבטל את השיעור');
-                        }
-                    }
-                }
-            ]);
+            showDialog({
+                type: 'confirm',
+                title: 'ביטול שיעור',
+                message: 'האם לבטל את ההרשמה?',
+                showCancelGif: true,
+                buttons: [
+                    { text: 'לא', onPress: hideDialog, style: 'cancel' },
+                    {
+                        text: 'כן, בטל',
+                        onPress: () => {
+                            hideDialog();
+                            performCancellation();
+                        },
+                        style: 'destructive',
+                    },
+                ],
+            });
         }
     };
 
@@ -211,10 +486,15 @@ export default function ClassDetailsScreen() {
     };
 
     const handleSwitch = () => {
-        Alert.alert('החלף שיעור', 'אנא בטל את השיעור הנוכחי והירשם לשיעור אחר.');
+        showDialog({
+            type: 'confirm',
+            title: 'החלף שיעור',
+            message: 'אנא בטל את השיעור הנוכחי והירשם לשיעור אחר.',
+            buttons: [{ text: 'הבנתי', onPress: hideDialog, style: 'default' }],
+        });
     };
 
-    if (loading) {
+    if (loading || classesLoading) {
         return (
             <View style={styles.loadingContainer}>
                 <Text style={styles.loadingText}>טוען...</Text>
@@ -241,13 +521,38 @@ export default function ClassDetailsScreen() {
             <Stack.Screen options={{ headerShown: false }} />
 
             <View style={styles.container}>
-                {/* Header Notch */}
-                <LinearGradient
-                    colors={isOnWaitingList ? ['#F59E0B', '#D97706'] : isBooked ? ['#10B981', '#059669'] : ['#1F2937', '#111827']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={[styles.headerNotch, { paddingTop: insets.top }]}
-                >
+
+                {/* Header Notch with Smooth Transitions */}
+                <View style={[styles.headerNotch, { paddingTop: insets.top }]}>
+                    {/* 1. Base Gradient (Dark/Default) - Always visible */}
+                    <LinearGradient
+                        colors={['#1F2937', '#111827']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={StyleSheet.absoluteFill}
+                    />
+
+                    {/* 2. Waitlist Gradient (Orange) - Cross-fade */}
+                    <Animated.View style={[StyleSheet.absoluteFill, { opacity: waitlistOpacity }]}>
+                        <LinearGradient
+                            colors={['#F59E0B', '#D97706']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={StyleSheet.absoluteFill}
+                        />
+                    </Animated.View>
+
+                    {/* 3. Booked Gradient (Green) - Cross-fade */}
+                    <Animated.View style={[StyleSheet.absoluteFill, { opacity: bookedOpacity }]}>
+                        <LinearGradient
+                            colors={['#10B981', '#059669']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={StyleSheet.absoluteFill}
+                        />
+                    </Animated.View>
+
+                    {/* Content Overlay */}
                     <TouchableOpacity onPress={() => router.back()} style={styles.headerBackButton}>
                         <Icon name="chevron-right" size={24} color="#FFFFFF" strokeWidth={2.5} />
                     </TouchableOpacity>
@@ -262,7 +567,7 @@ export default function ClassDetailsScreen() {
                         )}
                     </View>
                     <View style={styles.headerSpacer} />
-                </LinearGradient>
+                </View>
 
                 <ScrollView
                     contentContainerStyle={{
@@ -305,8 +610,11 @@ export default function ClassDetailsScreen() {
                         </View>
                     </View>
 
-                    {/* Training Content Collapsible */}
-                    <TrainingContentCard description={classItem.description} />
+                    {/* Workout Content */}
+                    <WorkoutViewer
+                        workoutData={workoutData}
+                        description={classItem.description}
+                    />
 
                     {/* Slots Section */}
                     <View style={styles.slotsCard}>
@@ -391,25 +699,41 @@ export default function ClassDetailsScreen() {
                     {isBooked ? (
                         <View style={styles.footerRow}>
                             <TouchableOpacity
-                                style={styles.primaryButton}
+                                style={{ flex: 1 }}
                                 onPress={handleSwitch}
+                                activeOpacity={0.8}
                             >
-                                <Icon name="repeat" size={18} color="#FFFFFF" strokeWidth={2.5} />
-                                <Text style={styles.primaryButtonText}>החלף שיעור</Text>
+                                <LinearGradient
+                                    colors={['#1F2937', '#111827']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                    style={styles.gradientButton}
+                                >
+                                    <SwapIcon size={20} color="#F59E0B" />
+                                    <Text style={[styles.gradientButtonText, { color: '#FFFFFF' }]}>החלף שיעור</Text>
+                                </LinearGradient>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.secondaryButton, getIsLateCancellation() && styles.warningButton]}
+                                style={{ flex: 1 }}
                                 onPress={handleCancelClass}
+                                activeOpacity={0.8}
                             >
-                                <Icon
-                                    name={getIsLateCancellation() ? "alert-triangle" : "x-circle"}
-                                    size={18}
-                                    color={getIsLateCancellation() ? "#F59E0B" : "#374151"}
-                                    strokeWidth={2.5}
-                                />
-                                <Text style={[styles.secondaryButtonText, getIsLateCancellation() && styles.warningButtonText]}>
-                                    {getIsLateCancellation() ? 'ביטול מאוחר' : 'ביטול שיעור'}
-                                </Text>
+                                <LinearGradient
+                                    colors={['#1F2937', '#111827']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                    style={styles.gradientButton}
+                                >
+                                    <Icon
+                                        name={getIsLateCancellation() ? "alert-triangle" : "x-circle"}
+                                        size={18}
+                                        color="#EF4444"
+                                        strokeWidth={2.5}
+                                    />
+                                    <Text style={[styles.gradientButtonText, { color: '#FFFFFF' }]}>
+                                        {getIsLateCancellation() ? 'ביטול מאוחר' : 'ביטול שיעור'}
+                                    </Text>
+                                </LinearGradient>
                             </TouchableOpacity>
                         </View>
                     ) : (
@@ -430,6 +754,20 @@ export default function ClassDetailsScreen() {
                         </TouchableOpacity>
                     )}
                 </View>
+
+                {/* Custom Dialog */}
+                <CustomDialog
+                    visible={dialogVisible}
+                    onClose={hideDialog}
+                    type={dialogConfig.type}
+                    title={dialogConfig.title}
+                    message={dialogConfig.message}
+                    buttons={dialogConfig.buttons}
+                    showSuccessGif={dialogConfig.showSuccessGif}
+                    showWarningGif={dialogConfig.showWarningGif}
+                    showCancelGif={dialogConfig.showCancelGif}
+                    autoCloseAfterGif={dialogConfig.autoCloseAfterGif}
+                />
             </View>
         </>
     );
@@ -460,6 +798,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderBottomLeftRadius: 24,
         borderBottomRightRadius: 24,
+        overflow: 'hidden',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.15,
@@ -799,5 +1138,18 @@ const styles = StyleSheet.create({
     },
     disabledButton: {
         backgroundColor: '#D1D5DB',
+    },
+    gradientButton: {
+        flex: 1,
+        borderRadius: 16,
+        paddingVertical: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+    },
+    gradientButtonText: {
+        fontSize: 15,
+        fontWeight: '700',
     },
 });

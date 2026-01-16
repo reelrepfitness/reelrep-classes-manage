@@ -19,7 +19,7 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('class_schedules')
-        .select('*')
+        .select('*, coach:coach_id(avatar_url)')
         .eq('is_active', true);
 
       if (error) throw error;
@@ -45,6 +45,7 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
             classDate: classDate.toISOString(),
             title: schedule.name,
             instructor: schedule.coach_name,
+            instructorAvatar: (schedule.coach as any)?.avatar_url || null,
             date: dateKey,
             time: `${hours}:${minutes}`,
             duration: schedule.duration_minutes,
@@ -507,8 +508,12 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
     const classDate = classItem.date;
 
     return bookings.some((b: any) => {
-      const matchesSchedule = b.scheduleId === classItem.scheduleId;
-      const bookingDate = b.classDate ? formatDateKey(new Date(b.classDate)) : null;
+      // Support both camelCase (from mapped data) and snake_case (fallback)
+      const bookingScheduleId = b.scheduleId || b.schedule_id;
+      const bookingClassDate = b.classDate || b.class_date;
+
+      const matchesSchedule = bookingScheduleId === classItem.scheduleId;
+      const bookingDate = bookingClassDate ? formatDateKey(new Date(bookingClassDate)) : null;
       const matchesDate = bookingDate === classDate;
       return matchesSchedule && matchesDate && b.status === 'confirmed';
     });
@@ -520,8 +525,12 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
     if (!classItem) return undefined;
 
     return bookings.find((b: any) => {
-      const matchesSchedule = b.scheduleId === classItem.scheduleId;
-      const bookingDate = b.classDate ? formatDateKey(new Date(b.classDate)) : null;
+      // Support both camelCase (from mapped data) and snake_case (fallback)
+      const bookingScheduleId = b.scheduleId || b.schedule_id;
+      const bookingClassDate = b.classDate || b.class_date;
+
+      const matchesSchedule = bookingScheduleId === classItem.scheduleId;
+      const bookingDate = bookingClassDate ? formatDateKey(new Date(bookingClassDate)) : null;
       const matchesDate = bookingDate === classItem.date;
       return matchesSchedule && matchesDate && b.status === 'confirmed';
     });

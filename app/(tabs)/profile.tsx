@@ -134,7 +134,11 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           <View style={styles.profileInfo}>
-            <View style={styles.avatarWrapper}>
+            <TouchableOpacity
+              style={styles.avatarWrapper}
+              onPress={() => router.push('/edit-profile' as any)}
+              activeOpacity={0.8}
+            >
               {user?.profileImage ? (
                 <Image source={{ uri: user.profileImage }} style={styles.avatar} />
               ) : (
@@ -145,7 +149,7 @@ export default function ProfileScreen() {
               <View style={styles.editBadge}>
                 <Ionicons name="pencil" size={12} color="#fff" />
               </View>
-            </View>
+            </TouchableOpacity>
             <Text style={styles.userName}>{user?.name || 'אורח'}</Text>
             <Text style={styles.userEmail}>{user?.email || 'user@example.com'}</Text>
           </View>

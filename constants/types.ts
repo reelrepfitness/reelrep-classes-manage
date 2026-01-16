@@ -88,6 +88,7 @@ export interface Class {
   description: string;
   instructor: string;
   instructorImage?: string;
+  instructorAvatar?: string | null;
   date: string;
   time: string;
   duration: number;

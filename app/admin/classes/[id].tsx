@@ -48,15 +48,31 @@ const getProgressColor = (ratio: number) => {
     return '#10B981'; // Open - Green
 };
 
+// --- Interfaces ---
+interface WorkoutExercise {
+    id: string;
+    name: string;
+    repsOrTime: string;
+}
+
+interface WorkoutSection {
+    id: string;
+    title: string;
+    exercises: WorkoutExercise[];
+}
+
 // --- Collapsible Training Content Card ---
 const TrainingContentCard = ({
     description,
+    workoutData,
     onAddContent
 }: {
     description?: string;
+    workoutData?: WorkoutSection[] | null;
     onAddContent: () => void;
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
+    const hasWorkoutData = workoutData && workoutData.length > 0;
 
     return (
         <View style={trainingContentStyles.card}>
@@ -79,14 +95,36 @@ const TrainingContentCard = ({
                     onPress={onAddContent}
                     activeOpacity={0.7}
                 >
-                    <Icon name="plus" size={20} color={Colors.primary} strokeWidth={2.5} />
+                    <Icon name={hasWorkoutData || description ? "edit-2" : "plus"} size={18} color={Colors.primary} strokeWidth={2.5} />
                 </TouchableOpacity>
             </View>
             {isExpanded && (
                 <View style={trainingContentStyles.content}>
-                    <Text style={trainingContentStyles.description}>
-                        {description || 'אין תיאור לאימון זה.'}
-                    </Text>
+                    {hasWorkoutData ? (
+                        <View style={trainingContentStyles.sectionsList}>
+                            {workoutData!.map((section) => (
+                                <View key={section.id} style={trainingContentStyles.section}>
+                                    {!!section.title && (
+                                        <Text style={trainingContentStyles.sectionTitle}>{section.title}</Text>
+                                    )}
+                                    <View style={trainingContentStyles.exercisesList}>
+                                        {section.exercises.map((exercise, index) => (
+                                            <View key={exercise.id}>
+                                                <View style={trainingContentStyles.exerciseRow}>
+                                                    <Text style={trainingContentStyles.exerciseName}>{exercise.name}</Text>
+                                                    <Text style={trainingContentStyles.exerciseTime}>{exercise.repsOrTime}</Text>
+                                                </View>
+                                            </View>
+                                        ))}
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    ) : (
+                        <Text style={trainingContentStyles.description}>
+                            {description || 'אין תיאור לאימון זה.'}
+                        </Text>
+                    )}
                 </View>
             )}
         </View>
@@ -135,7 +173,7 @@ const trainingContentStyles = StyleSheet.create({
         paddingBottom: 16,
         borderTopWidth: 1,
         borderTopColor: '#F3F4F6',
-        paddingTop: 12,
+        paddingTop: 16,
     },
     description: {
         fontSize: 14,
@@ -143,6 +181,48 @@ const trainingContentStyles = StyleSheet.create({
         lineHeight: 22,
         textAlign: 'right',
     },
+    sectionsList: {
+        gap: 20,
+    },
+    section: {
+        gap: 12,
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#111827',
+        textAlign: 'right',
+    },
+    exercisesList: {
+        gap: 8,
+    },
+    exerciseRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 4,
+    },
+    exerciseName: {
+        fontSize: 15,
+        color: '#374151',
+        textAlign: 'right',
+        flex: 1,
+        marginRight: 16,
+    },
+    exerciseTime: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: Colors.primary,
+        textAlign: 'right',
+        minWidth: 60,
+    },
+    separator: {
+        height: 1,
+        backgroundColor: '#E5E7EB',
+        borderStyle: 'dotted',
+        borderWidth: 1,
+        borderColor: '#F3F4F6',
+    }
 });
 
 // --- Add Client Modal ---
@@ -526,15 +606,35 @@ export default function AdminClassDetailsScreen() {
                     return;
                 }
 
+                // Try to find matching real class for workout data
+                // Need to match schedule_id and exact date/time
+                // Approximating date (today) for now as admin likely views 'today' context when clicking virtually
+                // Better approach: Admin usually enters via calendar with specific date context, but 'id' param only has virtual_scheduleId sometimes.
+                // NOTE: If coming from calendar, ID is usually "virtual_scheduleId". We assume TODAY or nearest occurrence?
+                // Actually, let's just create a basic item. If we want workout data, we'd need exact date.
+
+                // Try to finding a class instance for TODAY or upcoming?
+                // For simplicity in this fix, we'll check if there's a class for TODAY with this schedule.
+                const todayStr = new Date().toISOString().split('T')[0];
+                const classDateTime = new Date(`${todayStr}T${schedule.start_time}`);
+
+                const { data: realClass } = await supabase
+                    .from('classes')
+                    .select('workout_data')
+                    .eq('schedule_id', scheduleId)
+                    .eq('class_date', classDateTime.toISOString())
+                    .single();
+
                 setClassItem({
                     id: id,
                     title: schedule.name,
                     instructor: schedule.coach_name || 'מאמן',
-                    date: new Date().toISOString().split('T')[0],
+                    date: todayStr,
                     time: schedule.start_time,
                     capacity: schedule.max_participants || 15,
                     enrolled: 0,
                     description: schedule.description,
+                    workoutData: realClass?.workout_data,
                     classDate: new Date(),
                 });
                 setParticipants([]);
@@ -562,6 +662,7 @@ export default function AdminClassDetailsScreen() {
                     capacity: classInstance.max_participants || 15,
                     enrolled: classInstance.bookings?.[0]?.count || 0,
                     description: classInstance.description,
+                    workoutData: classInstance.workout_data,
                     classDate: classDate,
                 });
 
@@ -727,14 +828,14 @@ export default function AdminClassDetailsScreen() {
     };
 
     const handleDuplicateContent = () => {
-        if (!classItem?.description) {
-            Alert.alert('אין תוכן', 'אין תוכן אימון לשכפל');
-            return;
-        }
-        // Navigate to a screen where they can select which class to copy to
-        router.push(`/admin/classes/duplicate-content?content=${encodeURIComponent(classItem.description)}`);
-    };
+        const hasContent = classItem?.description || (classItem?.workoutData && Array.isArray(classItem.workoutData) && classItem.workoutData.length > 0);
 
+        if (hasContent) {
+            router.push(`/admin/classes/duplicate-content?sourceClassId=${classItem.id}`);
+        } else {
+            Alert.alert('שגיאה', 'אין תוכן לשכפול (תיאור או תוכנית אימון)');
+        }
+    };
     const handleCancelClass = () => {
         Alert.alert(
             'ביטול אימון',
@@ -861,6 +962,7 @@ export default function AdminClassDetailsScreen() {
                     {/* Training Content Collapsible */}
                     <TrainingContentCard
                         description={classItem.description}
+                        workoutData={classItem.workoutData}
                         onAddContent={handleAddContent}
                     />
 

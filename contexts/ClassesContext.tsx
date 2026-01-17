@@ -598,7 +598,8 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
                 id,
                 name,
                 icon,
-                catagory
+                catagory,
+                task_requirement
               )
             `)
             .eq('user_id', userId)

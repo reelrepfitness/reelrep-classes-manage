@@ -13,6 +13,8 @@ import {
     ActivityIndicator,
     I18nManager,
     Dimensions,
+    LayoutAnimation,
+    UIManager,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -23,20 +25,33 @@ import Colors from '@/constants/colors';
 import { supabase } from '@/constants/supabase';
 import { useGreenInvoice } from '@/app/hooks/useGreenInvoice';
 import { PaymentType } from '@/types/green-invoice';
-import * as Linking from 'expo-linking';
+import * as Haptics from 'expo-haptics';
+import { Tag, ChevronDown, Check } from 'lucide-react-native';
 
 // Ensure RTL
 I18nManager.allowRTL(true);
 
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 const TAB_BAR_HEIGHT = 80;
 const { width } = Dimensions.get('window');
 
-// --- Config ---
-const PAYMENT_METHODS = [
-    { id: 'credit_card', label: 'כרטיס אשראי', icon: 'card', iosIcon: 'creditcard.fill', color: '#2563EB', bg: '#EFF6FF' },
-    { id: 'cash', label: 'מזומן', icon: 'cash', iosIcon: 'banknote.fill', color: '#059669', bg: '#ECFDF5' },
-    { id: 'bit', label: 'ביט / אפליקציה', icon: 'phone-portrait', iosIcon: 'iphone.circle.fill', color: '#7C3AED', bg: '#F5F3FF', image: require('@/assets/images/bit-icon.png') },
-    { id: 'debt', label: 'רשום כחוב', icon: 'document-text', iosIcon: 'signature', color: '#DC2626', bg: '#FEF2F2' },
+// Payment method images from assets
+const PAYMENT_IMAGES = {
+    credit_card: require('@/assets/images/credit-card.webp'),
+    bit: require('@/assets/images/bit.webp'),
+    cash: require('@/assets/images/cash.webp'),
+    debt: require('@/assets/images/debt.webp'),
+};
+
+const PAYMENT_OPTIONS = [
+    { id: 'credit_card', label: 'כרטיס אשראי', image: PAYMENT_IMAGES.credit_card },
+    { id: 'bit', label: 'ביט', image: PAYMENT_IMAGES.bit },
+    { id: 'cash', label: 'מזומן', image: PAYMENT_IMAGES.cash },
+    { id: 'debt', label: 'רשום כחוב', icon: 'document-text', iosIcon: 'signature' },
 ];
 
 // --- Icons Helper ---
@@ -56,38 +71,66 @@ export default function POSPaymentScreen() {
     const clientData = {
         id: params.clientId as string,
         name: params.clientName as string,
+        email: params.clientEmail as string,
+        phone: params.clientPhone as string || '',
     };
     const totalAmount = parseFloat(params.totalAmount as string || '0');
     const items = params.cartItems ? JSON.parse(params.cartItems as string) : [];
+    const planId = params.planId as string;
+    const planType = params.planType as string;
+    const startDate = params.startDate as string || new Date().toISOString();
+    const endDate = params.endDate as string;
 
     // State
     const [payments, setPayments] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
+
+    // Discount State (moved from register)
+    const [discountValue, setDiscountValue] = useState('');
+    const [discountType, setDiscountType] = useState<'nis' | '%'>('nis');
+    const [showDiscountSection, setShowDiscountSection] = useState(false);
 
     // Modal State
     const [modalVisible, setModalVisible] = useState(false);
-    const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
     const [amountInput, setAmountInput] = useState('');
 
     const { createInvoice } = useGreenInvoice();
 
+    // Calculate discount
+    const calculateDiscount = () => {
+        const disc = parseFloat(discountValue) || 0;
+        if (disc <= 0) return 0;
+        if (discountType === 'nis') return disc;
+        return totalAmount * (disc / 100);
+    };
+
+    const discountedAmount = Math.max(0, totalAmount - calculateDiscount());
+
     // Computed
     const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
-    const remainingAmount = Math.max(0, totalAmount - totalPaid);
+    const remainingAmount = Math.max(0, discountedAmount - totalPaid);
     const isFullyPaid = remainingAmount < 0.1;
 
-    // Mock Suggestions
-    const suggestions = searchQuery.length > 0
-        ? ['ישראל ישראלי', 'אבי כהן', 'דני לוי', 'רוני דואני', 'אלירן סבג'].filter(s => s.includes(searchQuery))
-        : [];
+    const toggleDiscountSection = () => {
+        if (Platform.OS !== 'web') {
+            Haptics.selectionAsync();
+        }
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setShowDiscountSection(!showDiscountSection);
+    };
 
     const handleMethodPress = (methodId: string) => {
-        if (remainingAmount <= 0) return;
+        if (Platform.OS !== 'web') {
+            Haptics.selectionAsync();
+        }
         setSelectedMethod(methodId);
-        setAmountInput(remainingAmount.toString());
-        setModalVisible(true);
+
+        // If remaining amount, open modal for amount input
+        if (remainingAmount > 0) {
+            setAmountInput(remainingAmount.toString());
+            setModalVisible(true);
+        }
     };
 
     const confirmAddPayment = () => {
@@ -98,16 +141,77 @@ export default function POSPaymentScreen() {
     };
 
     const removePayment = (id: string) => {
+        if (Platform.OS !== 'web') {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        }
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setPayments(prev => prev.filter(p => p.id !== id));
     };
 
     const handleFinish = async () => {
         setLoading(true);
-        // Simulation for UI check
-        setTimeout(() => {
+        try {
+            // Determine payment method (use first payment or 'mixed' if multiple)
+            const paymentMethod = payments.length === 1
+                ? payments[0].method
+                : payments.length > 1 ? 'mixed' : 'unknown';
+
+            if (planType === 'ticket') {
+                // Create ticket
+                const item = items[0];
+                const { error } = await supabase.from('user_tickets').insert({
+                    user_id: clientData.id,
+                    plan_id: planId,
+                    total_sessions: item.total_sessions || 0,
+                    sessions_remaining: item.total_sessions || 0,
+                    status: 'active',
+                    purchase_date: startDate,
+                    expiry_date: endDate,
+                    payment_method: paymentMethod,
+                    payment_reference: `ADMIN-POS-${Date.now()}`,
+                });
+                if (error) throw error;
+            } else {
+                // Create subscription
+                const { error } = await supabase.from('user_subscriptions').insert({
+                    user_id: clientData.id,
+                    plan_id: planId,
+                    status: 'active',
+                    is_active: true,
+                    start_date: startDate,
+                    end_date: endDate,
+                    payment_method: paymentMethod,
+                    payment_reference: `ADMIN-POS-${Date.now()}`,
+                    sessions_used_this_week: 0,
+                });
+                if (error) throw error;
+            }
+
+            // Create invoice record
+            const { error: invoiceError } = await supabase.from('invoices').insert({
+                user_id: clientData.id,
+                amount: discountedAmount,
+                payment_status: 'paid',
+                payment_method: paymentMethod,
+                cart_items: items,
+                discount_amount: calculateDiscount(),
+                created_at: new Date().toISOString(),
+            });
+
+            if (invoiceError) {
+                console.warn('[POS] Invoice creation warning:', invoiceError);
+                // Don't fail the whole operation for invoice error
+            }
+
+            Alert.alert("הצלחה", "המנוי/כרטיסייה נוצרו בהצלחה!", [
+                { text: "אישור", onPress: () => router.replace('/(tabs)/register') }
+            ]);
+        } catch (error) {
+            console.error('[POS] Error creating subscription/ticket:', error);
+            Alert.alert("שגיאה", "אירעה שגיאה ביצירת המנוי. נסה שנית.");
+        } finally {
             setLoading(false);
-            Alert.alert("הצלחה", "חשבונית הופקה בהצלחה!");
-        }, 1500);
+        }
     };
 
     return (
@@ -123,27 +227,67 @@ export default function POSPaymentScreen() {
                     <View style={{ width: 40 }} />
                 </View>
 
-                {/* Search Bar */}
-                <View style={styles.searchContainer}>
-                    <RenderIcon name="search" iosName="magnifyingglass" size={18} color="#9CA3AF" />
-                    <TextInput
-                        style={styles.searchInput}
-                        placeholder="חפש לקוח לשיוך..."
-                        placeholderTextColor="#9CA3AF"
-                        value={searchQuery}
-                        onChangeText={(t) => { setSearchQuery(t); setShowSuggestions(t.length > 0); }}
-                        textAlign="right"
-                    />
-                    {searchQuery.length > 0 && (
-                        <TouchableOpacity onPress={() => { setSearchQuery(''); setShowSuggestions(false); }}>
-                            <RenderIcon name="close" iosName="xmark.circle.fill" size={18} color="#9CA3AF" />
-                        </TouchableOpacity>
-                    )}
+                {/* Selected Client Display (replacing search bar) */}
+                <View style={styles.selectedClientContainer}>
+                    <View style={styles.clientAvatarSmall}>
+                        <Text style={styles.clientInitialsSmall}>
+                            {clientData.name?.[0]?.toUpperCase() || '?'}
+                        </Text>
+                    </View>
+                    <View style={styles.clientInfoContainer}>
+                        <Text style={styles.clientNameSmall}>{clientData.name}</Text>
+                        <Text style={styles.clientEmailSmall}>{clientData.email}</Text>
+                    </View>
                 </View>
             </View>
 
             {/* --- 2. Main Content --- */}
             <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 200 }]} showsVerticalScrollIndicator={false}>
+
+                {/* Discount Card (moved from register) */}
+                <View style={styles.discountCard}>
+                    <TouchableOpacity
+                        onPress={toggleDiscountSection}
+                        style={styles.discountHeader}
+                        activeOpacity={0.7}
+                    >
+                        <View style={styles.discountHeaderRight}>
+                            <View style={[styles.discountIconCircle, discountValue && styles.discountIconCircleActive]}>
+                                <Tag size={16} color={discountValue ? '#fff' : '#64748b'} />
+                            </View>
+                            <Text style={styles.discountTitle}>
+                                {discountValue ? `הנחה: ${discountValue}${discountType === 'nis' ? '₪' : '%'}` : 'הוסף הנחה'}
+                            </Text>
+                        </View>
+                        <ChevronDown
+                            size={20}
+                            color="#94a3b8"
+                            style={{ transform: [{ rotate: showDiscountSection ? '180deg' : '0deg' }] }}
+                        />
+                    </TouchableOpacity>
+
+                    {showDiscountSection && (
+                        <View style={styles.discountInputContainer}>
+                            <TextInput
+                                style={styles.discountInput}
+                                placeholder="0"
+                                keyboardType="numeric"
+                                value={discountValue}
+                                onChangeText={setDiscountValue}
+                                textAlign="center"
+                            />
+                            <TouchableOpacity
+                                onPress={() => {
+                                    if (Platform.OS !== 'web') Haptics.selectionAsync();
+                                    setDiscountType(t => t === 'nis' ? '%' : 'nis');
+                                }}
+                                style={styles.discountTypeButton}
+                            >
+                                <Text style={styles.discountTypeText}>{discountType === 'nis' ? '₪' : '%'}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+                </View>
 
                 {/* Hero Amount */}
                 <View style={styles.heroCard}>
@@ -158,27 +302,51 @@ export default function POSPaymentScreen() {
                     )}
                 </View>
 
-                {/* Payment Methods Grid */}
+                {/* Payment Methods Grid - 2x2 with cart.tsx styling */}
                 <Text style={styles.sectionHeader}>איך תרצה לשלם?</Text>
-                <View style={styles.gridContainer}>
-                    {PAYMENT_METHODS.map((method) => (
-                        <TouchableOpacity
-                            key={method.id}
-                            style={[styles.card, { backgroundColor: method.bg }, remainingAmount <= 0 && styles.disabledCard]}
-                            onPress={() => handleMethodPress(method.id)}
-                            activeOpacity={0.7}
-                            disabled={remainingAmount <= 0}
-                        >
-                            <View style={styles.cardContent}>
-                                {method.image ? (
-                                    <Image source={method.image} style={styles.cardImage} contentFit="contain" />
-                                ) : (
-                                    <RenderIcon name={method.icon} iosName={method.iosIcon} size={32} color={method.color} />
+                <View style={styles.paymentGrid}>
+                    {PAYMENT_OPTIONS.map((option) => {
+                        const isSelected = selectedMethod === option.id;
+                        return (
+                            <TouchableOpacity
+                                key={option.id}
+                                onPress={() => handleMethodPress(option.id)}
+                                activeOpacity={0.7}
+                                disabled={remainingAmount <= 0}
+                                style={[
+                                    styles.paymentTile,
+                                    isSelected && styles.paymentTileSelected,
+                                    remainingAmount <= 0 && styles.paymentTileDisabled,
+                                ]}
+                            >
+                                {isSelected && (
+                                    <View style={styles.checkBadge}>
+                                        <Check size={10} color="#fff" strokeWidth={3} />
+                                    </View>
                                 )}
-                                <Text style={[styles.cardLabel, { color: method.color }]}>{method.label}</Text>
-                            </View>
-                        </TouchableOpacity>
-                    ))}
+                                {option.image ? (
+                                    <Image
+                                        source={option.image}
+                                        style={styles.paymentImage}
+                                        contentFit="contain"
+                                    />
+                                ) : (
+                                    <RenderIcon
+                                        name={option.icon}
+                                        iosName={option.iosIcon}
+                                        size={48}
+                                        color={isSelected ? '#da4477' : '#64748b'}
+                                    />
+                                )}
+                                <Text style={[
+                                    styles.paymentLabel,
+                                    isSelected && styles.paymentLabelSelected
+                                ]}>
+                                    {option.label}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+                    })}
                 </View>
 
                 {/* Added Payments List */}
@@ -186,12 +354,16 @@ export default function POSPaymentScreen() {
                     <View style={styles.summaryContainer}>
                         <Text style={styles.sectionHeader}>פירוט תשלומים</Text>
                         {payments.map((p) => {
-                            const m = PAYMENT_METHODS.find(x => x.id === p.method);
+                            const m = PAYMENT_OPTIONS.find(x => x.id === p.method);
                             return (
                                 <View key={p.id} style={styles.paymentRow}>
                                     <View style={styles.paymentRowRight}>
-                                        <View style={[styles.miniIcon, { backgroundColor: m?.bg }]}>
-                                            <RenderIcon name={m?.icon} iosName={m?.iosIcon} size={16} color={m?.color} />
+                                        <View style={styles.miniIcon}>
+                                            {m?.image ? (
+                                                <Image source={m.image} style={{ width: 20, height: 20 }} contentFit="contain" />
+                                            ) : (
+                                                <RenderIcon name={m?.icon} iosName={m?.iosIcon} size={16} color="#64748b" />
+                                            )}
                                         </View>
                                         <Text style={styles.paymentText}>{m?.label}</Text>
                                     </View>
@@ -208,35 +380,19 @@ export default function POSPaymentScreen() {
                 )}
             </ScrollView>
 
-            {/* --- 3. Absolute Suggestions Layer (Fixes Z-Index Issue) --- */}
-            {showSuggestions && suggestions.length > 0 && (
-                <View style={[styles.suggestionsLayer, { top: insets.top + 120 }]}>
-                    {suggestions.map((item, idx) => (
-                        <TouchableOpacity
-                            key={idx}
-                            style={styles.suggestionRow}
-                            onPress={() => { setSearchQuery(item); setShowSuggestions(false); }}
-                        >
-                            <RenderIcon name="person" iosName="person.circle" size={20} color="#6B7280" />
-                            <Text style={styles.suggestionText}>{item}</Text>
-                        </TouchableOpacity>
-                    ))}
+            {/* --- 3. Sticky Footer --- */}
+            <View style={[styles.footerContainer, { paddingBottom: insets.bottom + 16 }]}>
+                {/* Top Row - Total */}
+                <View style={styles.footerRow}>
+                    <Text style={styles.totalLabel}>סה"כ לתשלום</Text>
+                    <Text style={styles.totalValue}>₪{discountedAmount.toLocaleString()}</Text>
                 </View>
-            )}
-
-            {/* --- 4. Floating Footer --- */}
-            <View style={[styles.footerContainer, { bottom: insets.bottom + TAB_BAR_HEIGHT + 10 }]}>
-                {/* Top Actions Row */}
-                <View style={styles.footerActions}>
-                    <TouchableOpacity style={styles.discountBtn}>
-                        <RenderIcon name="pricetag" iosName="tag.fill" size={14} color={Colors.primary} />
-                        <Text style={styles.discountText}>הוסף הנחה</Text>
-                    </TouchableOpacity>
-                    <View>
-                        <Text style={styles.totalLabel}>סה"כ לתשלום</Text>
-                        <Text style={styles.totalValue}>₪{totalAmount.toLocaleString()}</Text>
+                {calculateDiscount() > 0 && (
+                    <View style={styles.footerRow}>
+                        <Text style={styles.discountLabel}>הנחה:</Text>
+                        <Text style={styles.discountValue}>-₪{calculateDiscount().toLocaleString()}</Text>
                     </View>
-                </View>
+                )}
 
                 {/* Main Action Button */}
                 <TouchableOpacity
@@ -255,7 +411,7 @@ export default function POSPaymentScreen() {
                 </TouchableOpacity>
             </View>
 
-            {/* --- 5. Amount Modal --- */}
+            {/* --- 4. Amount Modal --- */}
             <Modal visible={modalVisible} transparent animationType="slide">
                 <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalContainer}>
                     <TouchableOpacity style={styles.modalBackdrop} onPress={() => setModalVisible(false)} />
@@ -287,77 +443,345 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F9FAFB' },
 
     // Header
-    header: { backgroundColor: '#fff', paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderColor: '#F3F4F6', zIndex: 10 },
-    headerTop: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-    headerTitle: { fontSize: 18, fontWeight: '700', color: '#111' },
-    iconButton: { width: 40, height: 40, backgroundColor: '#F3F4F6', borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-
-    // Search
-    searchContainer: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: '#F9FAFB', borderRadius: 12, paddingHorizontal: 12, height: 44, borderWidth: 1, borderColor: '#E5E7EB' },
-    searchInput: { flex: 1, textAlign: 'right', fontSize: 16, color: '#111', marginRight: 8, height: '100%' },
-
-    // Suggestions Absolute Layer
-    suggestionsLayer: {
-        position: 'absolute', left: 20, right: 20, backgroundColor: '#fff',
-        borderRadius: 16, paddingVertical: 8, zIndex: 9999, elevation: 20,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.2, shadowRadius: 20
+    header: {
+        backgroundColor: '#fff',
+        paddingHorizontal: 20,
+        paddingBottom: 16,
+        borderBottomWidth: 1,
+        borderColor: '#F3F4F6',
+        zIndex: 10,
     },
-    suggestionRow: { flexDirection: 'row-reverse', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderColor: '#F3F4F6', gap: 10 },
-    suggestionText: { fontSize: 16, color: '#374151' },
+    headerTop: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 12,
+    },
+    headerTitle: { fontSize: 18, fontWeight: '700', color: '#111' },
+    iconButton: {
+        width: 40,
+        height: 40,
+        backgroundColor: '#F3F4F6',
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    // Selected Client Display
+    selectedClientContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F8FAFC',
+        borderRadius: 16,
+        padding: 14,
+        gap: 12,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+    },
+    clientAvatarSmall: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: Colors.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    clientInitialsSmall: {
+        color: '#fff',
+        fontWeight: '700',
+        fontSize: 16,
+    },
+    clientInfoContainer: {
+        flex: 1,
+    },
+    clientNameSmall: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#1a1a2e',
+        textAlign: 'left',
+    },
+    clientEmailSmall: {
+        fontSize: 13,
+        color: '#64748b',
+        marginTop: 2,
+        textAlign: 'left',
+    },
 
     content: { padding: 20 },
+
+    // Discount Card
+    discountCard: {
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        marginBottom: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+        elevation: 4,
+    },
+    discountHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 18,
+    },
+    discountHeaderRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    discountIconCircle: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        backgroundColor: '#f1f5f9',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    discountIconCircleActive: {
+        backgroundColor: Colors.primary,
+    },
+    discountTitle: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#1a1a2e',
+    },
+    discountInputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingHorizontal: 18,
+        paddingBottom: 18,
+    },
+    discountInput: {
+        flex: 1,
+        height: 48,
+        backgroundColor: '#f8fafc',
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1a1a2e',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    discountTypeButton: {
+        width: 48,
+        height: 48,
+        backgroundColor: '#f1f5f9',
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    discountTypeText: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#374151',
+    },
 
     // Hero
     heroCard: { alignItems: 'center', marginBottom: 30, marginTop: 10 },
     heroLabel: { fontSize: 14, color: '#6B7280', marginBottom: 6, fontWeight: '500' },
     heroAmount: { fontSize: 48, fontWeight: '800', color: '#EF4444', letterSpacing: -1 },
-    successBadge: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: '#ECFDF5', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, gap: 6 },
+    successBadge: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        backgroundColor: '#ECFDF5',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        gap: 6,
+    },
     successText: { color: '#059669', fontWeight: '700', fontSize: 18 },
 
-    // Grid
-    sectionHeader: { fontSize: 16, fontWeight: '700', color: '#111', marginBottom: 12, textAlign: 'right' },
-    gridContainer: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 12, marginBottom: 30 },
-    card: { width: (width - 52) / 2, height: 110, borderRadius: 20, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(0,0,0,0.03)' },
-    disabledCard: { opacity: 0.4 },
-    cardContent: { alignItems: 'center', gap: 8 },
-    cardImage: { width: 32, height: 32 },
-    cardLabel: { fontSize: 14, fontWeight: '700' },
+    // Payment Grid - 2x2 with cart.tsx styling
+    sectionHeader: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#111',
+        marginBottom: 12,
+        textAlign: 'right',
+    },
+    paymentGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 12,
+        marginBottom: 30,
+    },
+    paymentTile: {
+        width: '47%',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        paddingVertical: 14,
+        borderWidth: 2,
+        borderColor: '#e2e8f0',
+        minHeight: 100,
+        opacity: 0.5,
+        position: 'relative',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    paymentTileSelected: {
+        borderColor: '#1a1a2e',
+        opacity: 1,
+        transform: [{ scale: 1.05 }],
+    },
+    paymentTileDisabled: {
+        opacity: 0.3,
+    },
+    checkBadge: {
+        position: 'absolute',
+        top: 6,
+        right: 6,
+        width: 18,
+        height: 18,
+        borderRadius: 9,
+        backgroundColor: '#1a1a2e',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1,
+    },
+    paymentImage: {
+        width: 80,
+        height: 80,
+    },
+    paymentLabel: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#1a1a2e',
+        marginTop: 4,
+    },
+    paymentLabelSelected: {
+        fontWeight: '700',
+        color: '#da4477',
+    },
 
     // Summary List
-    summaryContainer: { backgroundColor: '#fff', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 10, elevation: 2 },
-    paymentRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-    paymentRowRight: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
-    miniIcon: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+    summaryContainer: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 16,
+        shadowColor: '#000',
+        shadowOpacity: 0.03,
+        shadowRadius: 10,
+        elevation: 2,
+    },
+    paymentRow: {
+        flexDirection: 'row-reverse',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    paymentRowRight: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        gap: 10,
+    },
+    miniIcon: {
+        width: 28,
+        height: 28,
+        borderRadius: 8,
+        backgroundColor: '#f1f5f9',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     paymentText: { fontSize: 15, fontWeight: '600', color: '#374151' },
-    paymentRowLeft: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
+    paymentRowLeft: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        gap: 10,
+    },
     paymentAmount: { fontSize: 16, fontWeight: '700', color: '#111' },
     trashBtn: { padding: 6, backgroundColor: '#FEF2F2', borderRadius: 8 },
 
-    // Footer
+    // Footer - Sticky at bottom
     footerContainer: {
-        position: 'absolute', left: 16, right: 16, backgroundColor: '#fff',
-        borderRadius: 24, padding: 20,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 16, elevation: 10,
-        zIndex: 50
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: '#fff',
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: '#f1f5f9',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        elevation: 10,
     },
-    footerActions: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-    totalLabel: { fontSize: 12, color: '#6B7280', textAlign: 'left' },
-    totalValue: { fontSize: 22, fontWeight: '800', color: '#111', textAlign: 'left' },
-    discountBtn: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: '#EFF6FF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, gap: 6 },
-    discountText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
-    mainButton: { backgroundColor: Colors.primary, borderRadius: 16, paddingVertical: 16, flexDirection: 'row-reverse', justifyContent: 'center', alignItems: 'center', gap: 10 },
+    footerRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    totalLabel: {
+        fontSize: 14,
+        color: '#6B7280',
+        fontWeight: '500',
+    },
+    totalValue: {
+        fontSize: 22,
+        fontWeight: '800',
+        color: '#111',
+    },
+    discountLabel: {
+        fontSize: 13,
+        color: '#10b981',
+        fontWeight: '500',
+    },
+    discountValue: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#10b981',
+    },
+    mainButton: {
+        backgroundColor: Colors.primary,
+        borderRadius: 16,
+        paddingVertical: 16,
+        flexDirection: 'row-reverse',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 10,
+    },
     btnDisabled: { backgroundColor: '#E5E7EB' },
     mainButtonText: { color: '#fff', fontSize: 18, fontWeight: '700' },
 
     // Modal
     modalContainer: { flex: 1, justifyContent: 'flex-end' },
     modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
-    modalCard: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
-    modalHandle: { width: 40, height: 4, backgroundColor: '#E5E7EB', borderRadius: 2, alignSelf: 'center', marginBottom: 24 },
+    modalCard: {
+        backgroundColor: '#fff',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        padding: 24,
+        paddingBottom: 40,
+    },
+    modalHandle: {
+        width: 40,
+        height: 4,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginBottom: 24,
+    },
     modalTitle: { fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 20 },
-    inputRow: { flexDirection: 'row-reverse', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+    inputRow: {
+        flexDirection: 'row-reverse',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
     currencySymbol: { fontSize: 32, fontWeight: '700', color: '#9CA3AF', marginLeft: 8 },
     amountInput: { fontSize: 48, fontWeight: '800', color: '#111', minWidth: 100, textAlign: 'center' },
     confirmBtn: { backgroundColor: Colors.primary, borderRadius: 16, paddingVertical: 16, alignItems: 'center' },
-    confirmBtnText: { color: '#fff', fontSize: 18, fontWeight: '700' }
+    confirmBtnText: { color: '#fff', fontSize: 18, fontWeight: '700' },
 });

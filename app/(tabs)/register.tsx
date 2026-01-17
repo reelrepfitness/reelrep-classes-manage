@@ -9,19 +9,38 @@ import {
     ActivityIndicator,
     Alert,
     Image,
-    KeyboardAvoidingView,
     Platform,
-    Dimensions
+    UIManager,
+    Dimensions,
+    Modal,
+    Pressable,
+    LayoutAnimation,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
 import { supabase } from '@/constants/supabase';
-import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
-import { BlurView } from 'expo-blur';
+import Animated, { FadeIn, SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
+import {
+    Search,
+    ChevronDown,
+    Check,
+    X,
+    Calendar,
+    Tag,
+    User,
+    ChevronRight,
+} from 'lucide-react-native';
+import { RegisterIcon } from '@/components/QuickToolsIcons';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const { width } = Dimensions.get('window');
 
@@ -46,8 +65,12 @@ interface Plan {
     id: string;
     name: string;
     name_hebrew?: string;
+    description?: string;
     price: number;
     type: 'subscription' | 'ticket';
+    total_sessions?: number;
+    validity_days?: number;
+    sessions_per_week?: number;
 }
 
 export default function POSCartScreen() {
@@ -62,12 +85,17 @@ export default function POSCartScreen() {
 
     const [activeTab, setActiveTab] = useState<'subscription' | 'ticket'>('subscription');
     const [plans, setPlans] = useState<Plan[]>([]);
-    const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
+    const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
     const [loadingPlans, setLoadingPlans] = useState(false);
 
-    const [discountValue, setDiscountValue] = useState('');
-    const [discountType, setDiscountType] = useState<'nis' | '%'>('nis');
-    const [showDiscountInput, setShowDiscountInput] = useState(false);
+    // Date customization
+    const [customStartDate, setCustomStartDate] = useState<Date>(new Date());
+    const [customEndDate, setCustomEndDate] = useState<Date>(new Date());
+
+    // Calendar modal state
+    const [showCalendarModal, setShowCalendarModal] = useState(false);
+    const [editingDateType, setEditingDateType] = useState<'start' | 'end'>('start');
+    const [calendarDisplayDate, setCalendarDisplayDate] = useState<Date>(new Date());
 
     // --- Data Fetching ---
     useEffect(() => {
@@ -80,7 +108,7 @@ export default function POSCartScreen() {
             try {
                 const { data, error } = await supabase
                     .from('profiles')
-                    .select('id, full_name, email, avatar_url') // Phone excluded as per previous fix
+                    .select('id, full_name, email, avatar_url')
                     .or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`)
                     .limit(5);
                 if (!error) setClients(data || []);
@@ -97,24 +125,21 @@ export default function POSCartScreen() {
             try {
                 let data: any[] = [];
                 if (activeTab === 'subscription') {
-                    const { data: subs } = await supabase.from('subscription_plans').select('*').eq('is_active', true);
-                    console.log('[POS] Raw subscription plans:', subs);
-                    // Map price-6-months to price field
-                    data = (subs || []).map((p: any) => {
-                        const price = p['price-6-months'] || 0;
-                        console.log(`[POS] Plan ${p.name}: price-6-months = ${p['price-6-months']}, mapped price = ${price}`);
-                        return {
-                            ...p,
-                            type: 'subscription',
-                            price
-                        };
-                    });
+                    // Match ShopContext fetch
+                    const { data: subs } = await supabase
+                        .from('subscription_plans')
+                        .select('id,name,type,sessions_per_week,description,full_price_in_advance,"price-per-month"')
+                        .eq('is_active', true);
+                    data = (subs || []).map((p: any) => ({
+                        ...p,
+                        type: 'subscription',
+                        price: p.full_price_in_advance ? Number(p.full_price_in_advance) : 0,
+                        pricePerMonth: p['price-per-month'] ? Number(p['price-per-month']) : undefined,
+                    }));
                 } else {
                     const { data: ticks } = await supabase.from('ticket_plans').select('*').eq('is_active', true);
-                    console.log('[POS] Raw ticket plans:', ticks);
                     data = (ticks || []).map((p: any) => ({ ...p, type: 'ticket' }));
                 }
-                console.log('[POS] Final plans:', data);
                 setPlans(data);
             } catch (e) {
                 console.error('[POS] Error fetching plans:', e);
@@ -125,16 +150,58 @@ export default function POSCartScreen() {
         fetchPlans();
     }, [activeTab]);
 
+    // Handle plan selection with animation and default dates
+    const handleSelectPlan = (planId: string) => {
+        if (Platform.OS !== 'web') {
+            Haptics.selectionAsync();
+        }
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+
+        if (selectedPlanId === planId) {
+            setSelectedPlanId(null);
+            return;
+        }
+
+        setSelectedPlanId(planId);
+        const plan = plans.find(p => p.id === planId);
+        if (!plan) return;
+
+        const start = new Date();
+        let end = new Date();
+
+        if (plan.type === 'subscription') {
+            end.setMonth(end.getMonth() + 6);
+        } else {
+            const validityDays = plan.validity_days || 90;
+            end.setDate(end.getDate() + validityDays);
+        }
+
+        setCustomStartDate(start);
+        setCustomEndDate(end);
+    };
+
+    // Get selected plan
+    const selectedPlan = plans.find(p => p.id === selectedPlanId) || null;
+
     // --- Logic ---
     const calculateTotal = () => {
         if (!selectedPlan) return 0;
-        let price = selectedPlan.price;
-        const disc = parseFloat(discountValue) || 0;
-        if (disc > 0) {
-            if (discountType === 'nis') price -= disc;
-            else price -= price * (disc / 100);
+        return selectedPlan.price;
+    };
+
+    // Render plan image based on name
+    const renderPlanImage = (plan: Plan) => {
+        const name = (plan.name || '').toUpperCase();
+        if (name.includes('ELITE')) {
+            return <Image source={require('@/assets/images/reel-elite.png')} style={styles.planImage} resizeMode="contain" />;
+        } else if (name.includes('ONE')) {
+            return <Image source={require('@/assets/images/reel-one.png')} style={styles.planImage} resizeMode="contain" />;
+        } else if (plan.total_sessions === 10 || name.includes('10')) {
+            return <Image source={require('@/assets/images/10sessions.png')} style={styles.planImage} resizeMode="contain" />;
+        } else if (plan.total_sessions === 20 || name.includes('20')) {
+            return <Image source={require('@/assets/images/20sessions.png')} style={styles.planImage} resizeMode="contain" />;
         }
-        return Math.max(0, price);
+        return <Text style={styles.planNameFallback}>{plan.name}</Text>;
     };
 
     const handleProceed = () => {
@@ -143,8 +210,12 @@ export default function POSCartScreen() {
             return;
         }
         if (!selectedPlan) {
-            Alert.alert('עגלה ריקה', 'אנא בחר מוצר כדי להמשיך');
+            Alert.alert('לא נבחר מוצר', 'אנא בחר מנוי או כרטיסייה');
             return;
+        }
+
+        if (Platform.OS !== 'web') {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
 
         const total = calculateTotal();
@@ -152,7 +223,8 @@ export default function POSCartScreen() {
             id: selectedPlan.id,
             name: selectedPlan.name_hebrew || selectedPlan.name,
             price: selectedPlan.price,
-            type: selectedPlan.type
+            type: selectedPlan.type,
+            total_sessions: selectedPlan.total_sessions,
         }];
 
         router.push({
@@ -161,224 +233,1105 @@ export default function POSCartScreen() {
                 clientId: selectedClient.id,
                 clientName: selectedClient.full_name,
                 clientEmail: selectedClient.email,
-                clientPhone: selectedClient.phone || '', // Fallback if missing
+                clientPhone: selectedClient.phone || '',
                 totalAmount: total.toString(),
                 cartItems: JSON.stringify(items),
-                planId: selectedPlan.id, // For legacy logic support
+                planId: selectedPlan.id,
                 planType: selectedPlan.type,
+                startDate: customStartDate.toISOString(),
+                endDate: customEndDate.toISOString(),
             }
         });
     };
 
+    const formatDateHebrew = (date: Date) => {
+        return date.toLocaleDateString('he-IL', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
+
+    // Calendar helper functions
+    const DAYS_HEBREW = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
+    const MONTHS_HEBREW = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+
+    const getCalendarDays = (date: Date) => {
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        const weeks: (number | null)[][] = [];
+        let currentWeek: (number | null)[] = [];
+
+        for (let i = 0; i < firstDay; i++) currentWeek.push(null);
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            currentWeek.push(day);
+            if (currentWeek.length === 7) {
+                weeks.push([...currentWeek]);
+                currentWeek = [];
+            }
+        }
+
+        if (currentWeek.length > 0) {
+            while (currentWeek.length < 7) currentWeek.push(null);
+            weeks.push(currentWeek);
+        }
+
+        return weeks;
+    };
+
+    const handleCalendarDateSelect = (day: number) => {
+        const selectedDate = new Date(calendarDisplayDate.getFullYear(), calendarDisplayDate.getMonth(), day);
+
+        // Validate: end date cannot be before start date
+        if (editingDateType === 'end' && selectedDate < customStartDate) {
+            return;
+        }
+
+        if (editingDateType === 'start') {
+            setCustomStartDate(selectedDate);
+            // If new start is after end, adjust end
+            if (selectedDate > customEndDate) {
+                const newEnd = new Date(selectedDate);
+                newEnd.setMonth(newEnd.getMonth() + 6);
+                setCustomEndDate(newEnd);
+            }
+        } else {
+            setCustomEndDate(selectedDate);
+        }
+
+        setShowCalendarModal(false);
+    };
+
+    const navigateCalendarMonth = (direction: 'prev' | 'next') => {
+        const newDate = new Date(calendarDisplayDate);
+        newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1));
+        setCalendarDisplayDate(newDate);
+    };
+
+    const handleClientSelect = (client: Profile) => {
+        if (Platform.OS !== 'web') {
+            Haptics.selectionAsync();
+        }
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setSelectedClient(client);
+        setSearchQuery('');
+    };
+
+    const handleRemoveClient = () => {
+        if (Platform.OS !== 'web') {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        }
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setSelectedClient(null);
+    };
+
+
+
     return (
         <View style={styles.container}>
-            {/* Header: Client Selection */}
-            <LinearGradient
-                colors={['#1a1a1a', '#000000', '#000000']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 0, y: 1 }}
-                style={[styles.header, { paddingTop: insets.top }]}
+            {/* Header - Shop Style */}
+            <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
+                {/* Back Button - Left side (RTL: visually on right) */}
+                <TouchableOpacity
+                    onPress={() => router.back()}
+                    style={styles.backButton}
+                >
+                    <Ionicons name="arrow-forward" size={24} color="#1a1a2e" />
+                </TouchableOpacity>
+
+                <RegisterIcon size={48} />
+                <Text style={styles.headerSubtitle}>בחרו לקוח ומוצר להמשך</Text>
+
+                {/* Segmented Control */}
+                <View style={styles.segmentedControl}>
+                    <TouchableOpacity
+                        onPress={() => {
+                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                            setActiveTab('subscription');
+                            setSelectedPlanId(null);
+                        }}
+                        style={[
+                            styles.segmentButton,
+                            activeTab === 'subscription' && styles.segmentButtonActive
+                        ]}
+                    >
+                        <Text style={[
+                            styles.segmentText,
+                            activeTab === 'subscription' && styles.segmentTextActive
+                        ]}>מנויים</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() => {
+                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                            setActiveTab('ticket');
+                            setSelectedPlanId(null);
+                        }}
+                        style={[
+                            styles.segmentButton,
+                            activeTab === 'ticket' && styles.segmentButtonActive
+                        ]}
+                    >
+                        <Text style={[
+                            styles.segmentText,
+                            activeTab === 'ticket' && styles.segmentTextActive
+                        ]}>כרטיסיות</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+
+            {/* Content */}
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
             >
-                <Text style={styles.screenTitle}>קופה רושמת</Text>
-
+                {/* Client Selection - Simplified when selected */}
                 {selectedClient ? (
-                    <Animated.View entering={FadeIn} style={styles.selectedClientCard}>
+                    <View style={styles.selectedClientCard}>
                         <View style={styles.clientAvatar}>
-                            <Text style={styles.clientInitials}>{selectedClient.full_name?.[0]}</Text>
+                            <Text style={styles.clientInitials}>
+                                {selectedClient.full_name?.[0]?.toUpperCase()}
+                            </Text>
                         </View>
-                        <View style={styles.clientInfo}>
+                        <View style={styles.clientDetails}>
                             <Text style={styles.clientName}>{selectedClient.full_name}</Text>
-                            <Text style={styles.clientSub}>{selectedClient.email}</Text>
+                            <Text style={styles.clientEmail}>{selectedClient.email}</Text>
                         </View>
-                        <TouchableOpacity onPress={() => setSelectedClient(null)} style={styles.removeClientBtn}>
-                            <RenderIcon name="close" iosName="xmark" size={16} color="#fff" />
+                        <TouchableOpacity onPress={handleRemoveClient} style={styles.removeClientButton}>
+                            <X size={20} color="#ef4444" />
                         </TouchableOpacity>
-                    </Animated.View>
-                ) : (
-                    <View style={styles.searchBar}>
-                        <RenderIcon name="search" iosName="magnifyingglass" size={20} color="#9CA3AF" />
-                        <TextInput
-                            style={styles.searchInput}
-                            placeholder="חפש לקוח..."
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                            placeholderTextColor="#9CA3AF"
-                        />
                     </View>
-                )}
+                ) : (
+                    <View style={styles.card}>
+                        <View style={styles.cardHeader}>
+                            <View style={styles.cardHeaderRight}>
+                                <View style={styles.iconCircle}>
+                                    <User size={18} color="#64748b" />
+                                </View>
+                                <Text style={styles.cardTitle}>בחר לקוח</Text>
+                            </View>
+                        </View>
 
-                {/* Search Results */}
-                {!selectedClient && searchQuery.length > 1 && (
-                    <View style={styles.searchResults}>
-                        {loadingClients ? <ActivityIndicator color={Colors.primary} /> : (
-                            clients.map(client => (
-                                <TouchableOpacity
-                                    key={client.id}
-                                    style={styles.resultItem}
-                                    onPress={() => { setSelectedClient(client); setSearchQuery(''); }}
-                                >
-                                    <Text style={styles.resultName}>{client.full_name}</Text>
-                                    <Text style={styles.resultEmail}>{client.email}</Text>
-                                </TouchableOpacity>
-                            ))
+                        <View style={styles.searchInputContainer}>
+                            <Search size={18} color="#94a3b8" />
+                            <TextInput
+                                style={styles.searchInput}
+                                placeholder="חפש לפי שם או אימייל..."
+                                value={searchQuery}
+                                onChangeText={setSearchQuery}
+                                placeholderTextColor="#94a3b8"
+                            />
+                        </View>
+
+                        {searchQuery.length > 1 && (
+                            <View style={styles.searchResults}>
+                                {loadingClients ? (
+                                    <ActivityIndicator color={Colors.primary} style={{ padding: 16 }} />
+                                ) : clients.length === 0 ? (
+                                    <Text style={styles.noResults}>לא נמצאו תוצאות</Text>
+                                ) : (
+                                    clients.map((client, index) => (
+                                        <TouchableOpacity
+                                            key={client.id}
+                                            style={[
+                                                styles.searchResultItem,
+                                                index !== clients.length - 1 && styles.searchResultBorder
+                                            ]}
+                                            onPress={() => handleClientSelect(client)}
+                                        >
+                                            <View style={styles.resultAvatar}>
+                                                <Text style={styles.resultInitials}>
+                                                    {client.full_name?.[0]?.toUpperCase()}
+                                                </Text>
+                                            </View>
+                                            <View style={styles.resultInfo}>
+                                                <Text style={styles.resultName}>{client.full_name}</Text>
+                                                <Text style={styles.resultEmail}>{client.email}</Text>
+                                            </View>
+                                            <ChevronRight size={18} color="#94a3b8" />
+                                        </TouchableOpacity>
+                                    ))
+                                )}
+                            </View>
                         )}
                     </View>
                 )}
-            </LinearGradient>
 
-            {/* Body: Product Selection */}
-            <View style={{ flex: 1 }}>
-                <View style={styles.tabsContainer}>
-                    <TouchableOpacity
-                        style={[styles.tab, activeTab === 'subscription' && styles.activeTab]}
-                        onPress={() => setActiveTab('subscription')}
-                    >
-                        <RenderIcon name="card" iosName="creditcard.fill" size={18} color={activeTab === 'subscription' ? '#fff' : '#4B5563'} />
-                        <Text style={[styles.tabText, activeTab === 'subscription' && styles.activeTabText]}>מנויים</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.tab, activeTab === 'ticket' && styles.activeTab]}
-                        onPress={() => setActiveTab('ticket')}
-                    >
-                        <RenderIcon name="ticket" iosName="ticket.fill" size={18} color={activeTab === 'ticket' ? '#fff' : '#4B5563'} />
-                        <Text style={[styles.tabText, activeTab === 'ticket' && styles.activeTabText]}>כרטיסיות</Text>
-                    </TouchableOpacity>
-                </View>
+                {/* Plans - Expandable Cards like Shop */}
+                {loadingPlans ? (
+                    <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+                ) : (
+                    plans.map((plan) => {
+                        const isSelected = selectedPlanId === plan.id;
+                        const isTicket = plan.type === 'ticket';
 
-                <ScrollView contentContainerStyle={styles.gridContent} showsVerticalScrollIndicator={false}>
-                    {loadingPlans ? (
-                        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
-                    ) : (
-                        <View style={styles.grid}>
-                            {plans.map(plan => {
-                                const isSelected = selectedPlan?.id === plan.id;
-                                return (
-                                    <TouchableOpacity
-                                        key={plan.id}
-                                        style={[styles.card, isSelected && styles.selectedCard]}
-                                        onPress={() => setSelectedPlan(plan)}
-                                        activeOpacity={0.8}
-                                    >
-                                        <View style={[styles.cardIcon, isSelected && { backgroundColor: Colors.primary }]}>
-                                            <RenderIcon
-                                                name={plan.type === 'subscription' ? 'ribbon' : 'ticket'}
-                                                iosName={plan.type === 'subscription' ? 'crown.fill' : 'ticket.fill'}
-                                                size={24}
-                                                color={isSelected ? '#fff' : Colors.primary}
-                                            />
-                                        </View>
-                                        <Text style={styles.cardPrice}>₪{plan.price}</Text>
-                                        <Text style={styles.cardTitle} numberOfLines={2}>{plan.name_hebrew || plan.name}</Text>
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </View>
-                    )}
-                </ScrollView>
-            </View>
+                        return (
+                            <TouchableOpacity
+                                key={plan.id}
+                                onPress={() => handleSelectPlan(plan.id)}
+                                activeOpacity={0.9}
+                                style={[
+                                    styles.planCard,
+                                    isSelected && styles.planCardSelected
+                                ]}
+                            >
+                                {/* Header Row */}
+                                <View style={styles.planCardHeader}>
+                                    <View style={styles.planCardLeft}>
+                                        {renderPlanImage(plan)}
 
-            {/* Sticky Footer */}
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}>
-                <View style={[styles.footer, { paddingBottom: insets.bottom + 85 }]}>
-                    {/* 85 is approx for CustomTabBar height */}
+                                        {/* Badge */}
+                                        {!isTicket && (
+                                            <LinearGradient
+                                                colors={[Colors.gradient1, Colors.gradient2]}
+                                                start={{ x: 0, y: 0 }}
+                                                end={{ x: 1, y: 0 }}
+                                                style={styles.planBadge}
+                                            >
+                                                <Text style={styles.planBadgeText}>חופשי חודשי</Text>
+                                            </LinearGradient>
+                                        )}
+                                        {isTicket && (
+                                            <LinearGradient
+                                                colors={[Colors.gradient1, Colors.gradient2]}
+                                                start={{ x: 0, y: 0 }}
+                                                end={{ x: 1, y: 0 }}
+                                                style={styles.planBadge}
+                                            >
+                                                <Text style={styles.planBadgeText}>
+                                                    {plan.total_sessions === 10 ? '69₪ לאימון' : plan.total_sessions === 20 ? '54₪ לאימון' : `${plan.total_sessions} אימונים`}
+                                                </Text>
+                                            </LinearGradient>
+                                        )}
+                                    </View>
 
-                    {/* Discount Row */}
-                    <TouchableOpacity style={styles.discountToggle} onPress={() => setShowDiscountInput(!showDiscountInput)}>
-                        <RenderIcon name="pricetag" iosName="tag.fill" size={14} color="#6B7280" />
-                        <Text style={styles.discountLabel}>
-                            {discountValue ? `הנחה: ${discountValue}${discountType === 'nis' ? '₪' : '%'}` : 'הוסף הנחה'}
-                        </Text>
-                    </TouchableOpacity>
+                                    <View style={styles.planCardRight}>
+                                        <Text style={styles.planPrice}>₪{plan.price}</Text>
+                                        {!isTicket && <Text style={styles.planPriceSub}>ל-6 חודשים</Text>}
+                                    </View>
+                                </View>
 
-                    {showDiscountInput && (
-                        <Animated.View entering={FadeInUp} style={styles.discountInputRow}>
-                            <TextInput
-                                style={styles.discInput}
-                                placeholder="0"
-                                keyboardType="numeric"
-                                value={discountValue}
-                                onChangeText={setDiscountValue}
-                                autoFocus
-                            />
-                            <TouchableOpacity onPress={() => setDiscountType(t => t === 'nis' ? '%' : 'nis')} style={styles.discTypeBtn}>
-                                <Text style={styles.discTypeText}>{discountType === 'nis' ? '₪' : '%'}</Text>
+                                {/* Description (always visible) */}
+                                {plan.description && (
+                                    <Text style={styles.planDescription} numberOfLines={isSelected ? undefined : 1}>
+                                        {plan.description.split('\n')[0]}
+                                    </Text>
+                                )}
+
+                                {/* Expanded Content - Only Date Pickers */}
+                                {isSelected && (
+                                    <View style={styles.expandedContent}>
+                                        {/* Start Date Picker */}
+                                        <TouchableOpacity
+                                            style={styles.datePickerRowInline}
+                                            onPress={() => {
+                                                setEditingDateType('start');
+                                                setCalendarDisplayDate(customStartDate);
+                                                setShowCalendarModal(true);
+                                            }}
+                                        >
+                                            <Text style={styles.datePickerLabelInline}>תאריך התחלה:</Text>
+                                            <View style={styles.datePickerValueContainer}>
+                                                <Text style={styles.datePickerValueText}>{formatDateHebrew(customStartDate)}</Text>
+                                                <Calendar size={18} color={Colors.primary} />
+                                            </View>
+                                        </TouchableOpacity>
+
+                                        {/* End Date Picker */}
+                                        <TouchableOpacity
+                                            style={styles.datePickerRowInline}
+                                            onPress={() => {
+                                                setEditingDateType('end');
+                                                setCalendarDisplayDate(customEndDate);
+                                                setShowCalendarModal(true);
+                                            }}
+                                        >
+                                            <Text style={styles.datePickerLabelInline}>תאריך סיום:</Text>
+                                            <View style={styles.datePickerValueContainer}>
+                                                <Text style={styles.datePickerValueText}>{formatDateHebrew(customEndDate)}</Text>
+                                                <Calendar size={18} color={Colors.primary} />
+                                            </View>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+
+                                {/* Expand Indicator */}
+                                {!isSelected && (
+                                    <View style={styles.expandIndicator}>
+                                        <ChevronDown size={20} color="#e2e8f0" />
+                                    </View>
+                                )}
                             </TouchableOpacity>
-                        </Animated.View>
-                    )}
+                        );
+                    })
+                )}
 
-                    <View style={styles.footerMain}>
-                        <View>
-                            <Text style={styles.totalLabel}>סה"כ לתשלום</Text>
-                            <Text style={styles.totalValue}>₪{calculateTotal().toFixed(0)}</Text>
+
+            </ScrollView>
+
+            {/* Sticky Footer - Animated like Shop */}
+            {selectedPlanId && selectedClient && (
+                <Animated.View
+                    entering={SlideInDown.duration(400)}
+                    exiting={SlideOutDown.duration(300)}
+                    style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}
+                >
+                    <View style={styles.footerContent}>
+                        <View style={styles.footerLeft}>
+                            <Text style={styles.footerLabel}>סה"כ לתשלום</Text>
+                            <Text style={styles.footerTotal}>₪{calculateTotal().toFixed(0)}</Text>
                         </View>
 
                         <TouchableOpacity
-                            style={[styles.proceedBtn, (!selectedClient || !selectedPlan) && styles.proceedBtnDisabled]}
                             onPress={handleProceed}
-                            disabled={!selectedClient || !selectedPlan}
+                            activeOpacity={0.8}
+                            style={styles.proceedButton}
                         >
-                            <Text style={styles.proceedText}>המשך לתשלום</Text>
-                            <RenderIcon name="arrow-forward" iosName="arrow.right" size={20} color="#fff" />
+                            <LinearGradient
+                                colors={['#60A5FA', '#3B82F6']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.proceedGradient}
+                            >
+                                <Text style={styles.proceedText}>המשך לתשלום</Text>
+                            </LinearGradient>
                         </TouchableOpacity>
                     </View>
-                </View>
-            </KeyboardAvoidingView>
+                </Animated.View>
+            )}
+
+            {/* Calendar Modal */}
+            <Modal visible={showCalendarModal} transparent animationType="slide">
+                <Pressable
+                    style={styles.calendarModalOverlay}
+                    onPress={() => setShowCalendarModal(false)}
+                >
+                    <Pressable style={styles.calendarModalContent} onPress={(e) => e.stopPropagation()}>
+                        {/* Modal Header */}
+                        <View style={styles.calendarModalHeader}>
+                            <TouchableOpacity
+                                onPress={() => setShowCalendarModal(false)}
+                                style={styles.modalCloseButton}
+                            >
+                                <X size={20} color="#64748b" />
+                            </TouchableOpacity>
+                            <Text style={styles.calendarModalTitle}>
+                                {editingDateType === 'start' ? 'בחר תאריך התחלה' : 'בחר תאריך סיום'}
+                            </Text>
+                            <View style={{ width: 32 }} />
+                        </View>
+
+                        {/* Month Navigation */}
+                        <View style={styles.calendarNavigation}>
+                            <TouchableOpacity
+                                onPress={() => navigateCalendarMonth('next')}
+                                style={styles.calendarNavButton}
+                            >
+                                <ChevronRight size={20} color="#374151" />
+                            </TouchableOpacity>
+                            <Text style={styles.calendarMonthYear}>
+                                {MONTHS_HEBREW[calendarDisplayDate.getMonth()]} {calendarDisplayDate.getFullYear()}
+                            </Text>
+                            <TouchableOpacity
+                                onPress={() => navigateCalendarMonth('prev')}
+                                style={styles.calendarNavButton}
+                            >
+                                <ChevronDown size={20} color="#374151" style={{ transform: [{ rotate: '90deg' }] }} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Day Headers */}
+                        <View style={styles.calendarDayHeaders}>
+                            {DAYS_HEBREW.map((day, idx) => (
+                                <View key={idx} style={styles.calendarDayHeader}>
+                                    <Text style={styles.calendarDayHeaderText}>{day}</Text>
+                                </View>
+                            ))}
+                        </View>
+
+                        {/* Calendar Grid */}
+                        <View style={styles.calendarGrid}>
+                            {getCalendarDays(calendarDisplayDate).map((week, weekIdx) => (
+                                <View key={weekIdx} style={styles.calendarWeek}>
+                                    {week.map((day, dayIdx) => {
+                                        if (day === null) {
+                                            return <View key={dayIdx} style={styles.calendarDayEmpty} />;
+                                        }
+
+                                        const cellDate = new Date(calendarDisplayDate.getFullYear(), calendarDisplayDate.getMonth(), day);
+                                        const isToday = new Date().toDateString() === cellDate.toDateString();
+                                        const isSelected = editingDateType === 'start'
+                                            ? customStartDate.toDateString() === cellDate.toDateString()
+                                            : customEndDate.toDateString() === cellDate.toDateString();
+                                        const isDisabled = editingDateType === 'end' && cellDate < customStartDate;
+
+                                        return (
+                                            <TouchableOpacity
+                                                key={dayIdx}
+                                                style={[
+                                                    styles.calendarDay,
+                                                    isToday && styles.calendarDayToday,
+                                                    isSelected && styles.calendarDaySelected,
+                                                    isDisabled && styles.calendarDayDisabled,
+                                                ]}
+                                                onPress={() => !isDisabled && handleCalendarDateSelect(day)}
+                                                disabled={isDisabled}
+                                            >
+                                                <Text style={[
+                                                    styles.calendarDayText,
+                                                    isToday && styles.calendarDayTextToday,
+                                                    isSelected && styles.calendarDayTextSelected,
+                                                    isDisabled && styles.calendarDayTextDisabled,
+                                                ]}>
+                                                    {day}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
+                            ))}
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F9FAFB' },
+    container: {
+        flex: 1,
+        backgroundColor: '#fff',
+    },
 
-    // Header
-    header: { paddingHorizontal: 20, paddingBottom: 16, borderBottomLeftRadius: 20, borderBottomRightRadius: 20, overflow: 'hidden', zIndex: 10 },
-    screenTitle: { fontSize: 24, fontWeight: '800', color: '#fff', textAlign: 'left', marginBottom: 12 },
-    searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12, paddingHorizontal: 12, height: 48, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-    searchInput: { flex: 1, textAlign: 'right', marginLeft: 10, fontSize: 16, height: '100%', color: '#fff' },
+    // Header - Shop Style
+    header: {
+        paddingHorizontal: 24,
+        paddingBottom: 24,
+        backgroundColor: '#fff',
+        borderBottomLeftRadius: 30,
+        borderBottomRightRadius: 30,
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.05,
+        shadowRadius: 15,
+        elevation: 5,
+        zIndex: 10,
+    },
+    backButton: {
+        position: 'absolute',
+        left: 20,
+        top: 60,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#f1f5f9',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1,
+    },
+    headerSubtitle: {
+        fontSize: 14,
+        color: '#64748b',
+        fontWeight: '500',
+        marginTop: 8,
+        marginBottom: 20,
+    },
 
-    searchResults: { position: 'absolute', top: 120, left: 20, right: 20, backgroundColor: '#fff', borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, elevation: 5, padding: 8 },
-    resultItem: { padding: 12, borderBottomWidth: 1, borderColor: '#F3F4F6' },
-    resultName: { fontWeight: '700', fontSize: 16, textAlign: 'left' },
-    resultEmail: { color: '#6B7280', fontSize: 12, textAlign: 'left' },
+    // Segmented Control
+    segmentedControl: {
+        flexDirection: 'row',
+        backgroundColor: '#f1f5f9',
+        borderRadius: 100,
+        padding: 4,
+        width: '100%',
+        maxWidth: 300,
+    },
+    segmentButton: {
+        flex: 1,
+        paddingVertical: 10,
+        borderRadius: 100,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    segmentButtonActive: {
+        backgroundColor: '#fff',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    segmentText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#64748b',
+    },
+    segmentTextActive: {
+        color: '#1a1a2e',
+    },
 
-    selectedClientCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', padding: 8, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-    clientAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
-    clientInitials: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-    clientInfo: { flex: 1, marginLeft: 12, alignItems: 'flex-start' },
-    clientName: { fontWeight: '700', color: '#fff', fontSize: 16 },
-    clientSub: { color: '#D1D5DB', fontSize: 12 },
-    removeClientBtn: { padding: 8 },
+    // Scroll Content
+    scrollContent: {
+        padding: 20,
+        paddingBottom: 200,
+        gap: 16,
+    },
 
-    // Tabs
-    tabsContainer: { flexDirection: 'row', padding: 16, gap: 12 },
-    tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, backgroundColor: '#fff', borderRadius: 12, gap: 8, borderWidth: 1, borderColor: '#E5E7EB' },
-    activeTab: { backgroundColor: '#111827', borderColor: '#111827' },
-    tabText: { fontWeight: '600', color: '#4B5563' },
-    activeTabText: { color: '#fff' },
+    // Card Base
+    card: {
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+        elevation: 4,
+        overflow: 'hidden',
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 18,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f1f5f9',
+    },
+    cardHeaderRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    cardTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#1a1a2e',
+    },
+    iconCircle: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        backgroundColor: '#f1f5f9',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    iconCircleActive: {
+        backgroundColor: Colors.primary,
+    },
+    removeButton: {
+        width: 32,
+        height: 32,
+        borderRadius: 8,
+        backgroundColor: '#fef2f2',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
 
-    // Grid
-    gridContent: { paddingHorizontal: 16, paddingBottom: 20 },
-    grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-    card: { width: (width - 44) / 2, backgroundColor: '#fff', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 4 },
-    selectedCard: { borderColor: Colors.primary, backgroundColor: '#FEF2F2' },
-    cardIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-    cardPrice: { fontSize: 20, fontWeight: '800', color: '#111827', marginBottom: 4 },
-    cardTitle: { fontSize: 14, color: '#4B5563', textAlign: 'center', height: 40 },
+    // Client Selection
+    selectedClientRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 18,
+        gap: 14,
+    },
+    clientAvatar: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: Colors.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    clientInitials: {
+        color: '#fff',
+        fontWeight: '700',
+        fontSize: 18,
+    },
+    clientDetails: {
+        flex: 1,
+    },
+    clientName: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#1a1a2e',
+        textAlign: 'left',
+    },
+    clientEmail: {
+        fontSize: 13,
+        color: '#64748b',
+        marginTop: 2,
+        textAlign: 'left',
+    },
+
+    // Search
+    searchInputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        margin: 16,
+        marginTop: 0,
+        backgroundColor: '#f8fafc',
+        borderRadius: 12,
+        paddingHorizontal: 14,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        gap: 10,
+    },
+    searchInput: {
+        flex: 1,
+        height: 48,
+        fontSize: 15,
+        color: '#1a1a2e',
+        textAlign: 'right',
+    },
+    searchResults: {
+        borderTopWidth: 1,
+        borderTopColor: '#f1f5f9',
+    },
+    searchResultItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 14,
+        paddingHorizontal: 18,
+        gap: 12,
+    },
+    searchResultBorder: {
+        borderBottomWidth: 1,
+        borderBottomColor: '#f1f5f9',
+    },
+    resultAvatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#f1f5f9',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    resultInitials: {
+        color: '#64748b',
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    resultInfo: {
+        flex: 1,
+    },
+    resultName: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#1a1a2e',
+        textAlign: 'left',
+    },
+    resultEmail: {
+        fontSize: 12,
+        color: '#94a3b8',
+        textAlign: 'left',
+    },
+    noResults: {
+        padding: 20,
+        textAlign: 'center',
+        color: '#94a3b8',
+        fontSize: 14,
+    },
+
+    // Plan Cards
+    planCard: {
+        backgroundColor: '#fff',
+        borderRadius: 24,
+        padding: 20,
+        borderWidth: 1,
+        borderColor: '#f1f5f9',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 12,
+        elevation: 2,
+    },
+    planCardSelected: {
+        borderColor: `${Colors.primary}30`,
+        backgroundColor: '#fafafa',
+        shadowColor: Colors.primary,
+        shadowOpacity: 0.15,
+        shadowRadius: 20,
+        elevation: 8,
+    },
+    planCardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+    },
+    planCardLeft: {
+        flex: 1,
+        marginRight: 16,
+        gap: 10,
+    },
+    planCardRight: {
+        alignItems: 'flex-end',
+    },
+    planImage: {
+        width: 140,
+        height: 28,
+    },
+    planNameFallback: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#1a1a2e',
+    },
+    planBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 100,
+        alignSelf: 'flex-start',
+    },
+    planBadgeText: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#fff',
+    },
+    planPrice: {
+        fontSize: 28,
+        fontWeight: '800',
+        color: '#1a1a2e',
+    },
+    planPriceSub: {
+        fontSize: 12,
+        color: '#94a3b8',
+    },
+    planDescription: {
+        fontSize: 14,
+        color: '#64748b',
+        marginTop: 12,
+        textAlign: 'left',
+        lineHeight: 20,
+    },
+    expandedContent: {
+        marginTop: 16,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: '#f1f5f9',
+        gap: 12,
+    },
+    datePickerRowInline: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#f8fafc',
+        padding: 14,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    datePickerLabelInline: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#374151',
+    },
+    datePickerValueContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    datePickerValueText: {
+        fontSize: 14,
+        color: '#1a1a2e',
+        fontWeight: '500',
+    },
+    expandIndicator: {
+        alignItems: 'center',
+        marginTop: 8,
+    },
+
+    // Discount Section
+    discountHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 18,
+    },
+    discountInputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingHorizontal: 18,
+        paddingBottom: 18,
+    },
+    discountInput: {
+        flex: 1,
+        height: 48,
+        backgroundColor: '#f8fafc',
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1a1a2e',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    discountTypeButton: {
+        width: 48,
+        height: 48,
+        backgroundColor: '#f1f5f9',
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    discountTypeText: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#374151',
+    },
 
     // Footer
-    footer: { backgroundColor: '#fff', borderTopWidth: 1, borderColor: '#E5E7EB', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10 },
-    discountToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
-    discountLabel: { fontSize: 14, color: '#6B7280', fontWeight: '600' },
-    discountInputRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-    discInput: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 8, padding: 8, textAlign: 'center', fontSize: 16 },
-    discTypeBtn: { width: 40, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
-    discTypeText: { fontWeight: '700', color: '#374151' },
+    footer: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: '#fff',
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: '#f1f5f9',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        elevation: 10,
+    },
+    footerContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    footerLeft: {
+        flex: 1,
+        marginRight: 16,
+    },
+    footerLabel: {
+        fontSize: 12,
+        color: '#64748b',
+        fontWeight: '500',
+    },
+    footerTotal: {
+        fontSize: 28,
+        fontWeight: '800',
+        color: '#1a1a2e',
+    },
+    proceedButton: {
+        borderRadius: 16,
+        overflow: 'hidden',
+    },
+    proceedGradient: {
+        paddingHorizontal: 24,
+        paddingVertical: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    proceedText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#fff',
+    },
 
-    footerMain: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    totalLabel: { fontSize: 14, color: '#6B7280' },
-    totalValue: { fontSize: 32, fontWeight: '900', color: '#111827' },
+    // Modal
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: '#fff',
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        paddingTop: 8,
+        paddingHorizontal: 20,
+        paddingBottom: 34,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f1f5f9',
+        marginBottom: 20,
+    },
+    modalCloseButton: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: '#f1f5f9',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#1a1a2e',
+    },
+    datePickerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 16,
+    },
+    datePickerLabel: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#374151',
+    },
+    datePickerButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        backgroundColor: '#f8fafc',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    datePickerValue: {
+        fontSize: 15,
+        color: '#1a1a2e',
+        fontWeight: '500',
+    },
+    modalConfirmButton: {
+        backgroundColor: Colors.primary,
+        borderRadius: 16,
+        paddingVertical: 16,
+        alignItems: 'center',
+        marginTop: 20,
+    },
+    modalConfirmText: {
+        color: '#fff',
+        fontSize: 17,
+        fontWeight: '700',
+    },
 
-    proceedBtn: { backgroundColor: Colors.primary, flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 16, gap: 8 },
-    proceedBtnDisabled: { backgroundColor: '#D1D5DB' },
-    proceedText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+    // Selected Client Card
+    selectedClientCard: {
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        padding: 18,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 14,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+        elevation: 4,
+    },
+    removeClientButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#fef2f2',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    // Calendar Modal
+    calendarModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    calendarModalContent: {
+        backgroundColor: '#fff',
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        paddingTop: 8,
+        paddingHorizontal: 20,
+        paddingBottom: 34,
+    },
+    calendarModalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f1f5f9',
+        marginBottom: 16,
+    },
+    calendarModalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#1a1a2e',
+    },
+    calendarNavigation: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 20,
+    },
+    calendarNavButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#f1f5f9',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    calendarMonthYear: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#1a1a2e',
+    },
+    calendarDayHeaders: {
+        flexDirection: 'row',
+        marginBottom: 12,
+    },
+    calendarDayHeader: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    calendarDayHeaderText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#94a3b8',
+    },
+    calendarGrid: {
+        marginBottom: 16,
+    },
+    calendarWeek: {
+        flexDirection: 'row',
+        marginBottom: 4,
+    },
+    calendarDayEmpty: {
+        flex: 1,
+        aspectRatio: 1,
+    },
+    calendarDay: {
+        flex: 1,
+        aspectRatio: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 12,
+    },
+    calendarDayToday: {
+        borderWidth: 1,
+        borderColor: Colors.primary,
+    },
+    calendarDaySelected: {
+        backgroundColor: Colors.primary,
+    },
+    calendarDayDisabled: {
+        opacity: 0.3,
+    },
+    calendarDayText: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: '#1a1a2e',
+    },
+    calendarDayTextToday: {
+        color: Colors.primary,
+        fontWeight: '700',
+    },
+    calendarDayTextSelected: {
+        color: '#fff',
+        fontWeight: '700',
+    },
+    calendarDayTextDisabled: {
+        color: '#cbd5e1',
+    },
 });

@@ -39,122 +39,238 @@ interface ClientData {
     phone: string;
     avatar_url: string;
     status: 'active' | 'frozen' | 'inactive';
+    highestAchievement?: {
+        id: string;
+        name: string;
+        icon: string;
+        task_requirement: number;
+    } | null;
+    attendedCount: number;
 }
 
 interface SubscriptionData {
+    id: string;
     classes_remaining: number;
     expiry_date: Date;
     is_frozen: boolean;
     plan_name: string;
 }
 
-// --- Mock Initial Data (Replace with Supabase Fetch) ---
-const MOCK_CLIENT: ClientData = {
-    id: 'c1',
-    full_name: 'אביב גפן',
-    phone: '050-1234567',
-    avatar_url: 'https://i.pravatar.cc/150?u=aviv',
-    status: 'active',
-};
-
-const MOCK_SUBSCRIPTION: SubscriptionData = {
-    classes_remaining: 8,
-    expiry_date: new Date('2025-06-15'),
-    is_frozen: false,
-    plan_name: 'כרטיסיית 10 כניסות',
-};
+interface TicketData {
+    id: string;
+    punches_remaining: number;
+    expiry_date: Date;
+    is_frozen: boolean;
+    plan_name: string;
+}
 
 export default function ClientManagerScreen() {
     const { id } = useLocalSearchParams();
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    
+
     // UI State
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
 
-    // Data State (Optimistic UI)
-    const [client, setClient] = useState<ClientData>(MOCK_CLIENT);
-    const [subscription, setSubscription] = useState<SubscriptionData>(MOCK_SUBSCRIPTION);
-    
-    // --- Supabase Integration (Mocked) ---
+    // Data State
+    const [client, setClient] = useState<ClientData | null>(null);
+    const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
+    const [ticket, setTicket] = useState<TicketData | null>(null);
+
+    // --- Fetch Real Data from Supabase ---
     useEffect(() => {
-        // TODO: Uncomment and adapt for real data fetching
-        /*
-        const fetchData = async () => {
+        const fetchClientData = async () => {
+            if (!id) return;
             setLoading(true);
-            const { data: profile } = await supabase.from('profiles').select('*').eq('id', id).single();
-            const { data: sub } = await supabase.from('subscriptions').select('*').eq('user_id', id).single();
-            if (profile) setClient(profile);
-            if (sub) setSubscription(sub);
-            setLoading(false);
+
+            try {
+                // 1. Fetch profile
+                const { data: profile, error: profileError } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, phone_number, avatar_url, email')
+                    .eq('id', id)
+                    .single();
+
+                if (profileError) {
+                    console.error('Error fetching profile:', profileError);
+                    setLoading(false);
+                    return;
+                }
+
+                // 2. Fetch active subscription
+                const { data: subscriptionData } = await supabase
+                    .from('user_subscriptions')
+                    .select('*, subscription_plans(*)')
+                    .eq('user_id', id)
+                    .eq('is_active', true)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                // 3. Fetch active ticket
+                const { data: ticketData } = await supabase
+                    .from('user_tickets')
+                    .select('*, ticket_plans(*)')
+                    .eq('user_id', id)
+                    .eq('status', 'active')
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                // 4. Fetch completed achievements to get highest badge
+                const { data: userAchievements } = await supabase
+                    .from('user_achievements')
+                    .select(`
+                        achievement_id,
+                        achievements:achievement_id (
+                            id,
+                            name,
+                            icon,
+                            task_requirement
+                        )
+                    `)
+                    .eq('user_id', id)
+                    .eq('completed', true);
+
+                // 5. Count total attended classes
+                const { count: attendedCount } = await supabase
+                    .from('class_bookings')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('user_id', id)
+                    .or('status.eq.completed,attended_at.not.is.null');
+
+                // Find highest achievement (by task_requirement)
+                const sortedAchievements = (userAchievements || [])
+                    .filter((ua: any) => ua.achievements)
+                    .map((ua: any) => ua.achievements)
+                    .sort((a: any, b: any) => (b.task_requirement || 0) - (a.task_requirement || 0));
+
+                const highestAchievement = sortedAchievements[0] || null;
+
+                // Determine client status
+                let status: 'active' | 'frozen' | 'inactive' = 'inactive';
+                if (subscriptionData?.is_frozen || ticketData?.is_frozen) {
+                    status = 'frozen';
+                } else if (subscriptionData?.is_active || ticketData?.status === 'active') {
+                    status = 'active';
+                }
+
+                setClient({
+                    id: profile.id,
+                    full_name: profile.full_name || profile.email || 'לקוח',
+                    phone: profile.phone_number || '',
+                    avatar_url: profile.avatar_url || '',
+                    status,
+                    highestAchievement,
+                    attendedCount: attendedCount || 0,
+                });
+
+                // Set subscription if exists
+                if (subscriptionData) {
+                    setSubscription({
+                        id: subscriptionData.id,
+                        classes_remaining: subscriptionData.classes_remaining || 0,
+                        expiry_date: new Date(subscriptionData.end_date || subscriptionData.expiry_date),
+                        is_frozen: subscriptionData.is_frozen || false,
+                        plan_name: subscriptionData.subscription_plans?.name || 'מנוי',
+                    });
+                }
+
+                // Set ticket if exists
+                if (ticketData) {
+                    setTicket({
+                        id: ticketData.id,
+                        punches_remaining: ticketData.punches_remaining || 0,
+                        expiry_date: new Date(ticketData.expiry_date),
+                        is_frozen: ticketData.is_frozen || false,
+                        plan_name: ticketData.ticket_plans?.name || 'כרטיסייה',
+                    });
+                }
+
+            } catch (error) {
+                console.error('Error fetching client data:', error);
+            } finally {
+                setLoading(false);
+            }
         };
-        fetchData();
-        */
-       // Simulating fetch delay
-       // setLoading(true);
-       // setTimeout(() => setLoading(false), 500);
+
+        fetchClientData();
     }, [id]);
 
     const handleUpdateSubscription = async (updates: Partial<SubscriptionData>) => {
+        if (!subscription) return;
         // Optimistic Update
-        setSubscription(prev => ({ ...prev, ...updates }));
+        setSubscription(prev => prev ? { ...prev, ...updates } : null);
 
-        // TODO: Sync with Supabase
-        /*
-        const { error } = await supabase
-            .from('subscriptions')
-            .update(updates)
-            .eq('user_id', id);
-        
-        if (error) Alert.alert('Error', error.message);
-        */
+        // Sync with Supabase
+        try {
+            const dbUpdates: any = {};
+            if (updates.classes_remaining !== undefined) dbUpdates.classes_remaining = updates.classes_remaining;
+            if (updates.is_frozen !== undefined) dbUpdates.is_frozen = updates.is_frozen;
+            if (updates.expiry_date !== undefined) dbUpdates.end_date = updates.expiry_date.toISOString();
+
+            const { error } = await supabase
+                .from('user_subscriptions')
+                .update(dbUpdates)
+                .eq('id', subscription.id);
+
+            if (error) {
+                console.error('Error updating subscription:', error);
+                Alert.alert('שגיאה', 'לא ניתן לעדכן את המנוי');
+            }
+        } catch (error) {
+            console.error('Error updating subscription:', error);
+        }
     };
 
     // --- Actions ---
 
     const handleWhatsApp = () => {
+        if (!client) return;
         // Linking.openURL(`whatsapp://send?phone=${client.phone}`);
         Alert.alert('WhatsApp', `Opening chat with ${client.phone}`);
     };
 
     const toggleFreeze = () => {
+        if (!subscription || !client) return;
         const newStatus = !subscription.is_frozen;
-        
+
         if (newStatus) {
             Alert.alert(
                 'הקפאת מנוי',
                 'האם אתה בטוח שברצונך להקפיא את המנוי? הלקוח לא יוכל להירשם לשיעורים.',
                 [
                     { text: 'ביטול', style: 'cancel' },
-                    { 
-                        text: 'הקפא', 
+                    {
+                        text: 'הקפא',
                         style: 'default',
                         onPress: () => {
                             handleUpdateSubscription({ is_frozen: true });
-                            setClient(prev => ({ ...prev, status: 'frozen' }));
+                            setClient(prev => prev ? { ...prev, status: 'frozen' } : null);
                         }
                     }
                 ]
             );
         } else {
             handleUpdateSubscription({ is_frozen: false });
-            setClient(prev => ({ ...prev, status: 'active' }));
+            setClient(prev => prev ? { ...prev, status: 'active' } : null);
         }
     };
 
     const handleCancelSubscription = () => {
+        if (!client) return;
         Alert.alert(
             'ביטול מנוי',
             'פעולה זו תבטל את המנוי לצמיתות. האם להמשיך?',
             [
                 { text: 'לא', style: 'cancel' },
-                { 
-                    text: 'כן, בטל מנוי', 
+                {
+                    text: 'כן, בטל מנוי',
                     style: 'destructive',
                     onPress: () => {
-                        setClient(prev => ({ ...prev, status: 'inactive' }));
+                        setClient(prev => prev ? { ...prev, status: 'inactive' } : null);
                         // Logic to cancel in DB
                         router.back();
                     }
@@ -164,20 +280,22 @@ export default function ClientManagerScreen() {
     };
 
     const adjustEntries = (amount: number) => {
+        if (!subscription) return;
         const newValue = Math.max(0, subscription.classes_remaining + amount);
         handleUpdateSubscription({ classes_remaining: newValue });
     };
 
     const extendDate = (type: 'week' | 'month') => {
+        if (!subscription) return;
         const current = new Date(subscription.expiry_date);
         const newDate = new Date(current);
-        
+
         if (type === 'week') {
             newDate.setDate(newDate.getDate() + 7);
         } else {
             newDate.setMonth(newDate.getMonth() + 1);
         }
-        
+
         handleUpdateSubscription({ expiry_date: newDate });
     };
 
@@ -191,14 +309,14 @@ export default function ClientManagerScreen() {
     // --- Render Helpers ---
 
     const getStatusColor = () => {
-        if (subscription.is_frozen) return '#3B82F6'; // Blue
-        if (client.status === 'inactive') return '#EF4444'; // Red
+        if (subscription?.is_frozen) return '#3B82F6'; // Blue
+        if (client?.status === 'inactive') return '#EF4444'; // Red
         return '#34C759'; // Green
     };
 
     const getStatusText = () => {
-        if (subscription.is_frozen) return 'מוקפא';
-        if (client.status === 'inactive') return 'לא פעיל';
+        if (subscription?.is_frozen) return 'מוקפא';
+        if (client?.status === 'inactive') return 'לא פעיל';
         return 'פעיל';
     };
 
@@ -210,38 +328,63 @@ export default function ClientManagerScreen() {
         );
     }
 
+    if (!client) {
+        return (
+            <View style={[styles.container, styles.centered]}>
+                <Text style={styles.headerTitle}>לקוח לא נמצא</Text>
+            </View>
+        );
+    }
+
     return (
         <View style={styles.container}>
             {/* Header */}
             <View style={[styles.header, { paddingTop: insets.top }]}>
-                <TouchableOpacity 
-                    onPress={() => router.back()} 
+                <TouchableOpacity
+                    onPress={() => router.back()}
                     style={styles.backButton}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                     <ChevronRight size={28} color="#000" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>ניהול לקוח</Text>
-                <View style={{ width: 28 }} /> 
+                <View style={{ width: 28 }} />
             </View>
 
-            <ScrollView 
+            <ScrollView
                 contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
                 showsVerticalScrollIndicator={false}
             >
                 {/* 1. Profile Section */}
                 <View style={styles.profileSection}>
                     <View style={styles.avatarContainer}>
-                        <Image source={{ uri: client.avatar_url }} style={styles.avatar} />
+                        {client.avatar_url ? (
+                            <Image source={{ uri: client.avatar_url }} style={styles.avatar} />
+                        ) : (
+                            <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                                <Text style={styles.avatarInitials}>
+                                    {client.full_name?.charAt(0) || '?'}
+                                </Text>
+                            </View>
+                        )}
                         <View style={[styles.statusIndicator, { backgroundColor: getStatusColor() }]} />
+                        {/* Achievement Badge */}
+                        {client.highestAchievement?.icon && (
+                            <Image
+                                source={{ uri: client.highestAchievement.icon }}
+                                style={styles.achievementBadge}
+                            />
+                        )}
                     </View>
-                    
+
                     <Text style={styles.clientName}>{client.full_name}</Text>
-                    
-                    <TouchableOpacity style={styles.phoneButton} onPress={handleWhatsApp}>
-                        <MessageCircle size={16} color="#25D366" fill="#25D366" />
-                        <Text style={styles.phoneText}>{client.phone}</Text>
-                    </TouchableOpacity>
+
+                    {client.phone ? (
+                        <TouchableOpacity style={styles.phoneButton} onPress={handleWhatsApp}>
+                            <MessageCircle size={16} color="#25D366" fill="#25D366" />
+                            <Text style={styles.phoneText}>{client.phone}</Text>
+                        </TouchableOpacity>
+                    ) : null}
 
                     <View style={[styles.statusChip, { backgroundColor: getStatusColor() + '15' }]}>
                         <Text style={[styles.statusText, { color: getStatusColor() }]}>
@@ -251,8 +394,9 @@ export default function ClientManagerScreen() {
                 </View>
 
                 {/* 2. Subscription Hero Card */}
+                {subscription && (
                 <View style={[
-                    styles.heroCard, 
+                    styles.heroCard,
                     subscription.is_frozen && styles.heroCardFrozen
                 ]}>
                     <View style={styles.cardHeader}>
@@ -314,26 +458,29 @@ export default function ClientManagerScreen() {
                         </View>
                     </View>
                 </View>
+                )}
 
                 {/* 3. Admin Actions Grid */}
+                {subscription && (
+                <>
                 <Text style={styles.sectionTitle}>פעולות מנהל</Text>
-                
+
                 <View style={styles.actionsGrid}>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={[
-                            styles.actionCard, 
+                            styles.actionCard,
                             subscription.is_frozen && styles.actionCardActive
                         ]}
                         onPress={toggleFreeze}
                         activeOpacity={0.8}
                     >
                         <View style={[
-                            styles.iconCircle, 
+                            styles.iconCircle,
                             { backgroundColor: subscription.is_frozen ? '#fff' : '#EFF6FF' }
                         ]}>
-                            <Snowflake 
-                                size={24} 
-                                color={subscription.is_frozen ? '#3B82F6' : '#3B82F6'} 
+                            <Snowflake
+                                size={24}
+                                color={subscription.is_frozen ? '#3B82F6' : '#3B82F6'}
                             />
                         </View>
                         <Text style={[
@@ -350,7 +497,7 @@ export default function ClientManagerScreen() {
                         </Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={[styles.actionCard, styles.actionCardDanger]}
                         onPress={handleCancelSubscription}
                         activeOpacity={0.8}
@@ -362,10 +509,12 @@ export default function ClientManagerScreen() {
                         <Text style={styles.actionSubtitle}>סיום התקשרות</Text>
                     </TouchableOpacity>
                 </View>
+                </>
+                )}
 
             </ScrollView>
 
-            {showDatePicker && (
+            {showDatePicker && subscription && (
                 <DateTimePicker
                     value={subscription.expiry_date}
                     mode="date"
@@ -439,6 +588,27 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         borderWidth: 3,
         borderColor: '#fff',
+    },
+    achievementBadge: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        borderWidth: 3,
+        borderColor: '#fff',
+        backgroundColor: '#fff',
+    },
+    avatarPlaceholder: {
+        backgroundColor: '#E5E7EB',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    avatarInitials: {
+        fontSize: 36,
+        fontWeight: '700',
+        color: '#6B7280',
     },
     clientName: {
         fontSize: 24,

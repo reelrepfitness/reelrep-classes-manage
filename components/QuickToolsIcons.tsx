@@ -58,3 +58,21 @@ export function ShoppingCartIcon({ size = 40 }: IconProps) {
         </Svg>
     );
 }
+
+// Register/Cash Register Icon - Green gradient (for admin POS)
+export function RegisterIcon({ size = 40 }: IconProps) {
+    return (
+        <Svg width={size} height={size} viewBox="0 0 24 24">
+            <Defs>
+                <LinearGradient id="registerGrad" x1="0" y1="0" x2="0" y2="24" gradientUnits="userSpaceOnUse">
+                    <Stop offset="0" stopColor="#34D399" />
+                    <Stop offset="1" stopColor="#10B981" />
+                </LinearGradient>
+            </Defs>
+            <Path
+                d="m4,9h6v3h-6v-3Zm0,7h2v-2h-2v2Zm4,0h2v-2h-2v2Zm-4,4h2v-2h-2v2Zm4,0h2v-2h-2v2ZM24,6.5v12.094l-3.126-1.9-2.874,1.807-2-1.257v-2.432l2,1.254,2.801-1.756,1.199.729V6.5c0-2.481-2.019-4.5-4.5-4.5-2.254,0-4.109,1.671-4.433,3.836.572.547.933,1.312.933,2.164v16H0V8c0-1.105.608-2.062,1.5-2.583v-.417C1.5,2.243,3.743,0,6.5,0h11c3.584,0,6.5,2.916,6.5,6.5Zm-12,1.5c0-.552-.448-1-1-1H3c-.552,0-1,.448-1,1v14h10v-14Zm-.823-2.982c.271-1.154.848-2.191,1.643-3.018h-6.321c-1.654,0-3,1.346-3,3h7.5c.061,0,.117.014.177.018Z"
+                fill="url(#registerGrad)"
+            />
+        </Svg>
+    );
+}

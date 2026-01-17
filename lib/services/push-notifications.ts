@@ -283,6 +283,7 @@ export class PushNotificationService {
       title: '🏆 הישג חדש הושג!',
       body: `סיימת את "${achievementName}" וקיבלת ${plates} פלטות!`,
       data: {
+        type: 'achievement_unlocked',
         achievementName,
         plates,
         timestamp: new Date().toISOString(),

@@ -1,11 +1,12 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Achievement, UserAchievement } from '@/constants/types';
 import { useAuth } from './AuthContext';
 import { useClasses } from './ClassesContext';
 import { useWorkouts } from './WorkoutContext';
 import { supabase } from '@/constants/supabase';
+import { PushNotificationService } from '@/lib/services/push-notifications';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -16,16 +17,25 @@ export const [AchievementsProvider, useAchievements] = createContextHook(() => {
   const { getClassAttendanceCount } = useClasses();
   const { getTotalWeight } = useWorkouts();
 
+  // Unlock detection state
+  const [newlyUnlockedAchievement, setNewlyUnlockedAchievement] = useState<Achievement | null>(null);
+  const [hasSeenUnlockDialog, setHasSeenUnlockDialog] = useState(true);
+  const previousAttendanceCount = useRef<number | null>(null);
+
   const achievementsQuery = useQuery({
     queryKey: ['achievements'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('achievements')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
+        .select('id, name, icon, task_requirement, task_type, catagory, points, description')
+        .eq('is_active', true);
       if (error) throw error;
-      return (data || []) as Achievement[];
+      // Sort client-side by task_requirement
+      return ((data || []) as Achievement[]).sort((a, b) => {
+        const reqA = parseInt(String(a.task_requirement), 10) || 0;
+        const reqB = parseInt(String(b.task_requirement), 10) || 0;
+        return reqA - reqB;
+      });
     },
   });
 
@@ -126,7 +136,8 @@ export const [AchievementsProvider, useAchievements] = createContextHook(() => {
     const classAttendance = getClassAttendanceCount();
     const attendanceAchievements = achievementsQuery.data
       .filter(a => a.task_type === 'classes_attended')
-      .sort((a, b) => a.task_requirement - b.task_requirement);
+      .map(a => ({ ...a, parsedReq: parseInt(String(a.task_requirement), 10) || 0 }))
+      .sort((a, b) => a.parsedReq - b.parsedReq);
 
     const userAttendanceIds = new Set(
       userAchievementsQuery.data
@@ -140,7 +151,7 @@ export const [AchievementsProvider, useAchievements] = createContextHook(() => {
     for (let i = 0; i < attendanceAchievements.length; i++) {
       const achievement = attendanceAchievements[i];
 
-      if (classAttendance >= achievement.task_requirement) {
+      if (classAttendance >= achievement.parsedReq) {
         lastUnlockedIndex = i;
 
         if (!userAttendanceIds.has(achievement.id)) {
@@ -250,6 +261,100 @@ export const [AchievementsProvider, useAchievements] = createContextHook(() => {
     await queryClient.invalidateQueries({ queryKey: ['achievements'] });
   }, [queryClient]);
 
+  // Get current active task (next uncompleted achievement)
+  const getCurrentTask = useCallback((): { achievement: Achievement | null; progress: number } => {
+    if (!achievementsQuery.data) return { achievement: null, progress: 0 };
+
+    const attendedCount = getClassAttendanceCount();
+    const sortedAchievements = achievementsQuery.data
+      .filter(a => a.task_type === 'classes_attended')
+      .map(a => ({ ...a, parsedReq: parseInt(String(a.task_requirement), 10) || 0 }))
+      .sort((a, b) => a.parsedReq - b.parsedReq);
+
+    // Find first achievement not yet completed (compare numbers!)
+    const nextAchievement = sortedAchievements.find(a => attendedCount < a.parsedReq);
+
+    return {
+      achievement: nextAchievement || null,
+      progress: attendedCount,
+    };
+  }, [achievementsQuery.data, getClassAttendanceCount]);
+
+  // Get highest completed achievement (for badge display)
+  const getHighestCompletedAchievement = useCallback((): Achievement | null => {
+    if (!achievementsQuery.data) return null;
+
+    const attendedCount = getClassAttendanceCount();
+    const sortedAchievements = achievementsQuery.data
+      .filter(a => a.task_type === 'classes_attended')
+      .map(a => ({ ...a, parsedReq: parseInt(String(a.task_requirement), 10) || 0 }))
+      .filter(a => attendedCount >= a.parsedReq)
+      .sort((a, b) => b.parsedReq - a.parsedReq);
+
+    return sortedAchievements[0] || null;
+  }, [achievementsQuery.data, getClassAttendanceCount]);
+
+  // Mark unlock dialog as seen
+  const markUnlockSeen = useCallback(() => {
+    setHasSeenUnlockDialog(true);
+    setNewlyUnlockedAchievement(null);
+  }, []);
+
+  // Check for new unlocks when attendance count changes
+  useEffect(() => {
+    if (!achievementsQuery.data || !user?.id) return;
+
+    const currentCount = getClassAttendanceCount();
+
+    // Skip on initial load
+    if (previousAttendanceCount.current === null) {
+      previousAttendanceCount.current = currentCount;
+      return;
+    }
+
+    // Check if count increased
+    if (currentCount > previousAttendanceCount.current) {
+      // Find achievement that matches exactly the current count
+      const justUnlocked = achievementsQuery.data.find(a =>
+        a.task_type === 'classes_attended' &&
+        parseInt(String(a.task_requirement), 10) === currentCount
+      );
+
+      if (justUnlocked) {
+        // Set for dialog display
+        setNewlyUnlockedAchievement(justUnlocked);
+        setHasSeenUnlockDialog(false);
+
+        // Mark as completed in database and send notification
+        (async () => {
+          try {
+            await supabase.from('user_achievements').upsert({
+              user_id: user.id,
+              achievement_id: justUnlocked.id,
+              progress: currentCount,
+              completed: true,
+              date_earned: new Date().toISOString(),
+            }, {
+              onConflict: 'user_id,achievement_id',
+            });
+
+            // Send push notification
+            const achievementName = justUnlocked.name;
+            const plates = justUnlocked.points || 0;
+            await PushNotificationService.notifyAchievementUnlocked(achievementName, plates);
+
+            // Refresh achievements
+            queryClient.invalidateQueries({ queryKey: ['userAchievements', user.id] });
+          } catch (error) {
+            console.error('Error marking achievement as completed:', error);
+          }
+        })();
+      }
+    }
+
+    previousAttendanceCount.current = currentCount;
+  }, [achievementsQuery.data, user?.id, getClassAttendanceCount, queryClient]);
+
   return {
     achievements: achievementsQuery.data || [],
     userAchievements: userAchievementsQuery.data || [],
@@ -264,5 +369,11 @@ export const [AchievementsProvider, useAchievements] = createContextHook(() => {
     acceptChallenge,
     calculateProgress,
     updateProgress,
+    // New functions for active task display and unlock detection
+    getCurrentTask,
+    getHighestCompletedAchievement,
+    newlyUnlockedAchievement,
+    hasSeenUnlockDialog,
+    markUnlockSeen,
   };
 });

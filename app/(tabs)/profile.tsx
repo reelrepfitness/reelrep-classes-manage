@@ -14,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAchievements } from '@/contexts/AchievementsContext';
+import { Lock } from 'lucide-react-native';
 
 // --- Menu Row Component (RTL Forced) ---
 const MenuRow = ({ icon, label, onPress, value, isDestructive, showChevron = true }: any) => (
@@ -42,14 +44,36 @@ const MenuRow = ({ icon, label, onPress, value, isDestructive, showChevron = tru
   </TouchableOpacity>
 );
 
-// --- Subscription Card Component ---
-const SubscriptionCard = ({ user, onPress }: { user: any, onPress: () => void }) => {
+// --- Subscription Card Component with Active Task ---
+const SubscriptionCard = ({ user, onPress, currentTask, attendedCount }: { user: any, onPress: () => void, currentTask: any, attendedCount: number }) => {
   if (!user?.subscription) return null;
 
-  const totalClasses = user.subscription.classesPerMonth || 10;
-  const usedClasses = user.subscription.classesUsed || 0;
-  const remaining = totalClasses - usedClasses;
-  const isUnlimited = user.subscription.type === 'unlimited';
+  const sub = user.subscription;
+  const taskRequirement = currentTask ? (parseInt(String(currentTask.task_requirement), 10) || currentTask.parsedReq || 0) : 0;
+  const taskProgress = currentTask && taskRequirement > 0
+    ? Math.min((attendedCount / taskRequirement) * 100, 100)
+    : 0;
+
+  // Render plan title/image based on planName
+  const renderPlanTitle = () => {
+    if (!sub?.planName) {
+      return <Text style={styles.cardTitle}>מנוי</Text>;
+    }
+    const name = sub.planName.toUpperCase();
+    const totalSessions = sub.totalSessions || 0;
+
+    if (name.includes('ELITE')) {
+      return <Image source={require('@/assets/images/reel-elite.png')} style={styles.planImage} resizeMode="contain" />;
+    } else if (name.includes('ONE')) {
+      return <Image source={require('@/assets/images/reel-one.png')} style={styles.planImage} resizeMode="contain" />;
+    } else if (name.includes('10') || totalSessions === 10) {
+      return <Image source={require('@/assets/images/10sessions.png')} style={styles.planImage} resizeMode="contain" />;
+    } else if (name.includes('20') || totalSessions === 20) {
+      return <Image source={require('@/assets/images/20sessions.png')} style={styles.planImage} resizeMode="contain" />;
+    }
+    // Fallback to text if no matching image
+    return <Text style={styles.cardTitle}>{sub.planName}</Text>;
+  };
 
   return (
     <TouchableOpacity activeOpacity={0.95} style={styles.cardWrapper} onPress={onPress}>
@@ -62,7 +86,7 @@ const SubscriptionCard = ({ user, onPress }: { user: any, onPress: () => void })
         <View style={styles.cardPatternCircle} />
 
         <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>{user.subscription.name || 'מנוי רגיל'}</Text>
+          {renderPlanTitle()}
           <View style={styles.activeTag}>
             <View style={styles.activeDot} />
             <Text style={styles.activeTagText}>מנוי פעיל</Text>
@@ -70,31 +94,41 @@ const SubscriptionCard = ({ user, onPress }: { user: any, onPress: () => void })
         </View>
 
         <View style={styles.cardBody}>
-          <View style={styles.statsRow}>
-            <View style={{ alignItems: 'flex-start' }}>
-              <Text style={styles.statLabel}>תוקף עד</Text>
-              <Text style={styles.statValue}>
-                {new Date(user.subscription.endDate).toLocaleDateString('he-IL')}
-              </Text>
+          {/* Active Task Display */}
+          {currentTask ? (
+            <View style={styles.activeTaskRow}>
+              <View style={styles.taskIconWrapper}>
+                <Image source={{ uri: currentTask.icon }} style={styles.taskIcon} />
+                <View style={styles.taskLockBadge}>
+                  <Lock size={10} color="#fff" />
+                </View>
+              </View>
+              <View style={styles.taskInfoSection}>
+                <Text style={styles.taskLabel}>היעד הבא</Text>
+                <Text style={styles.taskProgressText}>
+                  {attendedCount} / {taskRequirement}
+                </Text>
+                <View style={styles.taskProgressBarBg}>
+                  <LinearGradient
+                    colors={['#EC4899', '#F472B6']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={[styles.taskProgressBarFill, { width: `${taskProgress}%` }]}
+                  />
+                </View>
+              </View>
             </View>
-            <View style={{ alignItems: 'flex-start' }}>
-              <Text style={styles.statLabel}>יתרה</Text>
-              <Text style={styles.statValue}>
-                {isUnlimited ? '∞' : remaining}
-                <Text style={styles.statTotal}>{!isUnlimited && ` / ${totalClasses}`}</Text>
-              </Text>
-            </View>
-          </View>
-
-          {!isUnlimited && (
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBarBg}>
-                <LinearGradient
-                  colors={['#34D399', '#10B981']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={[styles.progressBarFill, { width: `${(remaining / totalClasses) * 100}%` }]}
-                />
+          ) : (
+            <View style={styles.statsRow}>
+              <View style={{ alignItems: 'flex-start' }}>
+                <Text style={styles.statLabel}>תוקף עד</Text>
+                <Text style={styles.statValue}>
+                  {sub.endDate ? new Date(sub.endDate).toLocaleDateString('he-IL') : '—'}
+                </Text>
+              </View>
+              <View style={{ alignItems: 'flex-start' }}>
+                <Text style={styles.statLabel}>אימונים</Text>
+                <Text style={styles.statValue}>{attendedCount}</Text>
               </View>
             </View>
           )}
@@ -107,6 +141,10 @@ const SubscriptionCard = ({ user, onPress }: { user: any, onPress: () => void })
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, signOut, isAdmin, isCoach } = useAuth();
+  const { getCurrentTask } = useAchievements();
+
+  // Get current active task
+  const { achievement: currentTask, progress: attendedCount } = getCurrentTask();
 
   const handleSignOut = async () => {
     try {
@@ -158,7 +196,12 @@ export default function ProfileScreen() {
         {/* Subscription Section */}
         <View style={styles.section}>
           {user?.subscription ? (
-            <SubscriptionCard user={user} onPress={() => router.push('/subscription-management' as any)} />
+            <SubscriptionCard
+              user={user}
+              onPress={() => router.push('/subscription-management' as any)}
+              currentTask={currentTask}
+              attendedCount={attendedCount}
+            />
           ) : (
             <View style={styles.emptyStateCard}>
               <Ionicons name="alert-circle-outline" size={32} color="#9CA3AF" />
@@ -244,6 +287,7 @@ const styles = StyleSheet.create({
   cardPatternCircle: { position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,255,255,0.05)' },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { color: '#fff', fontSize: 22, fontWeight: '800', textAlign: 'left' },
+  planImage: { width: 120, height: 28 },
   activeTag: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(16, 185, 129, 0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, gap: 6 },
   activeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981' },
   activeTagText: { color: '#10B981', fontSize: 12, fontWeight: '700' },
@@ -255,6 +299,22 @@ const styles = StyleSheet.create({
   progressContainer: { marginTop: 0 },
   progressBarBg: { height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' },
   progressBarFill: { height: '100%', borderRadius: 4 },
+
+  // Active Task Styles
+  activeTaskRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 8 },
+  taskIconWrapper: { position: 'relative' },
+  taskIcon: { width: 56, height: 56, borderRadius: 12 },
+  taskLockBadge: {
+    position: 'absolute', bottom: -4, right: -4,
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: '#64748b', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: '#111827'
+  },
+  taskInfoSection: { flex: 1 },
+  taskLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginBottom: 4, textAlign: 'left' },
+  taskProgressText: { color: '#fff', fontSize: 18, fontWeight: '700', marginBottom: 8, textAlign: 'left' },
+  taskProgressBarBg: { height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' },
+  taskProgressBarFill: { height: '100%', borderRadius: 4 },
 
   emptyStateCard: { backgroundColor: '#fff', padding: 30, borderRadius: 20, alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#E5E7EB', borderStyle: 'dashed' },
   emptyStateText: { color: '#6B7280', fontSize: 16, fontWeight: '500' },

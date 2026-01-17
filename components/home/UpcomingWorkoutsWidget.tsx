@@ -234,30 +234,45 @@ const TodaySchedule = ({
     </View>
 );
 
+// --- Empty State Images ---
+const EMPTY_STATE_IMAGES = [
+    require('@/assets/empty-state-images/angry1.webp'),
+    require('@/assets/empty-state-images/angry2.webp'),
+    require('@/assets/empty-state-images/angry3.webp'),
+    require('@/assets/empty-state-images/angry4.webp'),
+    require('@/assets/empty-state-images/angry5.webp'),
+];
+
 // --- Empty State ---
-const EmptyState = ({ onPress }: { onPress: () => void }) => (
-    <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
-        <View style={styles.emptyCard}>
-            {/* Background GIF */}
-            <Image
-                source={require('@/assets/images/angry.gif')}
-                style={styles.emptyBackgroundGif}
-                resizeMode="cover"
-            />
-            {/* Overlay for text readability */}
-            <View style={styles.emptyOverlay} />
+const EmptyState = ({ onPress }: { onPress: () => void }) => {
+    // Pick a random image once on mount
+    const randomImage = useMemo(() => {
+        const randomIndex = Math.floor(Math.random() * EMPTY_STATE_IMAGES.length);
+        return EMPTY_STATE_IMAGES[randomIndex];
+    }, []);
 
-            {/* Content */}
-            <View style={styles.emptyContent}>
-                <Text style={styles.emptyTitle}>עוד לא קבעת אימונים להשבוע!</Text>
+    return (
+        <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
+            <View style={styles.emptyCard}>
+                {/* Background Image */}
+                <Image
+                    source={randomImage}
+                    style={styles.emptyBackgroundImage}
+                    resizeMode="cover"
+                />
 
-                <View style={[styles.emptyButton, { backgroundColor: '#FFFFFF' }]}>
-                    <Text style={[styles.emptyButtonText, { color: '#111827' }]}>עכשיו לקבוע!</Text>
+                {/* Content */}
+                <View style={styles.emptyContent}>
+                    <Text style={styles.emptyTitleBlack}>עוד לא קבעת אימונים להשבוע!</Text>
+
+                    <View style={styles.emptyButtonBlack}>
+                        <Text style={styles.emptyButtonTextBlack}>עכשיו לקבוע!</Text>
+                    </View>
                 </View>
             </View>
-        </View>
-    </TouchableOpacity>
-);
+        </TouchableOpacity>
+    );
+};
 
 // --- Mini Card for Additional Bookings (same layout as hero, without trainer) ---
 const MiniBookingCard = ({
@@ -781,6 +796,12 @@ const styles = StyleSheet.create({
         bottom: 0,
         backgroundColor: 'rgba(0, 0, 0, 0.55)',
     },
+    emptyBackgroundImage: {
+        ...StyleSheet.absoluteFillObject,
+        width: undefined,
+        height: undefined,
+        opacity: 1,
+    },
     emptyContent: {
         alignItems: 'center',
         zIndex: 1,
@@ -789,6 +810,13 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '700',
         color: '#FFFFFF',
+        marginBottom: 16,
+        textAlign: 'center',
+    },
+    emptyTitleBlack: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#000000',
         marginBottom: 16,
         textAlign: 'center',
     },
@@ -806,7 +834,21 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         borderRadius: 14,
     },
+    emptyButtonBlack: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: '#000000',
+        paddingVertical: 14,
+        paddingHorizontal: 24,
+        borderRadius: 14,
+    },
     emptyButtonText: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#FFFFFF',
+    },
+    emptyButtonTextBlack: {
         fontSize: 15,
         fontWeight: '700',
         color: '#FFFFFF',

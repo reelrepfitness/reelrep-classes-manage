@@ -165,7 +165,10 @@ export function CustomTabBar() {
         '/admin/classes/',  // Hide on class details and workout content screens
     ];
 
-    if (hideTabBarPaths.some(path => pathname.startsWith(path))) {
+    // Also hide on register screen (check both formats)
+    const isRegisterScreen = pathname === '/register' || pathname === '/(tabs)/register' || pathname.endsWith('/register');
+
+    if (isRegisterScreen || hideTabBarPaths.some(path => pathname.startsWith(path))) {
         return null;
     }
 

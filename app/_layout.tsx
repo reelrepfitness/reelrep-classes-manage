@@ -1,8 +1,9 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import * as Notifications from "expo-notifications";
+import React, { useEffect, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { I18nManager, Platform } from "react-native";
@@ -27,6 +28,31 @@ const queryClient = new QueryClient();
 
 
 function RootLayoutNav() {
+  const router = useRouter();
+  const notificationResponseListener = useRef<Notifications.EventSubscription>();
+
+  // Handle notification tap - deep link to profile for achievement unlocks
+  useEffect(() => {
+    notificationResponseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data;
+
+      // Route based on notification type
+      if (data?.type === 'achievement_unlocked') {
+        // Navigate to home/profile screen where unlock dialog will show
+        router.push('/(tabs)');
+      } else if (data?.screen) {
+        // Generic screen routing
+        router.push(data.screen as any);
+      }
+    });
+
+    return () => {
+      if (notificationResponseListener.current) {
+        notificationResponseListener.current.remove();
+      }
+    };
+  }, [router]);
+
   return (
     <Stack screenOptions={{
       headerBackTitle: "חזור",

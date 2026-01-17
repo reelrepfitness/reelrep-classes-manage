@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, Text, ScrollView, TouchableOpacity, Alert, Image, Dimensions, PanResponder, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -301,36 +301,32 @@ export default function ClassesScreen() {
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       : [];
 
-    // --- MOCK DATA FOR TESTING WAITING LIST ---
-    if (selectedDate === formatDateKey(today)) {
-      baseClasses.push({
-        id: 'mock_full_class',
-        title: 'אימון כוח (Full)',
-        instructor: 'Ivan',
-        date: formatDateKey(today),
-        time: '23:59',
-        duration: 60,
-        capacity: 8,
-        enrolled: 8,
-        waitingListCount: 4,
-        enrolledAvatars: [
-          'https://i.pravatar.cc/150?u=1',
-          'https://i.pravatar.cc/150?u=2',
-          'https://i.pravatar.cc/150?u=3'
-        ],
-        difficulty: 'intermediate',
-        location: 'Main Gym',
-        requiredSubscription: ['unlimited'],
-        description: 'שיעור כוח מלא לבדיקת המתנה'
-      });
-    }
-
     return baseClasses;
   }, [groupedClasses, selectedDate, classes]);
 
+  // Find the first day that has classes (starting from today)
+  const getFirstDayWithClasses = useCallback(() => {
+    // Get all dates that have classes
+    const datesWithClasses = Object.keys(groupedClasses).sort();
+    const todayKey = formatDateKey(today);
+
+    // Find the first date >= today that has classes
+    const firstFutureDate = datesWithClasses.find(dateKey => dateKey >= todayKey);
+
+    if (firstFutureDate) {
+      return firstFutureDate;
+    }
+
+    // Fallback to today if no future classes
+    return todayKey;
+  }, [groupedClasses]);
+
   useEffect(() => {
-    if (selectedDate === null) setSelectedDate(formatDateKey(today));
-  }, []);
+    if (selectedDate === null) {
+      const firstDayWithClasses = getFirstDayWithClasses();
+      setSelectedDate(firstDayWithClasses);
+    }
+  }, [getFirstDayWithClasses]);
 
   // --- Effects & Logic ---
 

@@ -77,10 +77,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           .single();
 
         if (subData) {
-          // Found active subscription
+          // Found active subscription - fetch plan with image_url
           const { data: planData } = await supabase
             .from('subscription_plans')
-            .select('name, type, sessions_per_week')
+            .select('name, type, sessions_per_week, image_url')
             .eq('id', subData.plan_id)
             .single();
 
@@ -101,9 +101,16 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
         if (ticketData) {
           console.log('[Auth] Found active ticket:', ticketData);
+          // Fetch ticket plan details with image_url
+          const { data: ticketPlanData } = await supabase
+            .from('ticket_plans')
+            .select('name, image_url, total_sessions')
+            .eq('id', ticketData.plan_id)
+            .single();
+
           return {
             ...ticketData,
-            plan: null, // Tickets don't have a 'plan' relation usually, or we can fetch it
+            plan: ticketPlanData,
             type: 'ticket' // Marker
           };
         }
@@ -146,6 +153,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             classesUsed: subscription.sessions_remaining !== undefined
               ? (subscription.total_sessions - subscription.sessions_remaining)
               : (profile?.classes_used || 0),
+            // New fields for plan display
+            planName: plan?.name,
+            planImageUrl: plan?.image_url,
+            isTicket: !!subscription.total_sessions,
+            totalSessions: subscription.total_sessions,
+            sessionsRemaining: subscription.sessions_remaining,
           };
         }
       }

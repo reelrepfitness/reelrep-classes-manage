@@ -7,15 +7,20 @@ import {
   StyleSheet,
   Image,
   Dimensions,
+  Modal,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAchievements } from '@/contexts/AchievementsContext';
 import { UpcomingWorkoutsWidget } from '@/components/home/UpcomingWorkoutsWidget';
 import Colors from '@/constants/colors';
 import { supabase } from '@/constants/supabase';
 import { Icon } from '@/components/ui/icon';
 import { DumbbellIcon, TrophyIcon, ShoppingCartIcon } from '@/components/QuickToolsIcons';
+import { Lock } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
 const cardWidth = (width - 52) / 2; // splitRow padding (20*2) + gap (12)
@@ -33,6 +38,14 @@ const getHebrewDate = () => {
   return `${dayName}, ${day} ב${month}`;
 };
 
+// Format expiry date in Hebrew
+const formatExpiryDate = (dateStr?: string) => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  const months = ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'];
+  return `${date.getDate()} ${months[date.getMonth()]}`;
+};
+
 // --- Components ---
 
 // --- Components ---
@@ -42,15 +55,46 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const {
+    getCurrentTask,
+    getHighestCompletedAchievement,
+    newlyUnlockedAchievement,
+    hasSeenUnlockDialog,
+    markUnlockSeen,
+  } = useAchievements();
 
-  /* 
-   * Dynamic Weekly Goal Logic 
+  // Get the user's highest completed achievement badge
+  const userBadge = getHighestCompletedAchievement();
+
+  /*
+   * Dynamic Weekly Goal Logic
    */
   const [workoutsThisWeek, setWorkoutsThisWeek] = useState(0);
   const [workoutsLastWeek, setWorkoutsLastWeek] = useState(0);
   const [motivationText, setMotivationText] = useState('');
   const [toolsActiveIndex, setToolsActiveIndex] = useState(0);
   const toolsScrollRef = useRef<ScrollView>(null);
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+
+  // Get current active task
+  const { achievement: currentTask, progress: attendedCount } = getCurrentTask();
+  const taskProgress = currentTask
+    ? Math.min((attendedCount / currentTask.task_requirement) * 100, 100)
+    : 0;
+
+  // Show unlock dialog when there's a new unlock
+  useEffect(() => {
+    if (newlyUnlockedAchievement && !hasSeenUnlockDialog) {
+      // Slight delay for better UX
+      const timer = setTimeout(() => setShowUnlockDialog(true), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [newlyUnlockedAchievement, hasSeenUnlockDialog]);
+
+  const handleDismissUnlockDialog = () => {
+    setShowUnlockDialog(false);
+    markUnlockSeen();
+  };
 
   // Helper to get random message based on count & gender
   const getMotivationMessage = (count: number, gender: string = 'male', name: string = '') => {
@@ -144,21 +188,35 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         {/* 1. Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.avatarContainer}>
-            {user?.profileImage ? (
-              <Image source={{ uri: user.profileImage }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                <Text style={styles.avatarInitials}>{user?.name?.slice(0, 1).toUpperCase() || '?'}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+        <View style={styles.headerWrapper}>
+          <LinearGradient
+            colors={['#2d2d2d', '#111111', '#000000']}
+            locations={[0, 0.5, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={styles.headerCard}
+          >
+            <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.avatarContainer}>
+              {user?.profileImage ? (
+                <Image source={{ uri: user.profileImage }} style={styles.avatarLight} />
+              ) : (
+                <View style={[styles.avatarLight, styles.avatarPlaceholderLight]}>
+                  <Text style={styles.avatarInitialsLight}>{user?.name?.slice(0, 1).toUpperCase() || '?'}</Text>
+                </View>
+              )}
+              {/* Achievement Badge */}
+              {userBadge && (
+                <View style={styles.avatarBadge}>
+                  <Image source={{ uri: userBadge.icon }} style={styles.avatarBadgeIcon} />
+                </View>
+              )}
+            </TouchableOpacity>
 
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.greetingTitle}>היי, {user?.name?.split(' ')[0] || 'אורח'}</Text>
-            <Text style={styles.dateSubtitle}>{getHebrewDate()}</Text>
-          </View>
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.greetingTitleLight}>היי, {user?.name?.split(' ')[0] || 'אורח'}</Text>
+              <Text style={styles.dateSubtitleLight}>{getHebrewDate()}</Text>
+            </View>
+          </LinearGradient>
         </View>
 
         {/* 2. Upcoming Classes Widget */}
@@ -170,29 +228,105 @@ export default function HomeScreen() {
         <View style={styles.divider} />
 
         {/* 3. Membership Status Widget */}
-        <View style={styles.membershipCard}>
-          <View style={styles.membershipHeader}>
-            <Text style={styles.membershipTitle}>הסטטוס שלי</Text>
-            <View style={styles.activeBadge}>
-              <View style={styles.activeDot} />
-              <Text style={styles.activeText}>פעיל</Text>
-            </View>
-          </View>
+        {(() => {
+          const sub = user?.subscription;
+          const hasActiveSubscription = sub?.status === 'active';
+          const isTicket = sub?.isTicket;
+          const totalSessions = sub?.totalSessions || 0;
+          const sessionsRemaining = sub?.sessionsRemaining || 0;
+          // Progress fills as user books classes (used = total - remaining)
+          const sessionsUsed = totalSessions - sessionsRemaining;
+          const progressPercent = totalSessions > 0 ? (sessionsUsed / totalSessions) * 100 : 0;
 
-          <View style={styles.punchProgressContainer}>
-            <View style={styles.punchTrack}>
-              <View style={[styles.punchFill, { width: '70%' }]} />
-            </View>
-            <Text style={styles.punchText}>7 / 10 כניסות נותרו</Text>
-          </View>
+          // Render plan title/image
+          const renderPlanTitle = () => {
+            if (!sub?.planName) {
+              return <Text style={styles.membershipTitle}>הסטטוס שלי</Text>;
+            }
+            const name = sub.planName.toUpperCase();
+            if (name.includes('ELITE')) {
+              return <Image source={require('@/assets/images/reel-elite.png')} style={styles.planImage} resizeMode="contain" />;
+            } else if (name.includes('ONE')) {
+              return <Image source={require('@/assets/images/reel-one.png')} style={styles.planImage} resizeMode="contain" />;
+            } else if (name.includes('10') || totalSessions === 10) {
+              return <Image source={require('@/assets/images/10sessions.png')} style={styles.planImage} resizeMode="contain" />;
+            } else if (name.includes('20') || totalSessions === 20) {
+              return <Image source={require('@/assets/images/20sessions.png')} style={styles.planImage} resizeMode="contain" />;
+            }
+            return <Text style={styles.membershipTitle}>{sub.planName}</Text>;
+          };
 
-          <View style={styles.membershipFooter}>
-            <Text style={styles.validUntilText}>בתוקף עד 20 אוק׳</Text>
-            <TouchableOpacity style={styles.renewButton} onPress={() => router.push('/subscription-management' as any)}>
-              <Text style={styles.renewButtonText}>ניהול מנוי</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+          return (
+            <View style={styles.membershipCard}>
+              <View style={styles.membershipHeader}>
+                {renderPlanTitle()}
+                <View style={[styles.activeBadge, !hasActiveSubscription && styles.inactiveBadge]}>
+                  <View style={[styles.activeDot, !hasActiveSubscription && styles.inactiveDot]} />
+                  <Text style={[styles.activeText, !hasActiveSubscription && styles.inactiveText]}>
+                    {hasActiveSubscription ? 'פעיל' : 'לא פעיל'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Progress bar - only for tickets - fills as user books */}
+              {hasActiveSubscription && isTicket && (
+                <View style={styles.punchProgressContainer}>
+                  <View style={styles.punchTrack}>
+                    <View style={[styles.punchFill, { width: `${progressPercent}%` }]} />
+                  </View>
+                  <Text style={styles.punchText}>
+                    {sessionsUsed} / {totalSessions} כניסות בוצעו
+                  </Text>
+                </View>
+              )}
+
+              {/* For unlimited subscriptions, show active task instead of "unlimited" text */}
+              {hasActiveSubscription && !isTicket && currentTask && (
+                <View style={styles.activeTaskContainer}>
+                  <View style={styles.taskIconWrapper}>
+                    <Image source={{ uri: currentTask.icon }} style={styles.taskIcon} />
+                    <View style={styles.taskLockOverlay}>
+                      <Lock size={10} color="#fff" />
+                    </View>
+                  </View>
+                  <View style={styles.taskProgressSection}>
+                    <Text style={styles.taskProgressText}>
+                      {attendedCount} / {currentTask.task_requirement}
+                    </Text>
+                    <View style={styles.taskProgressBar}>
+                      <View style={[styles.taskProgressFill, { width: `${taskProgress}%` }]} />
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Fallback for unlimited if no task available */}
+              {hasActiveSubscription && !isTicket && !currentTask && (
+                <View style={styles.unlimitedContainer}>
+                  <Icon name="infinity" size={16} color={Colors.primary} />
+                  <Text style={styles.unlimitedText}>כניסות ללא הגבלה</Text>
+                </View>
+              )}
+
+              <View style={styles.membershipFooter}>
+                <Text style={styles.validUntilText}>
+                  {hasActiveSubscription
+                    ? `בתוקף עד ${formatExpiryDate(sub?.endDate)}`
+                    : 'אין מנוי פעיל'
+                  }
+                </Text>
+                <TouchableOpacity
+                  style={styles.renewButton}
+                  onPress={() => router.push(hasActiveSubscription ? '/subscription-management' as any : '/shop' as any)}
+                >
+                  <Text style={styles.renewButtonText}>
+                    {hasActiveSubscription ? 'ניהול מנוי' : 'לחנות'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        })()}
 
         {/* 4. Split Row: Weekly Goal & Quick Actions */}
         <View style={styles.splitRow}>
@@ -251,6 +385,31 @@ export default function HomeScreen() {
 
         <View style={{ height: 120 }} />
       </ScrollView>
+
+      {/* Achievement Unlock Dialog */}
+      <Modal visible={showUnlockDialog} transparent animationType="fade">
+        <View style={styles.unlockOverlay}>
+          <Animated.View style={styles.unlockDialog}>
+            {newlyUnlockedAchievement && (
+              <>
+                <Image
+                  source={{ uri: newlyUnlockedAchievement.icon }}
+                  style={styles.unlockIcon}
+                />
+                <Text style={styles.unlockTitle}>
+                  {newlyUnlockedAchievement.description || newlyUnlockedAchievement.name}
+                </Text>
+                <TouchableOpacity
+                  style={styles.unlockButton}
+                  onPress={handleDismissUnlockDialog}
+                >
+                  <Text style={styles.unlockButtonText}>מדהים! 🎉</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </Animated.View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -274,6 +433,24 @@ const styles = StyleSheet.create({
     marginTop: 6,
     gap: 12,
   },
+  headerWrapper: {
+    paddingHorizontal: 20,
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  headerCard: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: 24,
+    gap: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
+  },
   headerTextContainer: {
     justifyContent: 'center',
     alignItems: 'flex-start',
@@ -284,9 +461,21 @@ const styles = StyleSheet.create({
     color: '#171717',
     textAlign: 'left',
   },
+  greetingTitleLight: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textAlign: 'left',
+  },
   dateSubtitle: {
     fontSize: 14,
     color: '#6B7280',
+    marginTop: 2,
+    textAlign: 'left',
+  },
+  dateSubtitleLight: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.6)',
     marginTop: 2,
     textAlign: 'left',
   },
@@ -296,7 +485,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 6,
     elevation: 4,
-    borderRadius: 24,
+    borderRadius: 26,
   },
   avatar: {
     width: 48,
@@ -306,16 +495,58 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
     backgroundColor: '#fff',
   },
+  avatarLight: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
   avatarPlaceholder: {
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F3F4F6',
     borderColor: Colors.primary,
   },
+  avatarPlaceholderLight: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
   avatarInitials: {
     color: Colors.primary,
     fontWeight: '700',
     fontSize: 18,
+  },
+  avatarInitialsLight: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 20,
+  },
+  avatarBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000000',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  avatarBadgeIcon: {
+    width: 16,
+    height: 16,
+    resizeMode: 'contain',
   },
 
   // Hero
@@ -383,6 +614,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#10B981',
+  },
+  inactiveBadge: {
+    backgroundColor: '#FEF2F2',
+  },
+  inactiveDot: {
+    backgroundColor: '#EF4444',
+  },
+  inactiveText: {
+    color: '#EF4444',
+  },
+  planImage: {
+    width: 120,
+    height: 24,
+  },
+  unlimitedContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  unlimitedText: {
+    fontSize: 14,
+    color: '#4B5563',
+    fontWeight: '500',
   },
   punchProgressContainer: {
     gap: 8,
@@ -552,5 +807,95 @@ const styles = StyleSheet.create({
   dotActive: {
     backgroundColor: Colors.primary,
     width: 16,
+  },
+
+  // Active Task Styles
+  activeTaskContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 16,
+  },
+  taskIconWrapper: {
+    position: 'relative',
+  },
+  taskIcon: {
+    width: 56,
+    height: 56,
+    resizeMode: 'contain',
+  },
+  taskLockOverlay: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#64748b',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  taskProgressSection: {
+    flex: 1,
+  },
+  taskProgressText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4B5563',
+    marginBottom: 8,
+    textAlign: 'left',
+  },
+  taskProgressBar: {
+    height: 8,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  taskProgressFill: {
+    height: '100%',
+    backgroundColor: Colors.primary,
+    borderRadius: 4,
+  },
+
+  // Unlock Dialog Styles
+  unlockOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unlockDialog: {
+    backgroundColor: '#fff',
+    borderRadius: 28,
+    padding: 32,
+    alignItems: 'center',
+    width: '85%',
+    maxWidth: 340,
+  },
+  unlockIcon: {
+    width: 120,
+    height: 120,
+    resizeMode: 'contain',
+    marginBottom: 24,
+  },
+  unlockTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  unlockButton: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 16,
+  },
+  unlockButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

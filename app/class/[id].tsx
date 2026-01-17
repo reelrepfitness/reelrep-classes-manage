@@ -57,6 +57,213 @@ interface WorkoutSection {
     exercises: WorkoutExercise[];
 }
 
+// --- Helper: Get highest completed achievement badge ---
+const getHighestBadge = (participant: any) => {
+    const userAchievements = participant?.profiles?.user_achievements;
+    if (!userAchievements || userAchievements.length === 0) return null;
+
+    // Sort by task_requirement descending and return the highest
+    const sortedAchievements = userAchievements
+        .filter((ua: any) => ua.achievements)
+        .map((ua: any) => ua.achievements)
+        .sort((a: any, b: any) => (b.task_requirement || 0) - (a.task_requirement || 0));
+
+    return sortedAchievements[0] || null;
+};
+
+// --- Animated Slot Component ---
+const AnimatedSlot = ({
+    index,
+    participant,
+    onRegister,
+}: {
+    index: number;
+    participant: any;
+    onRegister: () => void;
+}) => {
+    const fadeAnim = useRef(new Animated.Value(participant ? 0 : 1)).current;
+    const scaleAnim = useRef(new Animated.Value(participant ? 0.8 : 1)).current;
+
+    useEffect(() => {
+        if (participant) {
+            // Staggered fade-in animation for taken slots
+            Animated.parallel([
+                Animated.timing(fadeAnim, {
+                    toValue: 1,
+                    duration: 400,
+                    delay: index * 100, // Stagger by 100ms per slot
+                    useNativeDriver: true,
+                }),
+                Animated.spring(scaleAnim, {
+                    toValue: 1,
+                    tension: 50,
+                    friction: 7,
+                    delay: index * 100,
+                    useNativeDriver: true,
+                }),
+            ]).start();
+        }
+    }, [participant, index]);
+
+    const isTaken = !!participant;
+    const profile = participant?.profiles;
+    const fullName = profile?.full_name || profile?.name || '';
+    const nameParts = fullName.split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+    const avatarUrl = profile?.avatar_url;
+    const highestBadge = getHighestBadge(participant);
+
+    if (isTaken) {
+        return (
+            <Animated.View
+                style={[
+                    slotStyles.slotBox,
+                    slotStyles.slotTaken,
+                    {
+                        opacity: fadeAnim,
+                        transform: [{ scale: scaleAnim }],
+                    },
+                ]}
+            >
+                <LinearGradient
+                    colors={['#1F2937', '#111827']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={slotStyles.slotTakenGradient}
+                >
+                    <View style={slotStyles.slotTakenRow}>
+                        <View style={slotStyles.slotAvatarContainer}>
+                            {avatarUrl ? (
+                                <Image source={{ uri: avatarUrl }} style={slotStyles.slotAvatar} />
+                            ) : (
+                                <View style={slotStyles.slotAvatarPlaceholder}>
+                                    <Icon name="user" size={14} color="#FFFFFF" strokeWidth={2} />
+                                </View>
+                            )}
+                            {highestBadge?.icon && (
+                                <Image
+                                    source={{ uri: highestBadge.icon }}
+                                    style={slotStyles.achievementBadge}
+                                />
+                            )}
+                        </View>
+                        <View style={slotStyles.slotNameContainer}>
+                            <Text style={slotStyles.slotFirstName} numberOfLines={1}>
+                                {firstName || 'משתתף'}
+                            </Text>
+                            {lastName ? (
+                                <Text style={slotStyles.slotLastName} numberOfLines={1}>
+                                    {lastName}
+                                </Text>
+                            ) : null}
+                        </View>
+                    </View>
+                </LinearGradient>
+            </Animated.View>
+        );
+    }
+
+    return (
+        <TouchableOpacity
+            style={slotStyles.slotBox}
+            activeOpacity={0.7}
+            onPress={onRegister}
+        >
+            <View style={slotStyles.slotContent}>
+                <Icon name="plus" size={28} color="#9CA3AF" strokeWidth={2.5} />
+                <Text style={slotStyles.slotAvailable}>פנוי</Text>
+            </View>
+        </TouchableOpacity>
+    );
+};
+
+const slotStyles = StyleSheet.create({
+    slotBox: {
+        width: '48%',
+        height: 80,
+        backgroundColor: '#F9FAFB',
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: '#E5E7EB',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 8,
+    },
+    slotTaken: {
+        borderColor: '#374151',
+        overflow: 'hidden',
+        padding: 0,
+    },
+    slotTakenGradient: {
+        flex: 1,
+        width: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 10,
+        paddingHorizontal: 8,
+    },
+    slotTakenRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    slotAvatarContainer: {
+        position: 'relative',
+    },
+    slotAvatar: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+    },
+    slotAvatarPlaceholder: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: '#374151',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    achievementBadge: {
+        position: 'absolute',
+        bottom: -4,
+        right: -4,
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: '#111827',
+        backgroundColor: '#fff',
+    },
+    slotNameContainer: {
+        flex: 1,
+        gap: 0,
+    },
+    slotContent: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+    },
+    slotFirstName: {
+        fontSize: 17,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        textAlign: 'left',
+    },
+    slotLastName: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#9CA3AF',
+        textAlign: 'left',
+    },
+    slotAvailable: {
+        fontSize: 9,
+        fontWeight: '600',
+        color: '#9CA3AF',
+        textAlign: 'center',
+    },
+});
+
 // --- Workout Viewer Component ---
 const WorkoutViewer = ({ workoutData, description }: { workoutData?: WorkoutSection[] | null, description?: string }) => {
     const [isExpanded, setIsExpanded] = useState(false);
@@ -624,63 +831,14 @@ export default function ClassDetailsScreen() {
                         </Text>
 
                         <View style={styles.slotsGrid}>
-                            {Array.from({ length: classItem.capacity }, (_, index) => {
-                                const participant = participants[index];
-                                const isTaken = !!participant;
-                                const profile = participant?.profiles;
-                                const fullName = profile?.full_name || profile?.name || '';
-                                const nameParts = fullName.split(' ');
-                                const firstName = nameParts[0] || '';
-                                const lastName = nameParts.slice(1).join(' ') || '';
-                                const avatarUrl = profile?.avatar_url;
-
-                                return (
-                                    <TouchableOpacity
-                                        key={index}
-                                        style={[
-                                            styles.slotBox,
-                                            isTaken && styles.slotTaken,
-                                        ]}
-                                        activeOpacity={isTaken ? 1 : 0.7}
-                                        disabled={isTaken}
-                                        onPress={isTaken ? undefined : handleRegister}
-                                    >
-                                        {isTaken ? (
-                                            <LinearGradient
-                                                colors={['#1F2937', '#111827']}
-                                                start={{ x: 0, y: 0 }}
-                                                end={{ x: 1, y: 1 }}
-                                                style={styles.slotTakenGradient}
-                                            >
-                                                <View style={styles.slotTakenRow}>
-                                                    {avatarUrl ? (
-                                                        <Image source={{ uri: avatarUrl }} style={styles.slotAvatar} />
-                                                    ) : (
-                                                        <View style={styles.slotAvatarPlaceholder}>
-                                                            <Icon name="user" size={14} color="#FFFFFF" strokeWidth={2} />
-                                                        </View>
-                                                    )}
-                                                    <View style={styles.slotNameContainer}>
-                                                        <Text style={styles.slotFirstName} numberOfLines={1}>
-                                                            {firstName || 'משתתף'}
-                                                        </Text>
-                                                        {lastName ? (
-                                                            <Text style={styles.slotLastName} numberOfLines={1}>
-                                                                {lastName}
-                                                            </Text>
-                                                        ) : null}
-                                                    </View>
-                                                </View>
-                                            </LinearGradient>
-                                        ) : (
-                                            <View style={styles.slotContent}>
-                                                <Icon name="plus" size={28} color="#9CA3AF" strokeWidth={2.5} />
-                                                <Text style={styles.slotAvailable}>פנוי</Text>
-                                            </View>
-                                        )}
-                                    </TouchableOpacity>
-                                );
-                            })}
+                            {Array.from({ length: classItem.capacity }, (_, index) => (
+                                <AnimatedSlot
+                                    key={index}
+                                    index={index}
+                                    participant={participants[index]}
+                                    onRegister={handleRegister}
+                                />
+                            ))}
                         </View>
 
                         {classItem.waitingListCount > 0 && (
@@ -694,66 +852,81 @@ export default function ClassDetailsScreen() {
                     </View>
                 </ScrollView>
 
-                {/* Sticky Footer */}
-                <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+                {/* Sticky Footer with Black Gradient */}
+                <LinearGradient
+                    colors={['#1F2937', '#111827']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}
+                >
                     {isBooked ? (
                         <View style={styles.footerRow}>
+                            {/* Switch Button - Yellow Icon */}
                             <TouchableOpacity
-                                style={{ flex: 1 }}
+                                style={styles.whiteButton}
                                 onPress={handleSwitch}
                                 activeOpacity={0.8}
                             >
-                                <LinearGradient
-                                    colors={['#1F2937', '#111827']}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
-                                    style={styles.gradientButton}
-                                >
-                                    <SwapIcon size={20} color="#F59E0B" />
-                                    <Text style={[styles.gradientButtonText, { color: '#FFFFFF' }]}>החלף שיעור</Text>
-                                </LinearGradient>
+                                <SwapIcon size={20} color="#F59E0B" />
+                                <Text style={styles.whiteButtonText}>החלף שיעור</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity
-                                style={{ flex: 1 }}
-                                onPress={handleCancelClass}
-                                activeOpacity={0.8}
-                            >
-                                <LinearGradient
-                                    colors={['#1F2937', '#111827']}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
-                                    style={styles.gradientButton}
+
+                            {/* Cancel Button - Red Icon / Red Gradient for Late */}
+                            {getIsLateCancellation() ? (
+                                <TouchableOpacity
+                                    style={{ flex: 1 }}
+                                    onPress={handleCancelClass}
+                                    activeOpacity={0.8}
+                                >
+                                    <LinearGradient
+                                        colors={['#EF4444', '#DC2626']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                        style={styles.redGradientButton}
+                                    >
+                                        <Icon
+                                            name="alert-triangle"
+                                            size={18}
+                                            color="#FFFFFF"
+                                            strokeWidth={2.5}
+                                        />
+                                        <Text style={styles.redGradientButtonText}>ביטול מאוחר</Text>
+                                    </LinearGradient>
+                                </TouchableOpacity>
+                            ) : (
+                                <TouchableOpacity
+                                    style={styles.whiteButton}
+                                    onPress={handleCancelClass}
+                                    activeOpacity={0.8}
                                 >
                                     <Icon
-                                        name={getIsLateCancellation() ? "alert-triangle" : "x-circle"}
+                                        name="x-circle"
                                         size={18}
                                         color="#EF4444"
                                         strokeWidth={2.5}
                                     />
-                                    <Text style={[styles.gradientButtonText, { color: '#FFFFFF' }]}>
-                                        {getIsLateCancellation() ? 'ביטול מאוחר' : 'ביטול שיעור'}
-                                    </Text>
-                                </LinearGradient>
-                            </TouchableOpacity>
+                                    <Text style={styles.whiteButtonText}>ביטול שיעור</Text>
+                                </TouchableOpacity>
+                            )}
                         </View>
                     ) : (
                         <TouchableOpacity
-                            style={[styles.fullWidthButton, isFull && styles.disabledButton]}
+                            style={[styles.whiteButtonFull, isFull && styles.disabledButtonWhite]}
                             onPress={handleRegister}
                             disabled={isFull}
                         >
-                            <Text style={styles.fullWidthButtonText}>
+                            <Text style={[styles.whiteButtonTextFull, isFull && styles.disabledButtonTextWhite]}>
                                 {isFull ? 'השיעור מלא' : 'הרשם לשיעור'}
                             </Text>
                             <Icon
                                 name={isFull ? 'lock' : 'check-circle'}
                                 size={20}
-                                color="#FFFFFF"
+                                color={isFull ? '#6B7280' : '#111827'}
                                 strokeWidth={2.5}
                             />
                         </TouchableOpacity>
                     )}
-                </View>
+                </LinearGradient>
 
                 {/* Custom Dialog */}
                 <CustomDialog
@@ -1069,16 +1242,16 @@ const styles = StyleSheet.create({
         bottom: 0,
         left: 0,
         right: 0,
-        backgroundColor: '#FFFFFF',
         paddingHorizontal: 20,
         paddingTop: 16,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 8,
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 16,
+        elevation: 12,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
+        overflow: 'hidden',
     },
     footerRow: {
         flexDirection: 'row',
@@ -1151,5 +1324,62 @@ const styles = StyleSheet.create({
     gradientButtonText: {
         fontSize: 15,
         fontWeight: '700',
+    },
+    // White button styles for black gradient footer
+    whiteButton: {
+        flex: 1,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        paddingVertical: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+    },
+    whiteButtonText: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#111827',
+    },
+    whiteButtonFull: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        paddingVertical: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    whiteButtonTextFull: {
+        fontSize: 17,
+        fontWeight: '700',
+        color: '#111827',
+    },
+    disabledButtonWhite: {
+        backgroundColor: 'rgba(255,255,255,0.3)',
+    },
+    disabledButtonTextWhite: {
+        color: '#6B7280',
+    },
+    warningButtonWhite: {
+        backgroundColor: '#FEF3C7',
+    },
+    warningButtonTextWhite: {
+        color: '#B45309',
+    },
+    // Red gradient button for late cancellation
+    redGradientButton: {
+        flex: 1,
+        borderRadius: 16,
+        paddingVertical: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+    },
+    redGradientButtonText: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#FFFFFF',
     },
 });

@@ -33,6 +33,12 @@ export interface UserSubscription {
   endDate: string;
   classesPerMonth: number;
   classesUsed: number;
+  // Plan display fields
+  planName?: string;
+  planImageUrl?: string;
+  isTicket?: boolean;
+  totalSessions?: number;
+  sessionsRemaining?: number;
 }
 
 export interface UserTicket {
@@ -116,16 +122,14 @@ export interface ClassBooking {
 export interface Achievement {
   id: string;
   name: string;
-  name_hebrew: string;
   catagory: string | null;
   icon: string;
   description?: string | null;
-  description_hebrew: string | null;
   task_requirement: number;
   points: number;
   task_type: 'total_weight' | 'challenge' | 'disapline' | 'classes_attended';
-  created_at: string;
-  is_active: boolean;
+  created_at?: string;
+  is_active?: boolean;
 }
 
 export interface UserAchievement {

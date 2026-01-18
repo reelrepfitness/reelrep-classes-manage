@@ -63,13 +63,13 @@ const SubscriptionCard = ({ user, onPress, currentTask, attendedCount }: { user:
     const totalSessions = sub.totalSessions || 0;
 
     if (name.includes('ELITE')) {
-      return <Image source={require('@/assets/images/reel-elite.png')} style={styles.planImage} resizeMode="contain" />;
+      return <Image source={require('@/assets/images/reel-elite-white.png')} style={styles.planImage} resizeMode="contain" />;
     } else if (name.includes('ONE')) {
-      return <Image source={require('@/assets/images/reel-one.png')} style={styles.planImage} resizeMode="contain" />;
+      return <Image source={require('@/assets/images/reel-one-white.png')} style={styles.planImage} resizeMode="contain" />;
     } else if (name.includes('10') || totalSessions === 10) {
-      return <Image source={require('@/assets/images/10sessions.png')} style={styles.planImage} resizeMode="contain" />;
+      return <Image source={require('@/assets/images/10sessions-white.png')} style={styles.planImage} resizeMode="contain" />;
     } else if (name.includes('20') || totalSessions === 20) {
-      return <Image source={require('@/assets/images/20sessions.png')} style={styles.planImage} resizeMode="contain" />;
+      return <Image source={require('@/assets/images/20sessions-white.png')} style={styles.planImage} resizeMode="contain" />;
     }
     // Fallback to text if no matching image
     return <Text style={styles.cardTitle}>{sub.planName}</Text>;

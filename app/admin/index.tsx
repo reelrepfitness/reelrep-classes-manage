@@ -1,13 +1,18 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import DashboardStatsCarousel from '@/components/admin/dashboard/DashboardStatsCarousel';
 import LeadFunnelWidget from '@/components/admin/dashboard/LeadFunnelWidget';
 import DailyClassesWidget from '@/components/admin/dashboard/DailyClassesWidget';
 import { useAdminDashboardData } from '@/hooks/admin/useAdminDashboardData';
 import { AdminHeader } from '@/components/admin/AdminHeader';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function AdminDashboard() {
+  const router = useRouter();
+  const { signOut } = useAuth();
   const { funnel, stats, todaysClasses, refresh } = useAdminDashboardData();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -16,6 +21,15 @@ export default function AdminDashboard() {
     await refresh();
     setRefreshing(false);
   }, [refresh]);
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      router.replace('/(auth)/login' as any);
+    } catch (error) {
+      console.error('Logout failed', error);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -38,10 +52,13 @@ export default function AdminDashboard() {
           conversionRate={funnel.conversionRate}
         />
 
-        {/* 3. Daily Studio */}
-        <DailyClassesWidget classes={todaysClasses} />
+        {/* Logout Button */}
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={20} color="#EF4444" />
+          <Text style={styles.logoutText}>התנתק מהמערכת</Text>
+        </TouchableOpacity>
 
-        <View style={{ height: 120 }} />
+        <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   );
@@ -50,7 +67,7 @@ export default function AdminDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB', // Light Background for Content
+    backgroundColor: '#F9FAFB',
   },
   scrollView: {
     flex: 1,
@@ -59,5 +76,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 20,
     paddingTop: 20,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FEE2E2',
+    paddingVertical: 16,
+    borderRadius: 16,
+    marginTop: 20,
+  },
+  logoutText: {
+    color: '#EF4444',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

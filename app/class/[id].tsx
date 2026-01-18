@@ -141,12 +141,6 @@ const AnimatedSlot = ({
                                     <Icon name="user" size={14} color="#FFFFFF" strokeWidth={2} />
                                 </View>
                             )}
-                            {highestBadge?.icon && (
-                                <Image
-                                    source={{ uri: highestBadge.icon }}
-                                    style={slotStyles.achievementBadge}
-                                />
-                            )}
                         </View>
                         <View style={slotStyles.slotNameContainer}>
                             <Text style={slotStyles.slotFirstName} numberOfLines={1}>
@@ -160,6 +154,12 @@ const AnimatedSlot = ({
                         </View>
                     </View>
                 </LinearGradient>
+                {highestBadge?.icon && (
+                    <Image
+                        source={{ uri: highestBadge.icon }}
+                        style={slotStyles.achievementBadge}
+                    />
+                )}
             </Animated.View>
         );
     }
@@ -192,7 +192,7 @@ const slotStyles = StyleSheet.create({
     },
     slotTaken: {
         borderColor: '#374151',
-        overflow: 'hidden',
+        overflow: 'visible',
         padding: 0,
     },
     slotTakenGradient: {
@@ -226,14 +226,13 @@ const slotStyles = StyleSheet.create({
     },
     achievementBadge: {
         position: 'absolute',
-        bottom: -4,
-        right: -4,
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: '#111827',
-        backgroundColor: '#fff',
+        right: 8,
+        top: '50%',
+        marginTop: -24,
+        width: 48,
+        height: 48,
+        resizeMode: 'contain',
+        zIndex: 10,
     },
     slotNameContainer: {
         flex: 1,
@@ -421,7 +420,9 @@ export default function ClassDetailsScreen() {
     const [classItem, setClassItem] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [participants, setParticipants] = useState<any[]>([]);
+    const [waitlistParticipants, setWaitlistParticipants] = useState<any[]>([]);
     const [workoutData, setWorkoutData] = useState<WorkoutSection[] | null>(null);
+    const [activeTab, setActiveTab] = useState<'booked' | 'waitlist'>('booked');
 
     // Dialog states
     const [dialogVisible, setDialogVisible] = useState(false);
@@ -440,7 +441,11 @@ export default function ClassDetailsScreen() {
         if (!id) return;
         try {
             const bookings = await getClassBookings(id);
-            setParticipants(bookings.filter((b: any) => ['confirmed', 'completed', 'no_show'].includes(b.status)));
+            const booked = bookings.filter((b: any) => ['confirmed', 'completed', 'no_show', 'late'].includes(b.status));
+            const waitlist = bookings.filter((b: any) => b.status === 'waiting_list');
+
+            setParticipants(booked);
+            setWaitlistParticipants(waitlist);
         } catch (error) {
             console.error('Error fetching participants:', error);
         }
@@ -823,30 +828,118 @@ export default function ClassDetailsScreen() {
                         description={classItem.description}
                     />
 
-                    {/* Slots Section */}
+                    {/* Slots Section with Tabs */}
                     <View style={styles.slotsCard}>
-                        <Text style={styles.sectionTitle}>בחר מקום בשיעור</Text>
-                        <Text style={styles.slotsSubtitle}>
-                            {classItem.enrolled} / {classItem.capacity} תפוסים
-                        </Text>
+                        {/* Tabs Header */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 24 }}>
+                            {/* REGISTERED Tab */}
+                            <TouchableOpacity
+                                onPress={() => setActiveTab('booked')}
+                                activeOpacity={0.7}
+                                style={{
+                                    borderBottomWidth: activeTab === 'booked' ? 2 : 0,
+                                    borderBottomColor: '#111827',
+                                    paddingBottom: 4,
+                                }}
+                            >
+                                <Text style={{
+                                    fontSize: 16,
+                                    fontWeight: activeTab === 'booked' ? '800' : '400',
+                                    color: activeTab === 'booked' ? '#111827' : '#6B7280',
+                                }}>
+                                    רשומים ({participants.length}/{classItem.capacity})
+                                </Text>
+                            </TouchableOpacity>
 
-                        <View style={styles.slotsGrid}>
-                            {Array.from({ length: classItem.capacity }, (_, index) => (
-                                <AnimatedSlot
-                                    key={index}
-                                    index={index}
-                                    participant={participants[index]}
-                                    onRegister={handleRegister}
-                                />
-                            ))}
+                            {/* WAITLIST Tab */}
+                            <TouchableOpacity
+                                onPress={() => setActiveTab('waitlist')}
+                                activeOpacity={0.7}
+                                style={{
+                                    borderBottomWidth: activeTab === 'waitlist' ? 2 : 0,
+                                    borderBottomColor: '#111827',
+                                    paddingBottom: 4,
+                                }}
+                            >
+                                <Text style={{
+                                    fontSize: 16,
+                                    fontWeight: activeTab === 'waitlist' ? '800' : '400',
+                                    color: activeTab === 'waitlist' ? '#111827' : '#6B7280',
+                                }}>
+                                    ממתינים ({classItem.waitingListCount || 0})
+                                </Text>
+                            </TouchableOpacity>
                         </View>
 
-                        {classItem.waitingListCount > 0 && (
-                            <View style={styles.waitingListBadge}>
-                                <Icon name="clock" size={12} color="#F59E0B" strokeWidth={2} />
-                                <Text style={styles.waitingListText}>
-                                    {classItem.waitingListCount} ברשימת המתנה
-                                </Text>
+                        {/* Content Body */}
+                        {activeTab === 'booked' ? (
+                            <View style={styles.slotsGrid}>
+                                {Array.from({ length: classItem.capacity }, (_, index) => (
+                                    <AnimatedSlot
+                                        key={index}
+                                        index={index}
+                                        participant={participants[index]}
+                                        onRegister={handleRegister}
+                                    />
+                                ))}
+                            </View>
+                        ) : (
+                            // Waitlist View
+                            <View>
+                                {waitlistParticipants.length === 0 ? (
+                                    <View style={{ alignItems: 'center', padding: 20 }}>
+                                        <Text style={{ color: '#9CA3AF', fontSize: 14 }}>אין ממתינים לשיעור זה</Text>
+                                    </View>
+                                ) : (
+                                    <View style={styles.slotsGrid}>
+                                        {waitlistParticipants.map((user, index) => {
+                                            const profile = user.profiles;
+                                            return (
+                                                <View key={user.id} style={{
+                                                    width: '100%',
+                                                    backgroundColor: '#F9FAFB',
+                                                    borderRadius: 12,
+                                                    padding: 12,
+                                                    flexDirection: 'row',
+                                                    alignItems: 'center',
+                                                    gap: 12,
+                                                    marginBottom: 8,
+                                                    borderWidth: 1,
+                                                    borderColor: '#E5E7EB'
+                                                }}>
+                                                    <View>
+                                                        {profile?.avatar_url ? (
+                                                            <Image source={{ uri: profile.avatar_url }} style={{ width: 40, height: 40, borderRadius: 20 }} />
+                                                        ) : (
+                                                            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center' }}>
+                                                                <Icon name="user" size={16} color="#9CA3AF" />
+                                                            </View>
+                                                        )}
+                                                        {/* Badge for position? */}
+                                                        <View style={{
+                                                            position: 'absolute',
+                                                            bottom: -4,
+                                                            right: -4,
+                                                            backgroundColor: '#F59E0B',
+                                                            width: 20,
+                                                            height: 20,
+                                                            borderRadius: 10,
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            borderWidth: 2,
+                                                            borderColor: '#FFFFFF'
+                                                        }}>
+                                                            <Text style={{ fontSize: 10, fontWeight: 'bold', color: 'white' }}>{index + 1}</Text>
+                                                        </View>
+                                                    </View>
+                                                    <Text style={{ fontSize: 15, fontWeight: '600', color: '#111827' }}>
+                                                        {profile?.full_name || 'משתתף'}
+                                                    </Text>
+                                                </View>
+                                            );
+                                        })}
+                                    </View>
+                                )}
                             </View>
                         )}
                     </View>

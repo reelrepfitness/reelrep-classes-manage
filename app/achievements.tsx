@@ -9,6 +9,7 @@ import { Achievement } from '@/constants/types';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { cn } from '@/lib/utils';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -167,7 +168,7 @@ export default function AchievementsScreen() {
   const renderAchievementsGrid = () => {
     return (
       <View className="px-5 pb-10">
-        <Text className="text-lg font-bold text-[#09090B] mb-4 text-right">אוסף המדליות שלי</Text>
+        <Text className="text-lg font-bold text-[#09090B] mb-4 text-left">מפת ההתקדמות</Text>
 
         <View className="flex-row flex-wrap justify-between">
           {attendanceAchievements.map((achievement, index) => {
@@ -182,9 +183,9 @@ export default function AchievementsScreen() {
                 className="mb-6 items-center"
               >
                 <View className={cn(
-                  "w-full aspect-square rounded-[24px] items-center justify-center mb-2 border relative shadow-sm",
-                  isUnlocked ? "bg-white border-green-100 shadow-green-100" :
-                    isNext ? "bg-white border-primary/30 shadow-pink-100" : "bg-gray-50 border-gray-100 opacity-60"
+                  "w-full aspect-square rounded-[24px] items-center justify-center mb-2 border relative",
+                  isUnlocked ? "bg-white border-green-100 shadow-sm shadow-green-100" :
+                    isNext ? "bg-white border-transparent shadow-md shadow-black/10" : "bg-gray-50 border-gray-100 opacity-60"
                 )}>
                   <Image
                     source={{ uri: achievement.icon }}
@@ -255,12 +256,33 @@ export default function AchievementsScreen() {
   return (
     <View className="flex-1 bg-[#F9FAFB]">
       {/* Header */}
-      <View style={{ paddingTop: insets.top }} className="bg-white pb-2 border-b border-gray-100 z-10">
-        <View className="px-5 pt-2 mb-2 flex-row justify-between items-center">
-          <Text className="text-2xl font-extrabold text-[#09090B]">ההישגים שלי</Text>
-          <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 items-center justify-center bg-gray-50 rounded-full">
-            <ChevronRight size={22} color="#09090B" />
+      <View
+        style={{ paddingTop: insets.top, paddingBottom: 16 }}
+        className="rounded-b-[20px] overflow-hidden z-10"
+      >
+        <LinearGradient
+          colors={['#1F2937', '#000000']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
+        />
+
+        <View className="px-5 pt-2 flex-row justify-between items-center relative">
+          {/* Back Button (Left side) */}
+          <TouchableOpacity
+            onPress={() => router.back()}
+            className="w-10 h-10 items-center justify-center bg-white/10 rounded-full z-10"
+          >
+            <ChevronRight size={22} color="#FFFFFF" />
           </TouchableOpacity>
+
+          {/* Title (Centered) */}
+          <Text className="text-xl font-extrabold text-white absolute left-0 right-0 text-center">
+            ההישגים שלי
+          </Text>
+
+          {/* Spacer for balance */}
+          <View className="w-10" />
         </View>
       </View>
 

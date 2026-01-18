@@ -14,7 +14,7 @@ export default function AlertsMenuScreen() {
             <View style={styles.content}>
                 <TouchableOpacity
                     style={styles.card}
-                    onPress={() => router.push('/admin-alerts')}
+                    onPress={() => router.push('/admin/notification-settings')}
                 >
                     <View style={[styles.iconContainer, { backgroundColor: '#FEE2E2' }]}>
                         <Bell size={32} color="#EF4444" />
@@ -40,7 +40,7 @@ export default function AlertsMenuScreen() {
 
                 <TouchableOpacity
                     style={styles.card}
-                    onPress={() => router.push('/admin/notification-settings')}
+                    onPress={() => router.push('/admin-alerts')}
                 >
                     <View style={[styles.iconContainer, { backgroundColor: '#F3E8FF' }]}>
                         <Settings size={32} color="#9333EA" />

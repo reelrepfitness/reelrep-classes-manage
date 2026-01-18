@@ -6,204 +6,292 @@ import {
     TouchableOpacity,
     StyleSheet,
     Dimensions,
-    Platform
+    Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { Trophy, Clock, Dumbbell, Plus, ChevronLeft } from 'lucide-react-native';
 import { LineChart } from 'react-native-gifted-charts';
-import { useRouter } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
 import Colors from '@/constants/colors';
+import { ChevronLeft, Scale, TrendingUp, Dumbbell, History } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import LogProgressModal from '@/components/performance/LogProgressModal';
 
 const { width } = Dimensions.get('window');
 
-// --- Mock Data ---
-
-const PR_DATA = [
-    { id: '1', exercise: 'Deadlift', value: '180 kg', date: '10/01/2025', isNew: true },
-    { id: '2', exercise: 'Back Squat', value: '140 kg', date: '05/01/2025', isNew: false },
-    { id: '3', exercise: '5k Run', value: '21:30 min', date: '01/01/2025', isNew: false },
-    { id: '4', exercise: 'Clean & Jerk', value: '100 kg', date: '28/12/2024', isNew: false },
-];
+// --- Mock Data constants ---
+const USER_BODYWEIGHT = 80; // kg
 
 const EXERCISES = [
-    { label: 'Deadlift', value: 'deadlift', type: 'strength' },
-    { label: '5k Run', value: '5k_run', type: 'endurance' },
+    { id: 'deadlift', label: 'Deadlift', currentPR: 180, lastDate: '10/01/2025', unit: 'kg' },
+    { id: 'back_squat', label: 'Back Squat', currentPR: 140, lastDate: '05/01/2025', unit: 'kg' },
+    { id: 'bench_press', label: 'Bench Press', currentPR: 100, lastDate: '28/12/2024', unit: 'kg' },
+    { id: 'clean_jerk', label: 'Clean & Jerk', currentPR: 85, lastDate: '15/12/2024', unit: 'kg' },
+    { id: '5k_run', label: 'Run 5k', currentPR: 0, lastDate: '01/01/2025', unit: 'min', isTime: true, timeStr: '21:30' },
 ];
 
-const CHART_DATA = {
+const CHART_DATA_MOCK = {
     deadlift: [
-        { value: 160, date: '01 Dec', label: '12/1' },
-        { value: 165, date: '08 Dec', label: '12/8' },
-        { value: 170, date: '15 Dec', label: '12/15' },
-        { value: 175, date: '22 Dec', label: '12/22' },
-        { value: 175, date: '30 Dec', label: '12/30' },
-        { value: 180, date: '10 Jan', label: '1/10' },
+        { value: 160, date: '01/12' },
+        { value: 165, date: '08/12' },
+        { value: 170, date: '15/12' },
+        { value: 175, date: '22/12' },
+        { value: 175, date: '30/12' },
+        { value: 180, date: '10/01' },
+    ],
+    back_squat: [
+        { value: 120, date: '01/12' },
+        { value: 125, date: '10/12' },
+        { value: 130, date: '20/12' },
+        { value: 135, date: '30/12' },
+        { value: 140, date: '05/01' },
+    ],
+    bench_press: [
+        { value: 90, date: '01/12' },
+        { value: 92.5, date: '10/12' },
+        { value: 95, date: '20/12' },
+        { value: 100, date: '28/12' },
+    ],
+    clean_jerk: [
+        { value: 70, date: '01/12' },
+        { value: 75, date: '15/12' },
+        { value: 85, date: '15/12' },
     ],
     '5k_run': [
-        { value: 1450, date: '01 Dec', label: '12/1', displayValue: '24:10' }, // values in seconds
-        { value: 1420, date: '10 Dec', label: '12/10', displayValue: '23:40' },
-        { value: 1380, date: '20 Dec', label: '12/20', displayValue: '23:00' },
-        { value: 1350, date: '28 Dec', label: '12/28', displayValue: '22:30' },
-        { value: 1320, date: '05 Jan', label: '1/5', displayValue: '22:00' },
-        { value: 1290, date: '12 Jan', label: '1/12', displayValue: '21:30' },
+        { value: 24.10, date: '01/12' },
+        { value: 23.40, date: '10/12' },
+        { value: 23.00, date: '20/12' },
+        { value: 22.30, date: '28/12' },
+        { value: 21.30, date: '01/01' },
     ]
 };
 
-const HISTORY_DATA = [
-    { id: 'h1', exercise: 'Deadlift', result: '180 kg', date: '10/01/2025', isPR: true, type: 'strength' },
-    { id: 'h2', exercise: '5k Run', result: '21:30 min', date: '12/01/2025', isPR: true, type: 'endurance' },
-    { id: 'h3', exercise: 'Back Squat', result: '135 kg', date: '08/01/2025', isPR: false, type: 'strength' },
-    { id: 'h4', exercise: 'Deadlift', result: '175 kg', date: '05/01/2025', isPR: false, type: 'strength' },
-    { id: 'h5', exercise: 'Clean & Jerk', result: '95 kg', date: '03/01/2025', isPR: false, type: 'strength' },
+const HISTORY_MOCK = [
+    { id: '1', date: 'מאי 15, 2026', weight: 140, reps: 1, isPR: true },
+    { id: '2', date: 'אפר 28, 2026', weight: 135, reps: 2 },
+    { id: '3', date: 'מרץ 10, 2026', weight: 130, reps: 3 },
+    { id: '4', date: 'פבר 22, 2026', weight: 125, reps: 5 },
 ];
+
+// --- Helpers ---
+
+const calculateRatio = (weight: number, bodyWeight: number) => {
+    if (!weight || !bodyWeight) return 0;
+    return (weight / bodyWeight).toFixed(2);
+};
+
+const getRatioColor = (ratio: number) => {
+    if (ratio >= 2.0) return { bg: '#FEF3C7', text: '#D97706', label: 'Elite', icon: '👑' }; // Gold
+    if (ratio >= 1.5) return { bg: '#F1F5F9', text: '#475569', label: 'Pro', icon: '🥈' };  // Silver
+    return { bg: '#FFF1F2', text: Colors.primary, label: 'Athlete', icon: '💪' };    // Brand
+};
+
+const calculatePercentages = (max: number) => {
+    return [
+        { pct: '50%', weight: Math.round(max * 0.5) },
+        { pct: '70%', weight: Math.round(max * 0.7) },
+        { pct: '80%', weight: Math.round(max * 0.8) },
+        { pct: '90%', weight: Math.round(max * 0.9) },
+    ];
+};
 
 export default function PerformanceScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
     const [selectedExercise, setSelectedExercise] = useState(EXERCISES[0]);
+    const [bodyWeight, setBodyWeight] = useState(USER_BODYWEIGHT);
+    const [modalVisible, setModalVisible] = useState(false);
 
-    const currentChartData = CHART_DATA[selectedExercise.value as keyof typeof CHART_DATA];
-    const isStrength = selectedExercise.type === 'strength';
+    // Derived State
+    const currentData = CHART_DATA_MOCK[selectedExercise.id as keyof typeof CHART_DATA_MOCK] || [];
+    const isStrength = !selectedExercise.isTime;
+    const ratio = isStrength ? calculateRatio(selectedExercise.currentPR, bodyWeight) : null;
+    const ratioStyle = isStrength ? getRatioColor(Number(ratio)) : null;
+    const percentages = isStrength ? calculatePercentages(selectedExercise.currentPR) : [];
+
+    // Chart Data Formatting - Gifted Charts expects specific format
+    const chartData = currentData.map(item => ({
+        value: item.value,
+        dataPointText: String(item.value),
+        label: item.date,
+        hideDataPoint: false,
+    }));
 
     return (
         <View style={styles.container}>
-            {/* 1. Header */}
+            <Stack.Screen options={{ headerShown: false }} />
+
+            {/* Header */}
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <ChevronLeft size={28} color="#09090B" />
-                </TouchableOpacity>
-                <View style={styles.headerTextContainer}>
-                    <Text style={styles.headerTitle}>יומן ביצועים</Text>
-                    <Text style={styles.headerSubtitle}>ההתקדמות שלך</Text>
+                <View style={styles.headerTopRow}>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                        <ChevronLeft size={28} color="#09090B" />
+                    </TouchableOpacity>
+
+                    {/* Bodyweight Actions Only - Removed Title as requested */}
+                    <View style={styles.bwContainer}>
+                        <View style={styles.bwInfo}>
+                            <Scale size={16} color="#64748B" />
+                            <Text style={styles.bwText}>BW: <Text style={styles.bwValue}>{bodyWeight}kg</Text></Text>
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => Alert.alert('עדכון משקל גוף', 'כאן יפתח מודל לעדכון משקל')}
+                            style={styles.bwButton}
+                        >
+                            <Text style={styles.bwButtonText}>Update</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Placeholder to balance the back button */}
+                    <View style={{ width: 40 }} />
                 </View>
-                <TouchableOpacity style={styles.addButton}>
-                    <Plus size={24} color="#fff" />
-                </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-
-                {/* 2. PR Showcase Carousel */}
-                <View style={styles.carouselContainer}>
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.scrollContent}
+            >
+                {/* 1. Exercise Selector (Styled as Tabs) */}
+                <View style={styles.selectorContainer}>
                     <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.carouselContent}
-                        flexDirection="row-reverse"
+                        contentContainerStyle={[styles.selectorContent, { flexDirection: 'row-reverse' }]}
                     >
-                        {PR_DATA.map((item) => (
-                            <View key={item.id} style={styles.prCard}>
-                                <View style={styles.prHeader}>
-                                    <Text style={styles.prExercise}>{item.exercise}</Text>
-                                    {item.isNew && (
-                                        <View style={styles.newBadge}>
-                                            <Text style={styles.newBadgeText}>New PR!</Text>
-                                        </View>
-                                    )}
-                                </View>
-                                <Text style={styles.prValue}>{item.value}</Text>
-                                <View style={styles.prFooter}>
-                                    <Text style={styles.prDate}>{item.date}</Text>
-                                    <Trophy size={16} color={item.isNew ? "#FFD700" : "#E5E7EB"} />
-                                </View>
-                                <View style={styles.cardAccent} />
-                            </View>
-                        ))}
-                    </ScrollView>
-                </View>
-
-                {/* 3. Progress Chart */}
-                <View style={styles.chartSection}>
-                    <View style={styles.filterContainer}>
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.filterScroll}
-                            flexDirection="row-reverse"
-                        >
-                            {EXERCISES.map((ex) => (
+                        {EXERCISES.map((ex) => {
+                            const isSelected = selectedExercise.id === ex.id;
+                            return (
                                 <TouchableOpacity
-                                    key={ex.value}
+                                    key={ex.id}
                                     onPress={() => setSelectedExercise(ex)}
                                     style={[
-                                        styles.filterChip,
-                                        selectedExercise.value === ex.value && styles.activeFilterChip
+                                        styles.tabItem,
+                                        isSelected && styles.tabItemActive
                                     ]}
                                 >
                                     <Text style={[
-                                        styles.filterChipText,
-                                        selectedExercise.value === ex.value && styles.activeFilterChipText
+                                        styles.tabText,
+                                        isSelected && styles.tabTextActive
                                     ]}>
                                         {ex.label}
                                     </Text>
                                 </TouchableOpacity>
+                            );
+                        })}
+                    </ScrollView>
+                </View>
+
+                {/* 2. Hero Card - Current PR */}
+                <View style={styles.heroSection}>
+                    <LinearGradient
+                        colors={['#1F2937', '#000000']} // Black Gradient
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.heroCard}
+                    >
+                        <View style={styles.heroHeader}>
+                            <View style={styles.heroIconContainer}>
+                                <Dumbbell size={20} color="#fff" />
+                            </View>
+                            <Text style={styles.heroLabel}>שיא אישי (PR)</Text>
+                        </View>
+
+                        <View style={styles.heroMain}>
+                            <Text style={styles.heroValue}>
+                                {selectedExercise.isTime ? selectedExercise.timeStr : selectedExercise.currentPR}
+                            </Text>
+                            <Text style={styles.heroUnit}>
+                                {selectedExercise.unit}
+                            </Text>
+                        </View>
+
+                        {/* Smart Badge */}
+                        {isStrength && ratioStyle && (
+                            <View style={[styles.ratioBadge, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
+                                <Text style={styles.ratioIcon}>{ratioStyle.icon}</Text>
+                                <Text style={styles.ratioText}>
+                                    {ratio}x משקל גוף
+                                </Text>
+                            </View>
+                        )}
+                    </LinearGradient>
+                </View>
+
+                {/* 3. Pro Tools - Load Table (Only for Strength) */}
+                {isStrength && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>טבלת עומסים</Text>
+                        <View style={styles.loadGrid}>
+                            {percentages.map((p, index) => (
+                                <View key={index} style={styles.loadBox}>
+                                    <View style={styles.loadHeader}>
+                                        <Text style={styles.loadPct}>{p.pct}</Text>
+                                    </View>
+                                    <Text style={styles.loadWeight}>{p.weight} kg</Text>
+                                </View>
                             ))}
-                        </ScrollView>
+                        </View>
+                    </View>
+                )}
+
+                {/* 4. Progress Chart */}
+                <View style={styles.section}>
+                    <View style={styles.sectionHeaderRow}>
+                        <TrendingUp size={20} color={Colors.primary} />
+                        <Text style={styles.sectionTitle}>גרף התקדמות</Text>
                     </View>
 
-                    <View style={styles.chartContainer}>
-                        <LineChart
-                            data={currentChartData}
-                            width={width - 80}
-                            height={220}
-                            noOfSections={4}
-                            spacing={50}
-                            initialSpacing={20}
-                            color={Colors.primary}
-                            thickness={4}
-                            startFillColor={Colors.primary}
-                            endFillColor="rgba(218, 68, 119, 0.01)"
-                            startOpacity={0.4}
-                            endOpacity={0.1}
-                            areaChart
-                            curved
-                            pointerConfig={{
-                                pointerStrokeDashArray: [5, 5],
-                                pointerColor: Colors.primary,
-                                radius: 6,
-                                pointerLabelComponent: (items: any) => {
-                                    return (
-                                        <View style={styles.tooltipContainer}>
-                                            <Text style={styles.tooltipValue}>
-                                                {isStrength ? `${items[0].value} kg` : items[0].displayValue}
-                                            </Text>
-                                            <Text style={styles.tooltipDate}>{items[0].date}</Text>
-                                        </View>
-                                    );
-                                },
-                            }}
-                            yAxisTextStyle={styles.chartAxisText}
-                            xAxisLabelTextStyle={styles.chartAxisText}
-                            yAxisColor="#F3F4F6"
-                            xAxisColor="#F3F4F6"
-                            rulesColor="#F3F4F6"
-                        />
+                    <View style={styles.chartWrapper}>
+                        {/* LTR wrapper to fix mirroring issues */}
+                        <View style={{ direction: 'ltr' }}>
+                            <LineChart
+                                data={chartData}
+                                height={220}
+                                width={width - 64} // padding adjustments
+                                thickness={3}
+                                color={Colors.primary}
+                                startFillColor={Colors.primary}
+                                endFillColor={Colors.primary}
+                                startOpacity={0.2}
+                                endOpacity={0.0}
+                                areaChart
+                                curved
+                                hideDataPoints={false}
+                                dataPointsColor={Colors.primary}
+                                dataPointsRadius={4}
+                                textColor="#94A3B8"
+                                textFontSize={10}
+                                hideRules
+                                xAxisColor="transparent"
+                                yAxisColor="transparent"
+                                yAxisTextStyle={{ color: '#94A3B8', fontSize: 10 }}
+                                initialSpacing={20}
+                                spacing={50}
+                            />
+                        </View>
                     </View>
                 </View>
 
-                {/* 4. Recent History List */}
-                <View style={styles.historySection}>
-                    <Text style={styles.sectionTitle}>היסטוריה אחרונה</Text>
+                {/* 5. Recent History */}
+                <View style={styles.section}>
+                    <View style={styles.sectionHeaderRow}>
+                        <History size={20} color="#64748B" />
+                        <Text style={styles.sectionTitle}>היסטוריה</Text>
+                    </View>
+
                     <View style={styles.historyList}>
-                        {HISTORY_DATA.map((item) => (
+                        {HISTORY_MOCK.map((item, index) => (
                             <View key={item.id} style={styles.historyRow}>
-                                <View style={styles.historyIconContainer}>
-                                    {item.type === 'strength' ? (
-                                        <Dumbbell size={18} color={Colors.primary} />
-                                    ) : (
-                                        <Clock size={18} color="#3b82f6" />
-                                    )}
+                                <View style={styles.historyLeft}>
+                                    <Text style={styles.historyWeight}>{item.weight} kg</Text>
+                                    {item.reps > 1 && <Text style={styles.historyReps}>{item.reps} reps</Text>}
                                 </View>
-                                <View style={styles.historyInfo}>
-                                    <Text style={styles.historyExercise}>{item.exercise}</Text>
+                                <View style={styles.historyRight}>
                                     <Text style={styles.historyDate}>{item.date}</Text>
-                                </View>
-                                <View style={styles.historyResultContainer}>
-                                    {item.isPR && <Trophy size={14} color="#FFD700" style={{ marginRight: 6 }} />}
-                                    <Text style={[styles.historyResult, item.isPR && styles.prResultText]}>
-                                        {item.result}
-                                    </Text>
+                                    {item.isPR && (
+                                        <View style={styles.miniPrBadge}>
+                                            <Text style={styles.miniPrText}>PR</Text>
+                                        </View>
+                                    )}
                                 </View>
                             </View>
                         ))}
@@ -212,6 +300,22 @@ export default function PerformanceScreen() {
 
                 <View style={{ height: 100 }} />
             </ScrollView>
+
+            {/* Action Button for Logging - Floating Bottom Left */}
+            <TouchableOpacity
+                style={styles.fab}
+                onPress={() => setModalVisible(true)}
+            >
+                <Dumbbell color="white" size={24} />
+                <Text style={styles.fabText}>עדכון ביצועים</Text>
+            </TouchableOpacity>
+
+            <LogProgressModal
+                visible={modalVisible}
+                onClose={() => setModalVisible(false)}
+                exercise={selectedExercise}
+            />
+
         </View>
     );
 }
@@ -219,248 +323,313 @@ export default function PerformanceScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#fff',
+        backgroundColor: '#F8FAFC',
     },
     scrollContent: {
         paddingBottom: 40,
     },
     // Header
     header: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        paddingBottom: 20,
         backgroundColor: '#fff',
+        paddingHorizontal: 20,
+        paddingBottom: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
+    },
+    headerTopRow: {
+        flexDirection: 'row-reverse',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
     backButton: {
-        padding: 4,
+        width: 40,
+        height: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#F1F5F9',
+        borderRadius: 20,
     },
-    headerTextContainer: {
-        flex: 1,
-        alignItems: 'flex-end',
-        paddingHorizontal: 16,
+    headerTitleContainer: {
+        alignItems: 'center',
     },
     headerTitle: {
-        fontSize: 24,
+        fontSize: 20,
         fontWeight: '800',
-        color: '#09090B',
+        color: '#0F172A',
     },
-    headerSubtitle: {
-        fontSize: 14,
-        color: '#71717A',
-        marginTop: 2,
-    },
-    addButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: Colors.primary,
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: Colors.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 4,
-    },
-
-    // Carousel
-    carouselContainer: {
-        marginTop: 20,
-        marginBottom: 30,
-    },
-    carouselContent: {
-        paddingHorizontal: 20,
-        gap: 16,
-    },
-    prCard: {
-        width: 160,
-        backgroundColor: '#fff',
-        borderRadius: 20,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
-        elevation: 2,
-        position: 'relative',
-        overflow: 'hidden',
-    },
-    prHeader: {
+    bwContainer: {
         flexDirection: 'row-reverse',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: 8,
-    },
-    prExercise: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: '#64748B',
-        textAlign: 'right',
-        flex: 1,
-    },
-    newBadge: {
-        backgroundColor: '#FFFBEB',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 6,
-        borderWidth: 0.5,
-        borderColor: '#FEF3C7',
-    },
-    newBadgeText: {
-        fontSize: 8,
-        fontWeight: '800',
-        color: '#D97706',
-    },
-    prValue: {
-        fontSize: 22,
-        fontWeight: '900',
-        color: Colors.primary,
-        marginVertical: 4,
-        textAlign: 'right',
-    },
-    prFooter: {
-        flexDirection: 'row-reverse',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        marginTop: 8,
-    },
-    prDate: {
-        fontSize: 10,
-        color: '#94A3B8',
-    },
-    cardAccent: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: 3,
-        backgroundColor: Colors.primary,
-        opacity: 0.8,
-    },
-
-    // Chart Section
-    chartSection: {
-        paddingHorizontal: 20,
-        marginBottom: 40,
-    },
-    filterContainer: {
-        marginBottom: 20,
-    },
-    filterScroll: {
-        gap: 10,
-    },
-    filterChip: {
-        paddingHorizontal: 16,
+        backgroundColor: '#F8FAFC',
+        paddingHorizontal: 12,
         paddingVertical: 8,
-        borderRadius: 12,
-        backgroundColor: '#F8FAFC',
+        borderRadius: 20,
         borderWidth: 1,
-        borderColor: '#F1F5F9',
+        borderColor: '#E2E8F0',
+        gap: 8,
     },
-    activeFilterChip: {
-        backgroundColor: Colors.primary,
-        borderColor: Colors.primary,
+    bwInfo: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        gap: 6,
     },
-    filterChipText: {
-        fontSize: 14,
-        fontWeight: '600',
+    bwText: {
+        fontSize: 13,
         color: '#64748B',
+        fontWeight: '500',
     },
-    activeFilterChipText: {
-        color: '#fff',
+    bwValue: {
+        color: '#0F172A',
+        fontWeight: '700',
     },
-    chartContainer: {
-        backgroundColor: '#fff',
-        borderRadius: 24,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
-        alignItems: 'center',
+    bwButton: {
+        // backgroundColor: '#fff',
+        // padding: 4
     },
-    chartAxisText: {
-        fontSize: 10,
-        color: '#94A3B8',
-        fontWeight: '600',
-    },
-    tooltipContainer: {
-        backgroundColor: '#0F172A',
-        padding: 8,
-        borderRadius: 10,
-        alignItems: 'center',
-        justifyContent: 'center',
-        minWidth: 80,
-    },
-    tooltipValue: {
-        color: '#fff',
+    bwButtonText: {
         fontSize: 12,
-        fontWeight: '800',
-    },
-    tooltipDate: {
-        color: '#94A3B8',
-        fontSize: 10,
-        marginTop: 2,
+        fontWeight: '700',
+        color: Colors.primary,
     },
 
-    // History Section
-    historySection: {
-        paddingHorizontal: 20,
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: '800',
-        color: '#09090B',
-        marginBottom: 16,
-        textAlign: 'right',
-    },
-    historyList: {
-        gap: 12,
-    },
-    historyRow: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        padding: 14,
+    // Selector
+    selectorContainer: {
+        marginTop: 0,
+        marginBottom: 20,
         backgroundColor: '#fff',
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
+        paddingVertical: 12,
     },
-    historyIconContainer: {
-        width: 36,
-        height: 36,
-        borderRadius: 10,
-        backgroundColor: '#F8FAFC',
-        alignItems: 'center',
-        justifyContent: 'center',
+    selectorContent: {
+        paddingHorizontal: 20,
+        gap: 24,
     },
-    historyInfo: {
-        flex: 1,
-        marginRight: 12,
-        alignItems: 'flex-end',
+    // New Tab Styles
+    tabItem: {
+        paddingVertical: 8,
+        borderBottomWidth: 3,
+        borderBottomColor: 'transparent',
     },
-    historyExercise: {
-        fontSize: 15,
-        fontWeight: '700',
-        color: '#1E293B',
+    tabItemActive: {
+        borderBottomColor: Colors.primary,
     },
-    historyDate: {
-        fontSize: 12,
+    tabText: {
+        fontSize: 16,
+        fontWeight: '500',
         color: '#94A3B8',
-        marginTop: 2,
     },
-    historyResultContainer: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-    },
-    historyResult: {
+    tabTextActive: {
         fontSize: 16,
         fontWeight: '800',
         color: '#0F172A',
     },
-    prResultText: {
-        color: Colors.primary,
+
+    // Hero Section
+    heroSection: {
+        paddingHorizontal: 20,
+        marginBottom: 24,
+        marginTop: 20,
     },
+    heroCard: {
+        borderRadius: 24,
+        padding: 24,
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
+        elevation: 8,
+    },
+    heroHeader: {
+        flexDirection: 'row-reverse', // Ensure icon is on correct side for RTL context if needed, currently centered
+        alignItems: 'center',
+        marginBottom: 12,
+        gap: 8,
+    },
+    heroIconContainer: {
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        padding: 6,
+        borderRadius: 12,
+    },
+    heroLabel: {
+        color: 'rgba(255,255,255,0.9)',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    heroMain: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        gap: 6,
+        marginBottom: 16,
+    },
+    heroValue: {
+        fontSize: 56, // Huge
+        fontWeight: '900',
+        color: '#fff',
+        lineHeight: 56,
+        fontVariant: ['tabular-nums'],
+    },
+    heroUnit: {
+        fontSize: 20,
+        fontWeight: '600',
+        color: 'rgba(255,255,255,0.8)',
+        marginBottom: 8,
+    },
+    ratioBadge: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 16,
+        gap: 6,
+    },
+    ratioIcon: {
+        fontSize: 14,
+    },
+    ratioText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '700',
+    },
+
+    // Section Common
+    section: {
+        marginBottom: 24,
+        paddingHorizontal: 20,
+    },
+    sectionHeaderRow: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        marginBottom: 16,
+        gap: 8,
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#0F172A',
+        textAlign: 'right',
+        marginBottom: 12,
+    },
+
+    // Load Grid
+    loadGrid: {
+        flexDirection: 'row-reverse',
+        justifyContent: 'space-between',
+        gap: 8,
+    },
+    loadBox: {
+        flex: 1,
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 12,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.03,
+        shadowRadius: 4,
+        elevation: 1,
+    },
+    loadHeader: {
+        backgroundColor: '#F1F5F9',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 6,
+        marginBottom: 6,
+    },
+    loadPct: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#64748B',
+    },
+    loadWeight: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: '#0F172A',
+    },
+
+    // Chart Wrapper
+    chartWrapper: {
+        backgroundColor: '#fff',
+        borderRadius: 24,
+        padding: 16,
+        paddingBottom: 24,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+    },
+
+    // History
+    historyList: {
+        gap: 12,
+    },
+    historyRow: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 16,
+        flexDirection: 'row-reverse', // RTL: Date on right, Weight on left logic
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
+    },
+    historyRight: {
+        alignItems: 'flex-end',
+    },
+    historyDate: {
+        fontSize: 14,
+        color: '#64748B',
+        fontWeight: '500',
+    },
+    historyLeft: {
+        alignItems: 'flex-start',
+    },
+    historyWeight: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#0F172A',
+    },
+    historyReps: {
+        fontSize: 12,
+        color: '#94A3B8',
+        marginTop: 2,
+    },
+    miniPrBadge: {
+        marginTop: 4,
+        backgroundColor: '#FEF3C7',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
+    miniPrText: {
+        fontSize: 10,
+        fontWeight: '800',
+        color: '#D97706',
+    },
+
+    // FAB
+    fab: {
+        position: 'absolute',
+        bottom: 30,
+        left: 20, // Hebrew often uses Left for primary actions if context is reversed, or Right. 
+        // User asked for "action button", typically FAB is bottom-right in Material, but can be bottom-left in RTL optimization.
+        // Let's stick to Right (default thumb) or Left (RTL flipped). With pure logic, 'left: 20' is visual Left.
+        backgroundColor: Colors.primary,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        borderRadius: 30,
+        shadowColor: Colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
+        elevation: 6,
+        gap: 8,
+    },
+    fabText: {
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: 16,
+    }
 });

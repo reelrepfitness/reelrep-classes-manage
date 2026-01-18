@@ -31,13 +31,14 @@ interface AdminHeaderProps {
 
 const MENU_ITEMS = [
     { label: 'דשבורד', value: '/admin', icon: 'speedometer' },
-    { label: 'ניהול שיעורים', value: '/admin/classes', icon: 'calendar' },
-    { label: 'ניהול לקוחות', value: '/admin/clients', icon: 'people' },
+    { label: 'יומן', value: '/admin/classes', icon: 'calendar' },
+    { label: 'לקוחות', value: '/admin/clients', icon: 'people' },
     { label: 'ניהול תרגילים', value: '/admin/exercises', icon: 'barbell' },
-    { label: 'ניהול טפסים', value: '/admin/forms', icon: 'document-text' },
+    { label: 'טפסים', value: '/admin/forms', icon: 'document-text' },
     { label: 'דוחות', value: '/admin/financial', icon: 'bar-chart' },
+    { label: 'מנויים', value: '/admin/subscriptions', icon: 'card' },
+    { label: 'התראות', value: '/admin/alerts-menu', icon: 'notifications' },
     { label: 'הגדרות', value: '/admin/settings', icon: 'settings' },
-    { label: 'התנתק', value: 'logout', icon: 'log-out', isDestructive: true },
 ];
 
 export function AdminHeader({ title, disabled = false }: AdminHeaderProps) {
@@ -108,7 +109,6 @@ export function AdminHeader({ title, disabled = false }: AdminHeaderProps) {
     };
 
     // Better mapping for Expo Vector Icons (Ionicons)
-    // Common names that work cross-platform usually (or specific ones)
     const getIoniconsName = (itemIcon: string): keyof typeof Ionicons.glyphMap => {
         switch (itemIcon) {
             case 'speedometer': return 'speedometer-outline';
@@ -119,6 +119,8 @@ export function AdminHeader({ title, disabled = false }: AdminHeaderProps) {
             case 'bar-chart': return 'stats-chart-outline';
             case 'settings': return 'settings-outline';
             case 'log-out': return 'log-out-outline';
+            case 'card': return 'card-outline';
+            case 'notifications': return 'notifications-outline';
             default: return 'help-outline';
         }
     }
@@ -140,43 +142,32 @@ export function AdminHeader({ title, disabled = false }: AdminHeaderProps) {
                 pointerEvents={isOpen ? 'auto' : 'none'}
             >
                 <Animated.View style={[menuStyle]}>
-                    <LinearGradient
-                        colors={['#0F172A', '#1E293B']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.dropdown}
-                    >
-                        {MENU_ITEMS.map((item, index) => {
-                            const isSelected = pathname === item.value;
-                            return (
-                                <TouchableOpacity
-                                    key={index}
-                                    style={[
-                                        styles.menuItem,
-                                        index === MENU_ITEMS.length - 1 && styles.lastMenuItem
-                                    ]}
-                                    onPress={() => handleNavigation(item.value)}
-                                >
-                                    <View style={styles.menuItemContent}>
+                    <View style={styles.dropdown}>
+                        <View style={styles.menuGrid}>
+                            {MENU_ITEMS.map((item, index) => {
+                                const isSelected = pathname === item.value;
+                                return (
+                                    <TouchableOpacity
+                                        key={index}
+                                        style={styles.menuGridItem}
+                                        onPress={() => handleNavigation(item.value)}
+                                    >
                                         <Ionicons
                                             name={getIoniconsName(item.icon)}
-                                            size={22}
-                                            color={
-                                                item.isDestructive ? '#EF4444' : '#FFFFFF'
-                                            }
+                                            size={20}
+                                            color={isSelected ? '#FFFFFF' : '#94A3B8'}
                                         />
                                         <Text style={[
-                                            styles.menuItemText,
-                                            isSelected && styles.selectedText,
-                                            item.isDestructive && styles.destructiveText
+                                            styles.menuGridText,
+                                            isSelected && styles.selectedText
                                         ]}>
                                             {item.label}
                                         </Text>
-                                    </View>
-                                </TouchableOpacity>
-                            )
-                        })}
-                    </LinearGradient>
+                                    </TouchableOpacity>
+                                )
+                            })}
+                        </View>
+                    </View>
                 </Animated.View>
             </View>
 
@@ -184,7 +175,7 @@ export function AdminHeader({ title, disabled = false }: AdminHeaderProps) {
             <LinearGradient
                 colors={['#0F172A', '#1E293B']}
                 start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+                end={{ x: 0, y: 1 }}
                 style={[styles.header, { paddingTop: insets.top }]}
             >
                 <TouchableOpacity
@@ -249,6 +240,7 @@ const styles = StyleSheet.create({
         paddingBottom: 24,
         borderBottomLeftRadius: 20,
         borderBottomRightRadius: 20,
+        backgroundColor: '#1E293B',
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 10 },
         shadowOpacity: 0.3,
@@ -265,13 +257,43 @@ const styles = StyleSheet.create({
     },
     menuItemContent: {
         flexDirection: 'row',
-        justifyContent: 'flex-start', // Align left
+        justifyContent: 'flex-start',
         alignItems: 'center',
         gap: 12,
     },
     menuItemText: {
         fontSize: 16,
         color: '#9CA3AF',
+        fontWeight: '500',
+    },
+    menuGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        gap: 8,
+    },
+    menuGridItem: {
+        width: '48%',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingVertical: 12,
+        paddingHorizontal: 8,
+    },
+    menuGridIconContainer: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    menuGridIconContainerSelected: {
+        backgroundColor: '#3B82F6',
+    },
+    menuGridText: {
+        fontSize: 14,
+        color: '#94A3B8',
         fontWeight: '500',
     },
     selectedText: {

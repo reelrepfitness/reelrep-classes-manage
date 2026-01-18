@@ -15,7 +15,6 @@ import { cn } from '@/lib/utils';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { AvatarCircles } from '@/components/ui/AvatarCircles';
-import { ClassAttendeesSheet } from '@/components/ui/ClassAttendeesSheet';
 import { CalendarSyncBar } from '@/components/ui/CalendarSyncBar';
 import { CalendarSelectionModal } from '@/components/ui/CalendarSelectionModal';
 import { Progress } from '@tamagui/progress';
@@ -168,24 +167,6 @@ const parseDateKey = (key: string) => {
 };
 const NEXT_WEEK_LOCK_MESSAGE = 'ההרשמה לשבוע הבא נפתחת כל חמישי ב-12:00';
 
-// --- MOCK DATA FOR ATTENDEES (REQUESTED) ---
-const MOCK_BOOKED_USERS = [
-  { id: '1', name: 'איתי אהרוני', avatarUrl: 'https://i.pravatar.cc/150?u=1' },
-  { id: '2', name: 'נועה קירל', avatarUrl: 'https://i.pravatar.cc/150?u=2' },
-  { id: '3', name: 'מיכל אמדורסקי', avatarUrl: 'https://i.pravatar.cc/150?u=3' },
-  { id: '4', name: 'גיא זוארץ', avatarUrl: 'https://i.pravatar.cc/150?u=4' },
-  { id: '5', name: 'אסי עזר', avatarUrl: 'https://i.pravatar.cc/150?u=5' },
-  { id: '6', name: 'רותם סלע', avatarUrl: 'https://i.pravatar.cc/150?u=6' },
-  { id: '7', name: 'עברי לידר', avatarUrl: 'https://i.pravatar.cc/150?u=7' },
-  { id: '8', name: 'נינט טייב', avatarUrl: 'https://i.pravatar.cc/150?u=8' },
-];
-
-const MOCK_WAITLIST_USERS = [
-  { id: 'w1', name: 'נועם לוי', position: 1, joinedAt: '14:30', avatarUrl: 'https://i.pravatar.cc/150?u=w1' },
-  { id: 'w2', name: 'דניאל כהן', position: 2, joinedAt: '14:45', avatarUrl: 'https://i.pravatar.cc/150?u=w2' },
-  { id: 'w3', name: 'עומר רפאלי', position: 3, joinedAt: '15:05', avatarUrl: 'https://i.pravatar.cc/150?u=w3' },
-];
-
 export default function ClassesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -196,13 +177,7 @@ export default function ClassesScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedClass, setSelectedClass] = useState<any>(null);
 
-  // Attendees Sheet Ref
-  const attendeesSheetRef = useRef<any>(null);
 
-  const handleOpenAttendees = (item: any) => {
-    setSelectedClass(item);
-    attendeesSheetRef.current?.present();
-  };
 
   const lateCancellations = user?.lateCancellations || 0;
   const blockEndDate = user?.blockEndDate || null;
@@ -688,14 +663,18 @@ export default function ClassesScreen() {
         ) : (
           filteredClasses.map((classItem, index) => {
             // Robust Booking Check
-            // 1. Try standard context check (now fixed)
+            // 1. Try standard context check
             // 2. Fallback: Check bookings array directly for matching schedule + date
             const booked = isClassBooked(classItem) || bookings.some((b: any) => {
               if (b.status !== 'confirmed') return false;
-              if (b.schedule_id !== classItem.scheduleId) return false;
 
-              // Compare dates (YYYY-MM-DD)
-              const bookingDatePart = b.class_date ? new Date(b.class_date).toISOString().split('T')[0] : '';
+              const bookingScheduleId = b.scheduleId || b.schedule_id;
+              if (bookingScheduleId !== classItem.scheduleId) return false;
+
+              // Compare dates (YYYY-MM-DD) - Use Local Time
+              const bookingClassDate = b.classDate || b.class_date;
+              const bookingDatePart = bookingClassDate ? new Date(bookingClassDate).toLocaleDateString('en-CA') : '';
+
               return bookingDatePart === classItem.date;
             });
 
@@ -719,6 +698,9 @@ export default function ClassesScreen() {
                   shadowOpacity: 0.2,
                   shadowRadius: 8,
                   elevation: 4,
+                  backgroundColor: '#F0FDF4', // colors.green[50]
+                  borderColor: '#4ADE80', // colors.green[400]
+                  borderWidth: 2,
                 } : undefined}
               >
                 {/* Left Accent Strip for Booked */}
@@ -805,13 +787,13 @@ export default function ClassesScreen() {
                     />
                   </Progress>
                   <View className="flex-row items-center justify-start">
-                    <TouchableOpacity onPress={() => handleOpenAttendees(classItem)} activeOpacity={0.7}>
+                    <View>
                       <AvatarCircles
                         numPeople={Math.max(0, classItem.enrolled - 3)}
                         avatarUrls={classItem.enrolledAvatars?.slice(0, 3) || []}
                         className="justify-start"
                       />
-                    </TouchableOpacity>
+                    </View>
 
                     {/* Waiting List Badge (Left side in RTL) */}
                     {isFull && !booked && (classItem.waitingListCount || 0) > 0 && (
@@ -876,15 +858,7 @@ export default function ClassesScreen() {
       />
 
       {/* 5. Class Attendees Sheet (Global Instance) */}
-      <ClassAttendeesSheet
-        ref={attendeesSheetRef}
-        title={selectedClass?.title || ''}
-        subtitle={selectedClass ? `${selectedClass.time} • ${selectedClass.instructor}` : ''}
-        bookedUsers={MOCK_BOOKED_USERS}
-        waitlistUsers={MOCK_WAITLIST_USERS}
-        bookedCount={selectedClass ? `${selectedClass.enrolled}/${selectedClass.capacity}` : '0/0'}
-        waitlistCount={selectedClass?.waitingListCount || 0}
-      />
+
 
       {/* 6. Custom Dialog */}
       <CustomDialog

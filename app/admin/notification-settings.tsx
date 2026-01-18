@@ -1,15 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Switch, Platform, Alert, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, Switch, Platform, Alert, ActivityIndicator, TouchableOpacity, StyleSheet } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/constants/supabase';
 import Colors from '@/constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// --- Types ---
 type NotificationSettings = {
     id?: string;
-    // Attention
     notify_payment_failed: boolean;
     notify_in_app_purchase: boolean;
     notify_class_cancelled: boolean;
@@ -17,17 +15,14 @@ type NotificationSettings = {
     notify_payment_success: boolean;
     notify_sub_unfrozen: boolean;
     notify_new_lead: boolean;
-    // Action
     notify_last_punch: boolean;
     notify_ticket_finished: boolean;
     notify_sub_expiring: boolean;
-    // Blocks
     notify_user_blocked: boolean;
     notify_user_unblocked: boolean;
     notify_penalty_applied: boolean;
 };
 
-// --- Mappings ---
 type SettingConfig = {
     key: keyof NotificationSettings;
     label: string;
@@ -53,7 +48,7 @@ const SECTIONS: { title: string; data: SettingConfig[] }[] = [
         title: "לטיפול",
         data: [
             { key: 'notify_last_punch', label: "ניקוב אחרון", iconIOS: "alert-circle-outline", iconAndroid: "alert-circle", color: "#F59E0B" },
-            { key: 'notify_ticket_finished', label: "סיום כרטיסייה", iconIOS: "albums-outline", iconAndroid: "albums", color: "#F97316" }, // close to file tray
+            { key: 'notify_ticket_finished', label: "סיום כרטיסייה", iconIOS: "albums-outline", iconAndroid: "albums", color: "#F97316" },
             { key: 'notify_sub_expiring', label: "תוקף מנוי", iconIOS: "hourglass-outline", iconAndroid: "hourglass", color: "#F59E0B" },
         ]
     },
@@ -69,6 +64,7 @@ const SECTIONS: { title: string; data: SettingConfig[] }[] = [
 
 export default function AdminNotificationSettings() {
     const insets = useSafeAreaInsets();
+    const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [settings, setSettings] = useState<NotificationSettings>({
         notify_payment_failed: true,
@@ -109,9 +105,7 @@ export default function AdminNotificationSettings() {
             if (data) {
                 setSettings(data);
             } else {
-                // If no settings exist yet, create default row for THIS user
                 const newSettings = { ...settings, user_id: user.id };
-                // Remove ID if present in default state to avoid conflict, though state doesn't have it by default usually
                 delete (newSettings as any).id;
 
                 const { data: newData, error: insertError } = await supabase
@@ -134,13 +128,11 @@ export default function AdminNotificationSettings() {
     };
 
     const toggleSetting = async (key: keyof NotificationSettings) => {
-        // 1. Optimistic Update
         const previousValue = settings[key];
         const newValue = !previousValue;
 
         setSettings(prev => ({ ...prev, [key]: newValue }));
 
-        // 2. Network Request
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error("No user");
@@ -148,111 +140,53 @@ export default function AdminNotificationSettings() {
             const { error } = await supabase
                 .from('admin_notification_settings')
                 .update({ [key]: newValue })
-                .eq('user_id', user.id); // Update safely by User ID
+                .eq('user_id', user.id);
 
             if (error) throw error;
 
         } catch (error) {
             console.error('Error updating setting:', error);
-            // Revert state
             setSettings(prev => ({ ...prev, [key]: previousValue }));
             Alert.alert('שגיאה', 'עדכון ההגדרה נכשל');
         }
     };
 
-    const router = useRouter();
-
     return (
-        <View className="flex-1 bg-gray-50">
+        <View style={styles.container}>
             <Stack.Screen options={{ headerShown: false }} />
 
-            {/* Custom Header */}
-            <View
-                className="bg-white shadow-sm pb-4 border-b border-gray-100 z-10"
-                style={{ paddingTop: insets.top }}
-            >
-                <View className="flex-row items-center justify-between px-4 pt-2">
-                    <View style={{ width: 40 }} /> {/* Spacer for centering */}
-
-                    <Text className="text-xl font-extrabold text-[#09090B]">הגדרות התראות</Text>
-
-                    <TouchableOpacity
-                        onPress={() => router.back()}
-                        className="w-10 h-10 bg-gray-50 rounded-full items-center justify-center border border-gray-100 shadow-sm"
-                    >
+            <View style={[styles.header, { paddingTop: insets.top }]}>
+                <View style={styles.headerContent}>
+                    <View style={styles.spacer} />
+                    <Text style={styles.headerTitle}>הגדרות התראות</Text>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                         <Ionicons name="chevron-forward" size={24} color="#09090B" />
                     </TouchableOpacity>
                 </View>
             </View>
 
-            <ScrollView
-                contentContainerStyle={{
-                    padding: 24,
-                    paddingBottom: insets.bottom + 40
-                }}
-            >
+            <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: insets.bottom + 40 }}>
                 {loading ? (
-                    <View className="mt-10">
+                    <View style={styles.loadingContainer}>
                         <ActivityIndicator size="large" color={Colors.primary} />
                     </View>
                 ) : (
                     SECTIONS.map((section, index) => (
-                        <View key={index} className="mb-6">
-                            {/* Section Header */}
-                            <Text className="text-lg font-bold text-gray-900 mb-3 text-right">
-                                {section.title}
-                            </Text>
-
-                            {/* Card Container */}
-                            <View className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
+                        <View key={index} style={styles.section}>
+                            <Text style={styles.sectionTitle}>{section.title}</Text>
+                            <View style={styles.card}>
                                 {section.data.map((item, itemIndex) => {
                                     const isLast = itemIndex === section.data.length - 1;
                                     const iconName = Platform.OS === 'ios' ? item.iconIOS : item.iconAndroid;
 
                                     return (
-                                        <View
-                                            key={item.key}
-                                            className={`flex-row justify-between items-center p-4 ${!isLast ? 'border-b border-gray-50' : ''}`}
-                                        >
-                                            {/* Left Side (LTR) -> Switch */}
-                                            {/* In RTL environment, 'justify-between' puts first child (Switch) on Right? No. */}
-                                            {/* Flex layout follows direction. If I18nManager.isRTL is true: */}
-                                            {/* Child 1 (Start) -> Right. Child 2 (End) -> Left. */}
-                                            {/* User requested: Right=Symbol + Text. Left=Switch. */}
-                                            {/* In RTL: Start=Right. So Symbol+Text should be FIRST in DOM. Switch LAST. */}
-
-                                            {/* Wait, user said: "Row Layout (RTL): [Right] Symbol... [Left] Switch".
-                                                In Native RTL MODE (which is active):
-                                                Flex Direction is Row. Start is RIGHT. End is LEFT.
-                                                
-                                                So:
-                                                <View> (Container)
-                                                   <Content> (Aligned Start/Right)
-                                                   <Switch> (Aligned End/Left)
+                                        <View key={item.key} style={[styles.row, !isLast && styles.rowBorder]}>
+                                            <View style={styles.rowContent}>
+                                                <View style={[styles.iconBox, { backgroundColor: `${item.color}15` }]}>
+                                                    <Ionicons name={iconName} size={20} color={item.color} />
                                                 </View>
-                                            */}
-
-                                            {/* Content (Icon + Label) */}
-                                            <View className="flex-row items-center gap-3">
-                                                {/* Icon Box */}
-                                                <View
-                                                    className="w-10 h-10 rounded-full items-center justify-center"
-                                                    style={{ backgroundColor: `${item.color}15` }} // 15 = low opacity hex
-                                                >
-                                                    <Ionicons
-                                                        name={iconName}
-                                                        size={20}
-                                                        color={item.color}
-                                                    />
-                                                </View>
-
-                                                {/* Label */}
-                                                <Text className="text-base font-semibold text-gray-800 text-right">
-                                                    {item.label}
-                                                </Text>
+                                                <Text style={styles.label}>{item.label}</Text>
                                             </View>
-
-                                            {/* Switch */}
                                             <Switch
                                                 value={!!settings[item.key as keyof NotificationSettings]}
                                                 onValueChange={() => toggleSetting(item.key as keyof NotificationSettings)}
@@ -271,3 +205,89 @@ export default function AdminNotificationSettings() {
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#F9FAFB',
+    },
+    header: {
+        backgroundColor: '#FFFFFF',
+        paddingBottom: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+    },
+    headerContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingTop: 8,
+    },
+    spacer: {
+        width: 40,
+    },
+    headerTitle: {
+        fontSize: 20,
+        fontWeight: '800',
+        color: '#09090B',
+    },
+    backButton: {
+        width: 40,
+        height: 40,
+        backgroundColor: '#F9FAFB',
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: '#F3F4F6',
+    },
+    loadingContainer: {
+        marginTop: 40,
+    },
+    section: {
+        marginBottom: 24,
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#111827',
+        marginBottom: 12,
+        textAlign: 'right',
+    },
+    card: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: '#F3F4F6',
+    },
+    row: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 16,
+    },
+    rowBorder: {
+        borderBottomWidth: 1,
+        borderBottomColor: '#F9FAFB',
+    },
+    rowContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    iconBox: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    label: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#374151',
+        textAlign: 'right',
+    },
+});

@@ -96,7 +96,13 @@ const NextWorkoutHeroCard = ({
     onPress: () => void;
 }) => {
     const countdown = getTimeUntilClass(classItem.date, classItem.time);
-    const formattedDate = formatHebrewDate(classItem.date, classItem.time);
+
+    // Get day name only (no time)
+    const getDayName = () => {
+        const days = ['יום ראשון', 'יום שני', 'יום שלישי', 'יום רביעי', 'יום חמישי', 'יום שישי', 'יום שבת'];
+        const date = new Date(`${classItem.date}T${classItem.time}`);
+        return days[date.getDay()];
+    };
 
     return (
         <TouchableOpacity activeOpacity={0.95} onPress={onPress}>
@@ -118,7 +124,10 @@ const NextWorkoutHeroCard = ({
                 {/* Main Content */}
                 <View style={styles.heroContent}>
                     <Text style={styles.heroTitle} numberOfLines={1}>{classItem.title}</Text>
-                    <Text style={styles.heroTime}>{formattedDate}</Text>
+                    {/* Only show day name if no countdown badge (not today/tomorrow) */}
+                    {!countdown && (
+                        <Text style={styles.heroTime}>{getDayName()}</Text>
+                    )}
                 </View>
 
                 {/* Countdown Badge - only show for today/tomorrow */}
@@ -170,6 +179,16 @@ const ScheduleClassCard = ({
     onPress: () => void;
 }) => {
     const isFull = classItem.enrolled >= classItem.capacity;
+    const capacityPercent = classItem.capacity > 0
+        ? Math.min((classItem.enrolled / classItem.capacity) * 100, 100)
+        : 0;
+
+    // Color based on capacity: green (< 50%), orange (50-80%), red (> 80%)
+    const getCapacityColor = () => {
+        if (capacityPercent >= 80) return '#EF4444'; // Red
+        if (capacityPercent >= 50) return '#F59E0B'; // Orange
+        return '#10B981'; // Green
+    };
 
     return (
         <TouchableOpacity
@@ -185,8 +204,18 @@ const ScheduleClassCard = ({
             {/* Class Name */}
             <Text style={styles.scheduleName} numberOfLines={2}>{classItem.title}</Text>
 
-            {/* Trainer */}
-            <Text style={styles.scheduleTrainer}>{classItem.instructor}</Text>
+            {/* Capacity Progress Bar */}
+            <View style={styles.capacityContainer}>
+                <View style={styles.capacityBarBg}>
+                    <View style={[
+                        styles.capacityBarFill,
+                        { width: `${capacityPercent}%`, backgroundColor: getCapacityColor() }
+                    ]} />
+                </View>
+                <Text style={styles.capacityText}>
+                    {classItem.enrolled}/{classItem.capacity}
+                </Text>
+            </View>
 
             {/* Book Button */}
             <TouchableOpacity
@@ -212,7 +241,7 @@ const TodaySchedule = ({
 }) => (
     <View style={styles.scheduleContainer}>
         <View style={styles.scheduleHeader}>
-            <Text style={styles.scheduleTitle}>לוח שיעורים להיום</Text>
+            <Text style={styles.scheduleTitle}>אימונים היום</Text>
             <Icon name="calendar" size={20} color="#6B7280" strokeWidth={2} />
         </View>
 
@@ -283,7 +312,13 @@ const MiniBookingCard = ({
     onPress: () => void;
 }) => {
     const countdown = getTimeUntilClass(classItem.date, classItem.time);
-    const formattedDate = formatHebrewDate(classItem.date, classItem.time);
+
+    // Format date without time - only show day name for non-today/tomorrow
+    const getDateOnly = () => {
+        const days = ['יום ראשון', 'יום שני', 'יום שלישי', 'יום רביעי', 'יום חמישי', 'יום שישי', 'יום שבת'];
+        const date = new Date(`${classItem.date}T${classItem.time}`);
+        return days[date.getDay()];
+    };
 
     return (
         <TouchableOpacity activeOpacity={0.95} onPress={onPress}>
@@ -307,7 +342,10 @@ const MiniBookingCard = ({
                 {/* Main Content */}
                 <View style={styles.miniCardContent}>
                     <Text style={styles.miniCardTitle} numberOfLines={1}>{classItem.title}</Text>
-                    <Text style={styles.miniCardTime}>{formattedDate}</Text>
+                    {/* Only show date if no countdown badge */}
+                    {!countdown && (
+                        <Text style={styles.miniCardTime}>{getDateOnly()}</Text>
+                    )}
                 </View>
 
                 {/* Countdown Badge - only show for today/tomorrow */}
@@ -703,6 +741,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row-reverse',
         alignItems: 'center',
         gap: 8,
+        marginTop: 8,
+        marginBottom: 8,
     },
     scheduleTitle: {
         fontSize: 18,
@@ -749,6 +789,27 @@ const styles = StyleSheet.create({
         color: '#6B7280',
         textAlign: 'right',
     },
+    capacityContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    capacityBarBg: {
+        flex: 1,
+        height: 6,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 3,
+        overflow: 'hidden',
+    },
+    capacityBarFill: {
+        height: '100%',
+        borderRadius: 3,
+    },
+    capacityText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#6B7280',
+    },
     bookButton: {
         backgroundColor: Colors.primary,
         paddingVertical: 12,
@@ -782,6 +843,8 @@ const styles = StyleSheet.create({
         shadowRadius: 16,
         elevation: 3,
         overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
     },
     emptyBackgroundGif: {
         ...StyleSheet.absoluteFillObject,

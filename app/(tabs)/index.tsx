@@ -38,12 +38,11 @@ const getHebrewDate = () => {
   return `${dayName}, ${day} ב${month}`;
 };
 
-// Format expiry date in Hebrew
+// Format expiry date as DD/M
 const formatExpiryDate = (dateStr?: string) => {
   if (!dateStr) return '';
   const date = new Date(dateStr);
-  const months = ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'];
-  return `${date.getDate()} ${months[date.getMonth()]}`;
+  return `${date.getDate()}/${date.getMonth() + 1}`;
 };
 
 // --- Components ---
@@ -275,7 +274,7 @@ export default function HomeScreen() {
                     <View style={[styles.punchFill, { width: `${progressPercent}%` }]} />
                   </View>
                   <Text style={styles.punchText}>
-                    {sessionsUsed} / {totalSessions} כניסות בוצעו
+                    נותרו לך {sessionsRemaining} אימונים
                   </Text>
                 </View>
               )}

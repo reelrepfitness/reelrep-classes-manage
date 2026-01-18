@@ -54,9 +54,10 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '700',
         color: '#111827',
-        textAlign: 'right',
-        marginBottom: 12,
-        paddingRight: 4,
+        textAlign: 'left',
+        marginTop: 16,
+        marginBottom: 16,
+        paddingLeft: 4,
     },
     row: {
         flexDirection: 'row',

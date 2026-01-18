@@ -6,7 +6,6 @@ import { Progress } from '@tamagui/progress';
 import { cn } from '@/lib/utils';
 import Colors from '@/constants/colors';
 import { AvatarCircles } from '@/components/ui/AvatarCircles';
-import { ClassAttendeesSheet } from './ClassAttendeesSheet';
 
 interface ClassRegistrationCardProps {
     title: string;
@@ -23,7 +22,6 @@ interface ClassRegistrationCardProps {
     onCancel?: () => void;
     onCancelClass?: () => void;
     onSwitch?: () => void;
-    onOpenAttendees?: () => void;
     className?: string;
 }
 
@@ -42,7 +40,6 @@ export function ClassRegistrationCard({
     onCancel,
     onCancelClass,
     onSwitch,
-    onOpenAttendees,
     className,
 }: ClassRegistrationCardProps) {
     const [timeLeft, setTimeLeft] = useState(0);
@@ -183,12 +180,12 @@ export function ClassRegistrationCard({
 
                     {/* RIGHTSIDE (Avatars) */}
                     {enrolledAvatars.length > 0 && (
-                        <TouchableOpacity onPress={onOpenAttendees} activeOpacity={0.7}>
+                        <View>
                             <AvatarCircles
                                 avatarUrls={enrolledAvatars.slice(0, 4)}
                                 numPeople={Math.max(0, enrolled - 4)}
                             />
-                        </TouchableOpacity>
+                        </View>
                     )}
                 </View>
 

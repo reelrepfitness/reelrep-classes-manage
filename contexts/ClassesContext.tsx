@@ -142,6 +142,8 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
     setClasses(updatedClasses);
   }, [schedulesQuery.data, allBookingsQuery.data]);
 
+
+
   const bookingsQuery = useQuery({
     queryKey: ['bookings', user?.id],
     queryFn: async () => {
@@ -175,6 +177,33 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
     },
     enabled: !!user,
   });
+
+  // Realtime subscription for User's Bookings
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('public:class_bookings')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'class_bookings',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          // Refetch bookings when any change happens to user's bookings
+          bookingsQuery.refetch();
+          allBookingsQuery.refetch();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, bookingsQuery, allBookingsQuery]);
 
   const syncMutation = useMutation({
     mutationFn: async (bookings: ClassBooking[]) => {
@@ -482,8 +511,8 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
         // Match by schedule_id and date
         const matchesSchedule = b.scheduleId === c.scheduleId;
 
-        // Match by date (compare date strings)
-        const bookingDate = b.classDate ? new Date(b.classDate).toISOString().split('T')[0] : null;
+        // Match by date (compare date strings using Local Time to match classItem.date)
+        const bookingDate = b.classDate ? formatDateKey(new Date(b.classDate)) : null;
         const classDate = c.date;
         const matchesDate = bookingDate === classDate;
 

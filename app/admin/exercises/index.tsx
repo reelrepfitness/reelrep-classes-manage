@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Image } from 'react-native';
+import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, Plus, Edit, Trash2 } from 'lucide-react-native';
@@ -7,6 +8,68 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/constants/supabase';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import Colors from '@/constants/colors';
+
+// --- Equipment Tabs Configuration ---
+const EQUIPMENT_TABS = [
+  { id: 'kettlebell', label: 'Kettlebell', icon: require('@/assets/eqe-icons/kettlebell-icon.png') },
+  { id: 'barbell', label: 'Barbell', icon: require('@/assets/eqe-icons/barbell-icon.png') },
+  { id: 'dumbbell', label: 'Dumbbell', icon: require('@/assets/eqe-icons/dumbell-icon.png') },
+  { id: 'landmine', label: 'Landmine', icon: require('@/assets/eqe-icons/landmine-icon.png') },
+  { id: 'bodyweight', label: 'BW', icon: require('@/assets/eqe-icons/BW-icon.png') },
+];
+
+// --- Equipment Tab Component ---
+interface EquipmentTabProps {
+  tab: typeof EQUIPMENT_TABS[0];
+  isSelected: boolean;
+  onSelect: () => void;
+}
+
+const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
+
+const EquipmentTab = ({ tab, isSelected, onSelect }: EquipmentTabProps) => {
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        {
+          scale: withSpring(isSelected ? 1.15 : 1, {
+            damping: 15,
+            stiffness: 150,
+          }),
+        },
+      ],
+    };
+  });
+
+  return (
+    <AnimatedTouchable
+      onPress={onSelect}
+      activeOpacity={0.8}
+      style={[
+        {
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingHorizontal: 8,
+          paddingVertical: 8,
+          borderRadius: 12,
+          backgroundColor: 'transparent',
+          minWidth: 60,
+        },
+        animatedStyle,
+      ]}
+    >
+      <Image
+        source={tab.icon}
+        style={{ width: 36, height: 36, marginBottom: 4, opacity: isSelected ? 1 : 0.5 }}
+        resizeMode="contain"
+      />
+      <Text style={{ fontSize: 11, fontWeight: '600', color: '#1c1c1c', textAlign: 'center', opacity: isSelected ? 1 : 0.5 }} numberOfLines={1}>
+        {tab.label}
+      </Text>
+    </AnimatedTouchable>
+  );
+};
 
 interface Exercise {
   id: string;
@@ -16,15 +79,24 @@ interface Exercise {
   measurement_type: string;
   measurement_unit: string;
   difficulty?: string;
+  equipment?: 'kettlebell' | 'barbell' | 'dumbbell' | 'landmine' | 'bodyweight' | null;
   is_active: boolean;
 }
+
+const equipmentIcons: Record<string, any> = {
+  kettlebell: require('@/assets/eqe-icons/kettlebell-icon.png'),
+  barbell: require('@/assets/eqe-icons/barbell-icon.png'),
+  dumbbell: require('@/assets/eqe-icons/dumbell-icon.png'),
+  landmine: require('@/assets/eqe-icons/landmine-icon.png'),
+  bodyweight: require('@/assets/eqe-icons/BW-icon.png'),
+};
 
 export default function ExercisesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedEquipment, setSelectedEquipment] = useState<string>('barbell');
 
   // Fetch exercises
   const { data: exercises = [], isLoading } = useQuery({
@@ -60,9 +132,9 @@ export default function ExercisesScreen() {
   // Filter exercises
   const filteredExercises = exercises.filter(ex => {
     const matchesSearch = ex.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         ex.name_en?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = !selectedCategory || ex.category === selectedCategory;
-    return matchesSearch && matchesCategory;
+      ex.name_en?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesEquipment = ex.equipment === selectedEquipment;
+    return matchesSearch && matchesEquipment;
   });
 
   const handleDelete = (id: string, name: string) => {
@@ -75,16 +147,6 @@ export default function ExercisesScreen() {
       ]
     );
   };
-
-  const categories = [
-    { value: null, label: 'הכל' },
-    { value: 'strength', label: 'כוח' },
-    { value: 'cardio', label: 'קרדיו' },
-    { value: 'olympic', label: 'אולימפי' },
-    { value: 'gymnastics', label: 'התעמלות' },
-    { value: 'endurance', label: 'סיבולת' },
-    { value: 'other', label: 'אחר' },
-  ];
 
   return (
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
@@ -126,28 +188,22 @@ export default function ExercisesScreen() {
           />
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-          {categories.map(cat => (
-            <TouchableOpacity
-              key={cat.value || 'all'}
-              onPress={() => setSelectedCategory(cat.value)}
-              style={{
-                paddingHorizontal: 16,
-                paddingVertical: 8,
-                borderRadius: 20,
-                backgroundColor: selectedCategory === cat.value ? Colors.primary : '#F1F5F9',
-                marginLeft: 8,
-              }}
-            >
-              <Text style={{
-                color: selectedCategory === cat.value ? '#fff' : '#64748B',
-                fontWeight: '600',
-              }}>
-                {cat.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        <View style={{ alignItems: 'center' }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}
+          >
+            {EQUIPMENT_TABS.map((tab) => (
+              <EquipmentTab
+                key={tab.id}
+                tab={tab}
+                isSelected={selectedEquipment === tab.id}
+                onSelect={() => setSelectedEquipment(tab.id)}
+              />
+            ))}
+          </ScrollView>
+        </View>
       </View>
 
       {/* Exercise List */}
@@ -176,15 +232,26 @@ export default function ExercisesScreen() {
             >
               <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 18, fontWeight: '700', color: '#0F172A', textAlign: 'right' }}>
-                    {exercise.name}
-                  </Text>
-                  {exercise.name_en && (
-                    <Text style={{ fontSize: 14, color: '#64748B', textAlign: 'right', marginTop: 2 }}>
-                      {exercise.name_en}
-                    </Text>
-                  )}
-                  <View style={{ flexDirection: 'row-reverse', gap: 8, marginTop: 8 }}>
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+                    {exercise.equipment && equipmentIcons[exercise.equipment] && (
+                      <Image
+                        source={equipmentIcons[exercise.equipment]}
+                        style={{ width: 32, height: 32 }}
+                        resizeMode="contain"
+                      />
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 18, fontWeight: '700', color: '#0F172A', textAlign: 'right' }}>
+                        {exercise.name}
+                      </Text>
+                      {exercise.name_en && (
+                        <Text style={{ fontSize: 14, color: '#64748B', textAlign: 'right', marginTop: 2 }}>
+                          {exercise.name_en}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row-reverse', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                     <View style={{ backgroundColor: '#F1F5F9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
                       <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600' }}>
                         {exercise.category}

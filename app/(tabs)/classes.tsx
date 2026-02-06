@@ -572,79 +572,86 @@ export default function ClassesScreen() {
   return (
     <View className="flex-1 bg-background">
 
-      {/* 1. Header Section */}
-      <View style={{ paddingTop: insets.top }} className="bg-background pb-2 rounded-b-[32px] border-b border-gray-100 shadow-sm z-10">
-        <View className="px-5 pt-2 mb-3 flex-row justify-center items-center">
-          <Text className="text-3xl font-extrabold text-[#09090B] text-right">לוח שיעורים</Text>
-        </View>
+      {/* 1. Header Section with Black Gradient */}
+      <LinearGradient
+        colors={['#1a1a1a', '#000000']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={{ paddingTop: insets.top, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }}
+      >
+        <View className="pb-2">
+          <View className="px-5 pt-2 mb-3 flex-row justify-center items-center">
+            <Text className="text-2xl font-extrabold text-white text-right">לוח שיעורים</Text>
+          </View>
 
-        {/* Calendar Strip with Arrows and Swipe */}
-        <View
-          className="relative"
-          {...PanResponder.create({
-            onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > 20,
-            onPanResponderRelease: (_, gestureState) => {
-              if (gestureState.dx < -50 && weekOffset === 0) {
-                setWeekOffset(1);
-              } else if (gestureState.dx > 50 && weekOffset === 1) {
-                setWeekOffset(0);
-                setSelectedDate(formatDateKey(today));
-              }
-            },
-          }).panHandlers}
-        >
-          <View className="flex-row items-center justify-between px-2 pb-2">
-            {/* Right Arrow (Previous - Current Week) - First in RTL */}
-            <TouchableOpacity
-              onPress={() => { setWeekOffset(0); setSelectedDate(formatDateKey(today)); }}
-              disabled={weekOffset === 0}
-              className={cn("p-2 rounded-full", weekOffset === 0 ? "opacity-30" : "bg-gray-100")}
-            >
-              <ChevronRight size={20} color="#09090B" />
-            </TouchableOpacity>
+          {/* Calendar Strip with Arrows and Swipe */}
+          <View
+            className="relative"
+            {...PanResponder.create({
+              onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > 20,
+              onPanResponderRelease: (_, gestureState) => {
+                if (gestureState.dx < -50 && weekOffset === 0) {
+                  setWeekOffset(1);
+                } else if (gestureState.dx > 50 && weekOffset === 1) {
+                  setWeekOffset(0);
+                  setSelectedDate(formatDateKey(today));
+                }
+              },
+            }).panHandlers}
+          >
+            <View className="flex-row items-center justify-between px-2 pb-2">
+              {/* Right Arrow (Previous - Current Week) - First in RTL */}
+              <TouchableOpacity
+                onPress={() => { setWeekOffset(0); setSelectedDate(formatDateKey(today)); }}
+                disabled={weekOffset === 0}
+                className={cn("p-2 rounded-full", weekOffset === 0 ? "opacity-30" : "bg-white/10")}
+              >
+                <ChevronRight size={20} color="#FFFFFF" />
+              </TouchableOpacity>
 
-            {/* Days Strip */}
-            <View className={cn("flex-1 flex-row justify-between px-2", isWeekLocked && "opacity-40")}>
-              {calendarDays.map((day, index) => {
-                const isSelected = selectedDate === day.dateKey;
-                const isToday = day.dateKey === formatDateKey(today);
+              {/* Days Strip */}
+              <View className={cn("flex-1 flex-row justify-between px-2", isWeekLocked && "opacity-40")}>
+                {calendarDays.map((day, index) => {
+                  const isSelected = selectedDate === day.dateKey;
+                  const isToday = day.dateKey === formatDateKey(today);
 
-                return (
-                  <TouchableOpacity
-                    key={index}
-                    onPress={() => {
-                      if (isWeekLocked) { Alert.alert('מוקדם מדי', NEXT_WEEK_LOCK_MESSAGE); return; }
-                      setSelectedDate(day.dateKey);
-                    }}
-                    disabled={isWeekLocked}
-                    className={cn(
-                      "items-center justify-center w-[12%] py-2.5 rounded-xl transition-all",
-                      isSelected && !isWeekLocked ? "bg-[#09090B] shadow-md shadow-gray-400" : "bg-transparent",
-                      isToday && !isSelected ? "border border-gray-200 bg-gray-50" : ""
-                    )}
-                  >
-                    <Text className={cn("text-[10px] font-bold mb-0.5", isSelected && !isWeekLocked ? "text-gray-300" : "text-gray-400")}>
-                      {DAYS_OF_WEEK[day.dayOfWeek]}
-                    </Text>
-                    <Text className={cn("text-base font-extrabold", isSelected && !isWeekLocked ? "text-white" : "text-[#09090B]")}>
-                      {day.dayNumber}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      onPress={() => {
+                        if (isWeekLocked) { Alert.alert('מוקדם מדי', NEXT_WEEK_LOCK_MESSAGE); return; }
+                        setSelectedDate(day.dateKey);
+                      }}
+                      disabled={isWeekLocked}
+                      className={cn(
+                        "items-center justify-center w-[12%] py-2.5 rounded-xl transition-all",
+                        isSelected && !isWeekLocked ? "bg-white shadow-md" : "bg-transparent",
+                        isToday && !isSelected ? "border border-white/30 bg-white/10" : ""
+                      )}
+                    >
+                      <Text className={cn("text-[10px] font-bold mb-0.5", isSelected && !isWeekLocked ? "text-gray-500" : "text-gray-400")}>
+                        {DAYS_OF_WEEK[day.dayOfWeek]}
+                      </Text>
+                      <Text className={cn("text-base font-extrabold", isSelected && !isWeekLocked ? "text-[#09090B]" : "text-white")}>
+                        {day.dayNumber}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Left Arrow (Next Week) - Last in RTL */}
+              <TouchableOpacity
+                onPress={() => setWeekOffset(1)}
+                disabled={weekOffset === 1}
+                className={cn("p-2 rounded-full", weekOffset === 1 ? "opacity-30" : "bg-white/10")}
+              >
+                <ChevronLeft size={20} color="#FFFFFF" />
+              </TouchableOpacity>
             </View>
-
-            {/* Left Arrow (Next Week) - Last in RTL */}
-            <TouchableOpacity
-              onPress={() => setWeekOffset(1)}
-              disabled={weekOffset === 1}
-              className={cn("p-2 rounded-full", weekOffset === 1 ? "opacity-30" : "bg-gray-100")}
-            >
-              <ChevronLeft size={20} color="#09090B" />
-            </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </LinearGradient>
 
       {/* Sync Bar */}
       <CalendarSyncBar onPress={handleSyncPress} isSynced={!!syncedCalendarId} />

@@ -4,7 +4,7 @@ import { View, Image, StyleSheet } from 'react-native';
 import { useEffect, useState } from 'react';
 
 export default function Index() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isAdmin } = useAuth();
   const [showContent, setShowContent] = useState(false);
 
   useEffect(() => {
@@ -28,6 +28,11 @@ export default function Index() {
 
   if (!isAuthenticated) {
     return <Redirect href="/auth" />;
+  }
+
+  // Role-based routing
+  if (isAdmin) {
+    return <Redirect href="/admin" />;
   }
 
   return <Redirect href="/(tabs)" />;

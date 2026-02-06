@@ -16,7 +16,9 @@ import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/constants/supabase';
+import Colors from '@/constants/colors';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 type RequestType = 'freeze' | 'extend';
@@ -29,7 +31,7 @@ const MenuOption = ({ icon, title, subtitle, onPress, color = '#111827' }: any) 
             <Text style={styles.menuSubtitle}>{subtitle}</Text>
         </View>
         <View style={[styles.iconBox, { backgroundColor: `${color}15` }]}>
-            <Ionicons name={icon} size={24} color={color} />
+            <Ionicons name={icon} size={34} color={color} />
         </View>
     </TouchableOpacity>
 );
@@ -48,6 +50,7 @@ const DateInput = ({ label, date, onPress }: { label: string, date: Date | undef
 
 export default function SubscriptionManagementScreen() {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const { user } = useAuth();
 
     const [activeForm, setActiveForm] = useState<RequestType | null>(null);
@@ -147,23 +150,86 @@ export default function SubscriptionManagementScreen() {
 
     return (
         <View style={styles.container}>
-            <Stack.Screen options={{ title: 'ניהול מנוי', headerBackTitle: 'חזור' }} />
+            <Stack.Screen options={{ headerShown: false }} />
+
+            {/* Custom Header with Subscription Card */}
+            {/* Custom Header with Subscription Card */}
+            <LinearGradient
+                colors={['#374151', '#111827', '#000000']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.headerCard, { paddingTop: insets.top + 20, paddingBottom: 30, borderRadius: 0, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, marginTop: 0, marginBottom: 0 }]}
+            >
+                {/* Back Button */}
+                <TouchableOpacity
+                    style={{ position: 'absolute', top: insets.top + 20, left: 20, zIndex: 10, padding: 8 }}
+                    onPress={() => router.back()}
+                >
+                    <Ionicons name="arrow-forward" size={24} color="#FFFFFF" />
+                </TouchableOpacity>
+
+                {(() => {
+                    const sub = user?.subscription;
+                    const hasActiveSubscription = sub?.status === 'active';
+                    const isTicket = sub?.isTicket;
+                    const totalSessions = sub?.totalSessions || 0;
+                    const sessionsRemaining = sub?.sessionsRemaining || 0;
+                    const sessionsUsed = totalSessions - sessionsRemaining;
+                    const progressPercent = totalSessions > 0 ? (sessionsUsed / totalSessions) * 100 : 0;
+
+                    const renderPlanTitle = () => {
+                        if (!sub?.planName) {
+                            return <Text style={styles.headerTitle}>הסטטוס שלי</Text>;
+                        }
+                        const name = sub.planName.toUpperCase();
+                        if (name.includes('ELITE')) {
+                            return <Image source={require('@/assets/images/reel-elite.png')} style={styles.planImage} resizeMode="contain" />;
+                        } else if (name.includes('ONE')) {
+                            return <Image source={require('@/assets/images/reel-one.png')} style={styles.planImage} resizeMode="contain" />;
+                        } else if (name.includes('10') || totalSessions === 10) {
+                            return <Image source={require('@/assets/images/10sessions.png')} style={styles.planImage} resizeMode="contain" />;
+                        } else if (name.includes('20') || totalSessions === 20) {
+                            return <Image source={require('@/assets/images/20sessions.png')} style={styles.planImage} resizeMode="contain" />;
+                        }
+                        return <Text style={styles.headerTitle}>{sub.planName}</Text>;
+                    };
+
+                    return (
+                        <View style={styles.headerContent}>
+                            <View style={{ marginTop: 20 }}>
+                                {renderPlanTitle()}
+                            </View>
+
+                            <View style={[styles.activeBadge, !hasActiveSubscription && styles.inactiveBadge]}>
+                                <View style={[styles.activeDot, !hasActiveSubscription && styles.inactiveDot]} />
+                                <Text style={[styles.activeText, !hasActiveSubscription && styles.inactiveText]}>
+                                    {hasActiveSubscription ? 'פעיל' : 'לא פעיל'}
+                                </Text>
+                            </View>
+
+                            {hasActiveSubscription && isTicket && (
+                                <View style={styles.progressContainer}>
+                                    <View style={styles.progressBar}>
+                                        <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+                                    </View>
+                                    <Text style={styles.progressText}>
+                                        נותרו לך {sessionsRemaining} אימונים
+                                    </Text>
+                                </View>
+                            )}
+
+                            <Text style={styles.expiryText}>
+                                {hasActiveSubscription
+                                    ? `בתוקף עד ${sub?.endDate ? new Date(sub.endDate).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' }) : '-'}`
+                                    : 'אין מנוי פעיל'
+                                }
+                            </Text>
+                        </View>
+                    );
+                })()}
+            </LinearGradient>
 
             <ScrollView contentContainerStyle={styles.content}>
-
-                {/* Active Subscription Summary */}
-                <LinearGradient
-                    colors={['#374151', '#111827', '#000000']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.summaryCard}
-                >
-                    <View style={styles.summaryHeader}>
-                        <View style={styles.activeDot} />
-                        <Text style={styles.summaryTitle}>{user?.subscription?.name || 'מנוי רגיל'}</Text>
-                    </View>
-                    <Text style={styles.summaryDetail}>בתוקף עד: {user?.subscription?.endDate ? new Date(user.subscription.endDate).toLocaleDateString('he-IL') : '-'}</Text>
-                </LinearGradient>
 
                 <Text style={styles.sectionHeader}>פעולות זמינות</Text>
 
@@ -182,7 +248,7 @@ export default function SubscriptionManagementScreen() {
                             <Text style={styles.formTitle}>טופס בקשה להקפאה</Text>
 
                             <View style={{ gap: 12, marginBottom: 16 }}>
-                                <Text style={styles.inputLabel}>סיבה</Text>
+
                                 <TextInput
                                     style={styles.textArea}
                                     placeholder="למה תרצה להקפיא?"
@@ -214,8 +280,8 @@ export default function SubscriptionManagementScreen() {
                 <View style={[styles.optionWrapper, activeForm === 'extend' && styles.optionWrapperActive]}>
                     <MenuOption
                         icon="time-outline"
-                        title="הארכת מנוי"
-                        subtitle="בקש להאריך את תוקף המנוי"
+                        title="הארכת תוקף"
+                        subtitle="הגשת בקשה להאריך את תוקף המנוי/כרטיסייה"
                         color="#059669"
                         onPress={() => setActiveForm(activeForm === 'extend' ? null : 'extend')}
                     />
@@ -224,7 +290,7 @@ export default function SubscriptionManagementScreen() {
                             <Text style={styles.formTitle}>טופס בקשה להארכה</Text>
 
                             <View style={{ gap: 12, marginBottom: 16 }}>
-                                <Text style={styles.inputLabel}>סיבה</Text>
+
                                 <TextInput
                                     style={styles.textArea}
                                     placeholder="פרט את הסיבה..."
@@ -234,7 +300,7 @@ export default function SubscriptionManagementScreen() {
                                     textAlignVertical="top"
                                     placeholderTextColor="#9CA3AF"
                                 />
-                                <DateInput label="תאריך יעד חדש" date={extendDate} onPress={() => openPicker('extend')} />
+                                <DateInput label="עד מתי תרצו שאאריך?" date={extendDate} onPress={() => openPicker('extend')} />
                             </View>
 
                             <TouchableOpacity
@@ -277,16 +343,18 @@ export default function SubscriptionManagementScreen() {
             </Modal>
 
             {/* Android Date Picker */}
-            {!!showPicker && Platform.OS === 'android' && (
-                <DateTimePicker
-                    value={tempDate}
-                    mode="date"
-                    display="default"
-                    onChange={onDateChange}
-                    locale="he-IL"
-                />
-            )}
-        </View>
+            {
+                !!showPicker && Platform.OS === 'android' && (
+                    <DateTimePicker
+                        value={tempDate}
+                        mode="date"
+                        display="default"
+                        onChange={onDateChange}
+                        locale="he-IL"
+                    />
+                )
+            }
+        </View >
     );
 }
 
@@ -295,32 +363,117 @@ const styles = StyleSheet.create({
     content: { padding: 20 },
 
     // Summary
-    summaryCard: { borderRadius: 20, padding: 24, marginBottom: 24 },
-    summaryHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-    summaryTitle: { fontSize: 20, fontWeight: '700', color: '#FFFFFF', textAlign: 'left' },
-    summaryDetail: { fontSize: 14, color: '#F3F4F6', textAlign: 'left' },
-    activeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981' },
+    // Dynamic Header
+    headerCard: {
+        borderRadius: 24,
+        padding: 24,
+        marginBottom: 24,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 20,
+        elevation: 8,
+    },
+    headerContent: {
+        alignItems: 'center',
+        gap: 16,
+    },
+    headerTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        textAlign: 'center',
+    },
+    planImage: {
+        width: 140,
+        height: 28,
+        tintColor: '#FFFFFF',
+    },
+    activeBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: 'rgba(16, 185, 129, 0.15)',
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(16, 185, 129, 0.3)',
+    },
+    activeDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#10B981',
+        shadowColor: '#10B981',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.5,
+        shadowRadius: 6,
+    },
+    activeText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#10B981',
+    },
+    inactiveBadge: {
+        backgroundColor: 'rgba(239, 68, 68, 0.15)',
+        borderColor: 'rgba(239, 68, 68, 0.3)',
+    },
+    inactiveDot: {
+        backgroundColor: '#EF4444',
+        shadowColor: '#EF4444',
+    },
+    inactiveText: {
+        color: '#EF4444',
+    },
+    progressContainer: {
+        width: '100%',
+        marginTop: 8,
+        gap: 8,
+    },
+    progressBar: {
+        height: 8,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderRadius: 4,
+        overflow: 'hidden',
+    },
+    progressFill: {
+        height: '100%',
+        backgroundColor: '#3B82F6', // Using explicit Blue color since Colors import might be missing
+        borderRadius: 4,
+    },
+    progressText: {
+        fontSize: 16,
+        color: '#ffffffff',
+        textAlign: 'center',
+        fontWeight: '900',
+    },
+    expiryText: {
+        fontSize: 14,
+        color: '#9CA3AF',
+        marginTop: -8,
+    },
 
-    sectionHeader: { fontSize: 16, fontWeight: '700', color: '#374151', marginBottom: 16, textAlign: 'left' },
+    sectionHeader: { fontSize: 18, fontWeight: '900', color: '#374151', marginBottom: 16, textAlign: 'left' },
 
     // Options
     optionWrapper: { marginBottom: 16, backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
     optionWrapperActive: { borderWidth: 2, borderColor: '#D1D5DB' },
-    menuOption: { flexDirection: 'row', alignItems: 'center', padding: 16, justifyContent: 'space-between' },
-    menuContent: { flex: 1, marginRight: 16 },
-    menuTitle: { fontSize: 16, fontWeight: '600', color: '#111827', textAlign: 'left', marginBottom: 4 },
-    menuSubtitle: { fontSize: 13, color: '#6B7280', textAlign: 'left' },
-    iconBox: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+    menuOption: { flexDirection: 'column-reverse', alignItems: 'center', padding: 16, justifyContent: 'space-between' },
+    menuContent: { flex: 1, marginTop: 5 },
+    menuTitle: { fontSize: 18, fontWeight: '900', color: '#111827', textAlign: 'center', marginBottom: 4 },
+    menuSubtitle: { fontSize: 13, color: '#6B7280', textAlign: 'center' },
+    iconBox: { width: 50, height: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
 
     // Forms
     formContainer: { padding: 16, backgroundColor: '#F9FAFB', borderTopWidth: 1, borderTopColor: '#F3F4F6' },
-    formTitle: { fontSize: 14, fontWeight: '700', color: '#4B5563', marginBottom: 12, textAlign: 'left' },
-    inputLabel: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6, textAlign: 'left' },
-    textArea: { backgroundColor: '#fff', borderRadius: 12, padding: 12, height: 100, borderWidth: 1, borderColor: '#E5E7EB', textAlign: 'left', fontSize: 15, color: '#111827' },
+    formTitle: { fontSize: 14, fontWeight: '800', color: '#000000ff', marginBottom: 12, textAlign: 'center' },
+    inputLabel: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 4, textAlign: 'center' },
+    textArea: { backgroundColor: '#fff', borderRadius: 12, padding: 12, height: 100, borderWidth: 1, borderColor: '#E5E7EB', textAlign: 'right', fontSize: 15, color: '#111827' },
     dateField: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: 12, gap: 10, borderWidth: 1, borderColor: '#E5E7EB', height: 48 },
     dateText: { fontSize: 15, color: '#111827' },
     submitBtn: { backgroundColor: '#111827', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-    submitBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+    submitBtnText: { color: '#fff', fontSize: 15, fontWeight: '900' },
 
     // Picker Modal Styles
     pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },

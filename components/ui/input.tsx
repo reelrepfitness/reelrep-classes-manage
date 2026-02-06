@@ -32,7 +32,7 @@ export function Input({
           </View>
         )}
         <TextInput
-          style={[styles.input, Icon && styles.inputWithIcon, style]}
+          style={[styles.input, style]}
           placeholderTextColor="#888"
           {...props}
         />
@@ -58,11 +58,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#2a2a2a',
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#404040',
+    overflow: 'hidden',
   },
   inputContainerError: {
-    borderColor: Colors.danger,
+    borderWidth: 1,
+    borderColor: Colors.error,
   },
   iconContainer: {
     paddingHorizontal: 12,
@@ -70,14 +70,11 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 16,
-    color: Colors.light,
+    color: '#000000',
     paddingVertical: 16,
     paddingHorizontal: 16,
     textAlign: 'right',
     writingDirection: 'rtl' as const,
-  },
-  inputWithIcon: {
-    paddingRight: 0,
   },
   error: {
     fontSize: 13,

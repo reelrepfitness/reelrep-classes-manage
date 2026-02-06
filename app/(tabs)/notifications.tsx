@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Bell, Check, FileText, CheckCircle, XCircle } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/constants/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import Colors from '@/constants/colors';
@@ -60,11 +61,10 @@ function getDeepLink(notification: Notification, isAdmin: boolean): string | nul
             case 'purchase_success':
             case 'purchase_failed':
             case 'payment_pending':
-                return '/(tabs)/profile';
             case 'debt_activated':
                 return '/subscription-management';
             default:
-                return '/(tabs)/profile';
+                return '/(tabs)';
         }
     }
 }
@@ -340,38 +340,42 @@ export default function NotificationsScreen() {
 
     return (
         <View className="flex-1 bg-gray-50">
-            {/* Header with tabs */}
-            <View
-                style={{ paddingTop: insets.top }}
-                className="bg-white rounded-b-[28px] shadow-sm border-b border-gray-100 pb-3"
+            {/* Header with tabs - Black Gradient */}
+            <LinearGradient
+                colors={['#1a1a1a', '#000000']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={{ paddingTop: insets.top, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 }}
             >
-                <Text className="text-2xl font-extrabold text-[#09090B] text-center pt-3 mb-4">
-                    התראות
-                </Text>
+                <View className="pb-3">
+                    <Text className="text-2xl font-extrabold text-white text-center pt-3 mb-4">
+                        התראות
+                    </Text>
 
-                {/* Tab Selector */}
-                <View className="flex-row justify-center gap-2 px-4">
-                    {tabs.map((tab) => (
-                        <TouchableOpacity
-                            key={tab.key}
-                            onPress={() => setActiveTab(tab.key)}
-                            className={cn(
-                                "flex-1 py-2.5 rounded-xl items-center",
-                                activeTab === tab.key
-                                    ? "bg-[#09090B]"
-                                    : "bg-gray-100"
-                            )}
-                        >
-                            <Text className={cn(
-                                "font-bold text-sm",
-                                activeTab === tab.key ? "text-white" : "text-gray-600"
-                            )}>
-                                {tab.label}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
+                    {/* Tab Selector */}
+                    <View className="flex-row justify-center gap-2 px-4">
+                        {tabs.map((tab) => (
+                            <TouchableOpacity
+                                key={tab.key}
+                                onPress={() => setActiveTab(tab.key)}
+                                className={cn(
+                                    "flex-1 py-2.5 rounded-xl items-center",
+                                    activeTab === tab.key
+                                        ? "bg-white"
+                                        : "bg-white/10"
+                                )}
+                            >
+                                <Text className={cn(
+                                    "font-bold text-sm",
+                                    activeTab === tab.key ? "text-[#09090B]" : "text-white/70"
+                                )}>
+                                    {tab.label}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
                 </View>
-            </View>
+            </LinearGradient>
 
             {/* Content List */}
             <FlatList

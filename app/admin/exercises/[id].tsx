@@ -107,6 +107,7 @@ export default function EditExerciseScreen() {
   const [measurementUnit, setMeasurementUnit] = useState('kg');
   const [difficulty, setDifficulty] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner');
   const [instructions, setInstructions] = useState('');
+  const [equipment, setEquipment] = useState<string>('barbell');
 
   // Fetch exercise data
   const { isLoading } = useQuery({
@@ -129,6 +130,7 @@ export default function EditExerciseScreen() {
       setMeasurementUnit(data.measurement_unit || 'kg');
       setDifficulty(data.difficulty || 'beginner');
       setInstructions(data.instructions || '');
+      setEquipment(data.equipment || 'barbell');
 
       return data;
     },
@@ -174,6 +176,7 @@ export default function EditExerciseScreen() {
       measurement_unit: measurementUnit,
       difficulty,
       instructions: instructions.trim() || null,
+      equipment,
       is_active: true,
     });
   };
@@ -199,6 +202,14 @@ export default function EditExerciseScreen() {
     { label: 'מתחילים', value: 'beginner' },
     { label: 'בינוני', value: 'intermediate' },
     { label: 'מתקדמים', value: 'advanced' },
+  ];
+
+  const equipmentOptions: DropdownOption[] = [
+    { label: 'קטלבל', value: 'kettlebell' },
+    { label: 'מוט', value: 'barbell' },
+    { label: 'משקולת', value: 'dumbbell' },
+    { label: 'לנדמיין', value: 'landmine' },
+    { label: 'משקל גוף', value: 'bodyweight' },
   ];
 
   if (isLoading) {
@@ -266,6 +277,14 @@ export default function EditExerciseScreen() {
           value={category}
           options={categoryOptions}
           onSelect={setCategory}
+        />
+
+        {/* Equipment */}
+        <Dropdown
+          label="ציוד *"
+          value={equipment}
+          options={equipmentOptions}
+          onSelect={setEquipment}
         />
 
         {/* Subcategory */}

@@ -10,12 +10,11 @@ import {
   Modal,
   Animated,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAchievements } from '@/contexts/AchievementsContext';
 import { UpcomingWorkoutsWidget } from '@/components/home/UpcomingWorkoutsWidget';
+import { HomeHeader } from '@/components/home/HomeHeader';
 import Colors from '@/constants/colors';
 import { supabase } from '@/constants/supabase';
 import { Icon } from '@/components/ui/icon';
@@ -24,19 +23,6 @@ import { Lock } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
 const cardWidth = (width - 52) / 2; // splitRow padding (20*2) + gap (12)
-
-// --- Helper Functions ---
-const getHebrewDate = () => {
-  const days = ['יום ראשון', 'יום שני', 'יום שלישי', 'יום רביעי', 'יום חמישי', 'יום שישי', 'יום שבת'];
-  const months = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
-
-  const date = new Date();
-  const dayName = days[date.getDay()];
-  const day = date.getDate();
-  const month = months[date.getMonth()];
-
-  return `${dayName}, ${day} ב${month}`;
-};
 
 // Format expiry date as DD/M
 const formatExpiryDate = (dateStr?: string) => {
@@ -52,18 +38,13 @@ const formatExpiryDate = (dateStr?: string) => {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const {
     getCurrentTask,
-    getHighestCompletedAchievement,
     newlyUnlockedAchievement,
     hasSeenUnlockDialog,
     markUnlockSeen,
   } = useAchievements();
-
-  // Get the user's highest completed achievement badge
-  const userBadge = getHighestCompletedAchievement();
 
   /*
    * Dynamic Weekly Goal Logic
@@ -181,44 +162,15 @@ export default function HomeScreen() {
   }, [user?.id, user?.gender]);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
+      {/* Collapsible Profile Header */}
+      <HomeHeader />
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* 1. Header */}
-        <View style={styles.headerWrapper}>
-          <LinearGradient
-            colors={['#2d2d2d', '#111111', '#000000']}
-            locations={[0, 0.5, 1]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={styles.headerCard}
-          >
-            <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.avatarContainer}>
-              {user?.profileImage ? (
-                <Image source={{ uri: user.profileImage }} style={styles.avatarLight} />
-              ) : (
-                <View style={[styles.avatarLight, styles.avatarPlaceholderLight]}>
-                  <Text style={styles.avatarInitialsLight}>{user?.name?.slice(0, 1).toUpperCase() || '?'}</Text>
-                </View>
-              )}
-              {/* Achievement Badge */}
-              {userBadge && (
-                <View style={styles.avatarBadge}>
-                  <Image source={{ uri: userBadge.icon }} style={styles.avatarBadgeIcon} />
-                </View>
-              )}
-            </TouchableOpacity>
-
-            <View style={styles.headerTextContainer}>
-              <Text style={styles.greetingTitleLight}>היי, {user?.name?.split(' ')[0] || 'אורח'}</Text>
-              <Text style={styles.dateSubtitleLight}>{getHebrewDate()}</Text>
-            </View>
-          </LinearGradient>
-        </View>
-
-        {/* 2. Upcoming Classes Widget */}
+        {/* 1. Upcoming Classes Widget */}
         <View style={styles.heroSection}>
           <UpcomingWorkoutsWidget />
         </View>

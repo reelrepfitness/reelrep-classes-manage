@@ -13,8 +13,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     Home,
     Calendar,
-    User,
-    Dumbbell,
     ClipboardList,
     Receipt,
     Bell
@@ -36,8 +34,6 @@ const getIcon = (routeName: string, color: string, size: number) => {
             return <Receipt color={color} size={size} />;
         case 'notifications':
             return <Bell color={color} size={size} />;
-        case 'profile':
-            return <User color={color} size={size} />;
         case 'admin':
             return <ClipboardList color={color} size={size} />;
         default:
@@ -50,7 +46,6 @@ const TAB_ITEMS = [
     { name: 'classes', label: 'יומן', route: '/(tabs)/classes' },
     { name: 'notifications', label: 'התראות', route: '/(tabs)/notifications' },
     { name: 'register', label: 'קופה', route: '/(tabs)/register', adminOnly: true },
-    { name: 'profile', label: 'פרופיל', route: '/(tabs)/profile' },
     { name: 'admin', label: 'ניהול', route: '/admin', adminOnly: true },
 ];
 
@@ -149,7 +144,6 @@ export function CustomTabBar() {
         if (pathname.includes('/notifications')) return 'notifications';
         if (pathname.includes('/classes')) return 'classes';
         if (pathname.includes('/register')) return 'register';
-        if (pathname.includes('/profile')) return 'profile';
         return 'index'; // Default to home
     };
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Image, I18nManager, StyleSheet, Switch } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -7,6 +7,48 @@ import { supabase } from '@/constants/supabase';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import Colors from '@/constants/colors';
 import { ChevronDown } from 'lucide-react-native';
+import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
+
+// --- Equipment Tabs Configuration ---
+const EQUIPMENT_TABS = [
+  { id: 'kettlebell', label: 'Kettlebell', icon: require('@/assets/eqe-icons/kettlebell-icon.png') },
+  { id: 'barbell', label: 'Barbell', icon: require('@/assets/eqe-icons/barbell-icon.png') },
+  { id: 'dumbbell', label: 'Dumbbell', icon: require('@/assets/eqe-icons/dumbell-icon.png') },
+  { id: 'landmine', label: 'Landmine', icon: require('@/assets/eqe-icons/landmine-icon.png') },
+  { id: 'bodyweight', label: 'BW', icon: require('@/assets/eqe-icons/BW-icon.png') },
+];
+
+// --- Equipment Tab Component ---
+interface EquipmentTabProps {
+  tab: typeof EQUIPMENT_TABS[0];
+  isSelected: boolean;
+  onSelect: () => void;
+}
+
+const EquipmentTab = ({ tab, isSelected, onSelect }: EquipmentTabProps) => {
+  return (
+    <TouchableOpacity
+      onPress={onSelect}
+      activeOpacity={0.8}
+      style={styles.equipmentTab}
+    >
+      <Image
+        source={tab.icon}
+        style={[
+          styles.equipmentIcon,
+          { opacity: isSelected ? 1 : 0.3 }
+        ]}
+        resizeMode="contain"
+      />
+      <Text style={[
+        styles.equipmentLabel,
+        { opacity: isSelected ? 1 : 0.4, fontWeight: isSelected ? '700' : '500' }
+      ]} numberOfLines={1}>
+        {tab.label}
+      </Text>
+    </TouchableOpacity>
+  );
+};
 
 interface DropdownOption {
   label: string;
@@ -98,14 +140,13 @@ export default function NewExerciseScreen() {
   const queryClient = useQueryClient();
 
   const [name, setName] = useState('');
-  const [nameEn, setNameEn] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('strength');
-  const [subcategory, setSubcategory] = useState('');
+
   const [measurementType, setMeasurementType] = useState('weight');
   const [measurementUnit, setMeasurementUnit] = useState('kg');
   const [difficulty, setDifficulty] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner');
   const [instructions, setInstructions] = useState('');
+  const [equipment, setEquipment] = useState<string>('barbell');
+  const [prList, setPrList] = useState(false);
 
   const createMutation = useMutation({
     mutationFn: async (exercise: any) => {
@@ -140,26 +181,21 @@ export default function NewExerciseScreen() {
 
     createMutation.mutate({
       name: name.trim(),
-      name_en: nameEn.trim() || null,
-      description: description.trim() || null,
-      category,
-      subcategory: subcategory.trim() || null,
+      name_en: null,
+      description: null,
+      category: 'strength', // Default value since selector removal
+      subcategory: null,
       measurement_type: measurementType,
       measurement_unit: measurementUnit,
       difficulty,
       instructions: instructions.trim() || null,
+      equipment,
       is_active: true,
+      PR_list: prList,
     });
   };
 
-  const categoryOptions: DropdownOption[] = [
-    { label: 'כוח', value: 'strength' },
-    { label: 'קרדיו', value: 'cardio' },
-    { label: 'אולימפי', value: 'olympic' },
-    { label: 'התעמלות', value: 'gymnastics' },
-    { label: 'סיבולת', value: 'endurance' },
-    { label: 'אחר', value: 'other' },
-  ];
+
 
   const measurementTypeOptions: DropdownOption[] = [
     { label: 'משקל', value: 'weight' },
@@ -175,6 +211,14 @@ export default function NewExerciseScreen() {
     { label: 'מתקדמים', value: 'advanced' },
   ];
 
+  const equipmentOptions: DropdownOption[] = [
+    { label: 'קטלבל', value: 'kettlebell' },
+    { label: 'מוט', value: 'barbell' },
+    { label: 'משקולת', value: 'dumbbell' },
+    { label: 'לנדמיין', value: 'landmine' },
+    { label: 'משקל גוף', value: 'bodyweight' },
+  ];
+
   return (
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
       <AdminHeader title="תרגיל חדש" />
@@ -182,7 +226,7 @@ export default function NewExerciseScreen() {
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 100 }}>
         {/* Name (Hebrew) */}
         <View style={{ marginBottom: 16 }}>
-          <Text style={{ fontSize: 14, fontWeight: '600', color: '#475569', marginBottom: 8, textAlign: 'right' }}>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: '#475569', marginBottom: 8, textAlign: 'left' }}>
             שם התרגיל (עברית) *
           </Text>
           <TextInput
@@ -201,55 +245,43 @@ export default function NewExerciseScreen() {
           />
         </View>
 
-        {/* Name (English) */}
-        <View style={{ marginBottom: 16 }}>
-          <Text style={{ fontSize: 14, fontWeight: '600', color: '#475569', marginBottom: 8, textAlign: 'right' }}>
-            שם התרגיל (אנגלית)
-          </Text>
-          <TextInput
-            style={{
-              backgroundColor: '#F8FAFC',
-              borderRadius: 12,
-              padding: 16,
-              fontSize: 16,
-              textAlign: 'left',
-              borderWidth: 1,
-              borderColor: '#E2E8F0',
-            }}
-            placeholder="Deadlift"
-            value={nameEn}
-            onChangeText={setNameEn}
-          />
-        </View>
+
 
         {/* Category */}
-        <Dropdown
-          label="קטגוריה *"
-          value={category}
-          options={categoryOptions}
-          onSelect={setCategory}
-        />
 
-        {/* Subcategory */}
-        <View style={{ marginBottom: 16 }}>
-          <Text style={{ fontSize: 14, fontWeight: '600', color: '#475569', marginBottom: 8, textAlign: 'right' }}>
-            תת-קטגוריה
+
+        {/* Equipment */}
+        <View style={{ marginBottom: 24 }}>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: '#475569', marginBottom: 12, textAlign: 'left' }}>
+            ציוד *
           </Text>
-          <TextInput
-            style={{
-              backgroundColor: '#F8FAFC',
-              borderRadius: 12,
-              padding: 16,
-              fontSize: 16,
-              textAlign: 'right',
-              borderWidth: 1,
-              borderColor: '#E2E8F0',
-            }}
-            placeholder="משיכות, דחיפות..."
-            value={subcategory}
-            onChangeText={setSubcategory}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            {EQUIPMENT_TABS.map((tab) => (
+              <EquipmentTab
+                key={tab.id}
+                tab={tab}
+                isSelected={equipment === tab.id}
+                onSelect={() => setEquipment(tab.id)}
+              />
+            ))}
+          </View>
+        </View>
+
+        {/* PR_list Toggle */}
+        <View style={{ flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, backgroundColor: '#F8FAFC', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0' }}>
+          <Text style={{ fontSize: 16, fontWeight: '600', color: '#1E293B' }}>
+            האם להציג ביומן ביצועים?
+          </Text>
+          <Switch
+            trackColor={{ false: '#CBD5E1', true: Colors.primary }}
+            thumbColor={'#FFFFFF'}
+            ios_backgroundColor="#CBD5E1"
+            onValueChange={setPrList}
+            value={prList}
           />
         </View>
+
+
 
         {/* Measurement Type */}
         <Dropdown
@@ -261,7 +293,7 @@ export default function NewExerciseScreen() {
 
         {/* Measurement Unit */}
         <View style={{ marginBottom: 16 }}>
-          <Text style={{ fontSize: 14, fontWeight: '600', color: '#475569', marginBottom: 8, textAlign: 'right' }}>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: '#475569', marginBottom: 8, textAlign: 'left' }}>
             יחידת מדידה *
           </Text>
           <TextInput
@@ -288,29 +320,7 @@ export default function NewExerciseScreen() {
           onSelect={(val) => setDifficulty(val as any)}
         />
 
-        {/* Description */}
-        <View style={{ marginBottom: 16 }}>
-          <Text style={{ fontSize: 14, fontWeight: '600', color: '#475569', marginBottom: 8, textAlign: 'right' }}>
-            תיאור
-          </Text>
-          <TextInput
-            style={{
-              backgroundColor: '#F8FAFC',
-              borderRadius: 12,
-              padding: 16,
-              fontSize: 16,
-              textAlign: 'right',
-              borderWidth: 1,
-              borderColor: '#E2E8F0',
-              minHeight: 80,
-            }}
-            placeholder="תיאור קצר של התרגיל..."
-            value={description}
-            onChangeText={setDescription}
-            multiline
-            numberOfLines={3}
-          />
-        </View>
+
 
         {/* Instructions */}
         <View style={{ marginBottom: 16 }}>
@@ -356,3 +366,22 @@ export default function NewExerciseScreen() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  equipmentTab: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    width: '18%', // Ensure 5 items fit well
+  },
+  equipmentIcon: {
+    width: 40,
+    height: 40,
+    marginBottom: 6,
+  },
+  equipmentLabel: {
+    fontSize: 12,
+    color: '#1E293B',
+    textAlign: 'center',
+  },
+});

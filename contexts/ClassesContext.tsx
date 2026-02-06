@@ -349,22 +349,54 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
 
     // Decrement ticket sessions if user has an active ticket plan
     if (!isAdmin) {
-      const { data: activeTicket } = await supabase
+      const { data: activeTicket, error: ticketError } = await supabase
         .from('user_tickets')
         .select('id, sessions_remaining')
         .eq('user_id', user.id)
         .eq('status', 'active')
         .gt('sessions_remaining', 0)
+        .gt('expiry_date', new Date().toISOString())
+        .order('purchase_date', { ascending: false })
+        .limit(1)
         .single();
 
+      if (ticketError) {
+        console.error('Error finding active ticket for decrement:', ticketError);
+      }
+
       if (activeTicket) {
-        await supabase
-          .from('user_tickets')
-          .update({ sessions_remaining: activeTicket.sessions_remaining - 1 })
-          .eq('id', activeTicket.id);
+        // Try using RPC first (safer and handles status updates atomically)
+        const { data: rpcSuccess, error: rpcError } = await supabase
+          .rpc('use_ticket_session', { ticket_id: activeTicket.id });
+
+        if (rpcError || !rpcSuccess) {
+          console.log('RPC use_ticket_session failed or not found, falling back to manual update:', rpcError);
+
+          // Fallback to manual update
+          const newRemaining = activeTicket.sessions_remaining - 1;
+          const newStatus = newRemaining <= 0 ? 'depleted' : 'active';
+
+          const { error: updateError } = await supabase
+            .from('user_tickets')
+            .update({
+              sessions_remaining: newRemaining,
+              status: newStatus
+            })
+            .eq('id', activeTicket.id);
+
+          if (updateError) {
+            console.error('Error decrementing ticket sessions manually:', updateError);
+          } else {
+            console.log('Ticket session decremented manually. Remaining:', newRemaining);
+          }
+        } else {
+          console.log('Ticket session decremented via RPC');
+        }
 
         // Refresh user data to update UI (home screen header, profile)
         refreshUser();
+      } else {
+        console.log('No active ticket found to decrement (or user has unlimited plan)');
       }
     }
 

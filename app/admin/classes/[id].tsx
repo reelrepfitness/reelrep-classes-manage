@@ -246,13 +246,27 @@ const AddClientModal = ({ visible, onClose, onAddClient, classId }: AddClientMod
 
         setSearching(true);
         try {
-            const { data } = await supabase
+            // Search profiles
+            const { data: profilesData } = await supabase
                 .from('profiles')
-                .select('id, full_name, name, email, avatar_url, subscription_status')
-                .or(`full_name.ilike.%${query}%,name.ilike.%${query}%,email.ilike.%${query}%`)
+                .select('id, full_name, name, email, avatar_url, subscription_status, phone_number')
+                .or(`full_name.ilike.%${query}%,name.ilike.%${query}%,email.ilike.%${query}%,phone_number.ilike.%${query}%`)
                 .limit(10);
 
-            setSearchResults(data || []);
+            // Search leads
+            const { data: leadsData } = await supabase
+                .from('leads')
+                .select('id, name, phone, email, status')
+                .or(`name.ilike.%${query}%,phone.ilike.%${query}%,email.ilike.%${query}%`)
+                .limit(10);
+
+            // Combine and mark source
+            const combined = [
+                ...(profilesData || []).map(p => ({ ...p, source: 'profile' })),
+                ...(leadsData || []).map(l => ({ ...l, source: 'lead', full_name: l.name }))
+            ];
+
+            setSearchResults(combined);
         } catch (error) {
             console.error('Error searching clients:', error);
         } finally {
@@ -278,25 +292,37 @@ const AddClientModal = ({ visible, onClose, onAddClient, classId }: AddClientMod
         if (!searchQuery.trim()) return;
 
         try {
+            // Parse input - could be name or phone
+            const input = searchQuery.trim();
+            const isPhone = /^[0-9\-\+\(\)\s]+$/.test(input);
+
             const { data, error } = await supabase
-                .from('profiles')
+                .from('leads')
                 .insert({
-                    full_name: searchQuery.trim(),
-                    is_lead: true,
-                    subscription_status: 'none',
+                    name: isPhone ? 'מתעניין חדש' : input,
+                    phone: isPhone ? input : '',
+                    status: 'interested',
+                    source: 'direct',
                 })
-                .select()
+                .select('id, name, phone, email, status')
                 .single();
 
             if (error) throw error;
 
-            Alert.alert('ליד נוצר', `${searchQuery} נוסף כליד חדש`);
-            onAddClient(data);
+            // Add lead marker for UI consistency
+            const leadWithMarker = { ...data, source: 'lead', full_name: data.name };
+
+            Alert.alert('ליד נוצר', `${data.name} נוסף כמתעניין`);
+            onAddClient(leadWithMarker);
             setSearchQuery('');
             setSearchResults([]);
             onClose();
-        } catch (error) {
-            Alert.alert('שגיאה', 'לא ניתן ליצור ליד חדש');
+        } catch (error: any) {
+            if (error.code === '23505') {
+                Alert.alert('שגיאה', 'מספר טלפון זה כבר קיים במערכת');
+            } else {
+                Alert.alert('שגיאה', 'לא ניתן ליצור ליד חדש');
+            }
         }
     };
 
@@ -327,31 +353,50 @@ const AddClientModal = ({ visible, onClose, onAddClient, classId }: AddClientMod
                     )}
 
                     <ScrollView style={modalStyles.resultsList}>
-                        {searchResults.map((client) => (
-                            <TouchableOpacity
-                                key={client.id}
-                                style={modalStyles.resultItem}
-                                onPress={() => handleSelectClient(client)}
-                            >
-                                <View style={modalStyles.resultInfo}>
-                                    <Text style={modalStyles.resultName}>
-                                        {client.full_name || client.name}
-                                    </Text>
-                                    <Text style={modalStyles.resultEmail}>{client.email}</Text>
-                                </View>
-                                <View style={[
-                                    modalStyles.subscriptionBadge,
-                                    { backgroundColor: client.subscription_status === 'active' ? '#D1FAE5' : '#FEE2E2' }
-                                ]}>
-                                    <Text style={[
-                                        modalStyles.subscriptionText,
-                                        { color: client.subscription_status === 'active' ? '#059669' : '#DC2626' }
+                        {searchResults.map((client) => {
+                            const getBadgeColor = () => {
+                                if (client.source === 'lead') return '#FEF3C7';
+                                return client.subscription_status === 'active' ? '#D1FAE5' : '#FEE2E2';
+                            };
+
+                            const getBadgeText = () => {
+                                if (client.source === 'lead') return 'מתעניין';
+                                return client.subscription_status === 'active' ? 'מנוי פעיל' : 'ללא מנוי';
+                            };
+
+                            const getBadgeTextColor = () => {
+                                if (client.source === 'lead') return '#D97706';
+                                return client.subscription_status === 'active' ? '#059669' : '#DC2626';
+                            };
+
+                            return (
+                                <TouchableOpacity
+                                    key={client.id}
+                                    style={modalStyles.resultItem}
+                                    onPress={() => handleSelectClient(client)}
+                                >
+                                    <View style={modalStyles.resultInfo}>
+                                        <Text style={modalStyles.resultName}>
+                                            {client.full_name || client.name}
+                                        </Text>
+                                        <Text style={modalStyles.resultEmail}>
+                                            {client.source === 'lead' ? client.phone : client.email}
+                                        </Text>
+                                    </View>
+                                    <View style={[
+                                        modalStyles.subscriptionBadge,
+                                        { backgroundColor: getBadgeColor() }
                                     ]}>
-                                        {client.subscription_status === 'active' ? 'מנוי פעיל' : 'ללא מנוי'}
-                                    </Text>
-                                </View>
-                            </TouchableOpacity>
-                        ))}
+                                        <Text style={[
+                                            modalStyles.subscriptionText,
+                                            { color: getBadgeTextColor() }
+                                        ]}>
+                                            {getBadgeText()}
+                                        </Text>
+                                    </View>
+                                </TouchableOpacity>
+                            );
+                        })}
 
                         {searchQuery.length >= 2 && !searching && searchResults.length === 0 && (
                             <TouchableOpacity
@@ -718,6 +763,22 @@ export default function AdminClassDetailsScreen() {
         }
 
         try {
+            // For leads, we need to track differently as they don't have user_id
+            if (client.source === 'lead') {
+                // Update lead status to trial_scheduled
+                await supabase
+                    .from('leads')
+                    .update({
+                        status: 'trial_scheduled',
+                        trial_class_date: classItem.classDate?.toISOString() || new Date().toISOString()
+                    })
+                    .eq('id', client.id);
+
+                Alert.alert('הצלחה', `${client.name} (מתעניין) נוסף לרשימה והועבר לסטטוס "שיעור ניסיון מתוזמן"`);
+                fetchClassData();
+                return;
+            }
+
             const { error } = await supabase
                 .from('class_bookings')
                 .insert({

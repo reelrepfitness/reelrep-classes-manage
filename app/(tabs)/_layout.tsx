@@ -14,7 +14,6 @@ export default function TabLayout() {
       <Tabs.Screen name="classes" />
       <Tabs.Screen name="notifications" />
       <Tabs.Screen name="register" />
-      <Tabs.Screen name="profile" />
       <Tabs.Screen name="admin" />
     </Tabs>
   );

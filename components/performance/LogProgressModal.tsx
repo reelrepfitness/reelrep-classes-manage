@@ -17,9 +17,10 @@ interface LogProgressModalProps {
     visible: boolean;
     onClose: () => void;
     exercise: { id: string; label: string; unit: string; isTime?: boolean };
+    onSave: (data: { weight: string | null; reps: string | null; time: string | null; date: string }) => void;
 }
 
-export default function LogProgressModal({ visible, onClose, exercise }: LogProgressModalProps) {
+export default function LogProgressModal({ visible, onClose, exercise, onSave }: LogProgressModalProps) {
     const [weight, setWeight] = useState('');
     const [reps, setReps] = useState('');
     const [time, setTime] = useState('');
@@ -28,15 +29,18 @@ export default function LogProgressModal({ visible, onClose, exercise }: LogProg
     const isCardio = exercise.isTime;
 
     const handleSubmit = () => {
-        // Logic to submit
-        console.log({
-            exerciseId: exercise.id,
+        onSave({
             weight: isCardio ? null : weight,
             reps: isCardio ? null : reps,
             time: isCardio ? time : null,
             date
         });
-        onClose();
+        // We let the parent handle closing if needed, or close here. 
+        // Parent in my code calls onClose, so we can keep onClose here or let parent do it.
+        // My parent implementation: calls refetch then setModalVisible(false).
+        // BUT the parent implementation I wrote for performance.tsx calls onClose automatically ONLY IF I don't wait? 
+        // Actually, in `handleSaveLog` I call setModalVisible(false). 
+        // So I should just call onSave.
     };
 
     return (

@@ -1,120 +1,344 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
     View,
     Text,
     ScrollView,
     TouchableOpacity,
     StyleSheet,
-    Dimensions,
     Alert,
+    ActivityIndicator,
+    Image,
+    I18nManager,
+    TextInput,
+    Dimensions,
+    LayoutAnimation,
+    Platform,
+    UIManager,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// Enable LayoutAnimation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+import Animated, {
+    useAnimatedStyle,
+    withSpring,
+} from 'react-native-reanimated';
 import { LineChart } from 'react-native-gifted-charts';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import Colors from '@/constants/colors';
-import { ChevronLeft, Scale, TrendingUp, Dumbbell, History } from 'lucide-react-native';
+import { ChevronLeft, Dumbbell, ChevronRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import LogProgressModal from '@/components/performance/LogProgressModal';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/constants/supabase';
+import { useAuth } from '@/contexts/AuthContext';
+import { Image as OptimizedImage } from '@/components/ui/image';
 
-const { width } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// --- Mock Data constants ---
-const USER_BODYWEIGHT = 80; // kg
+// --- Types ---
+interface Exercise {
+    id: string;
+    name: string;
+    measurement_unit: string;
+    category: string;
+    is_active: boolean;
+    measurement_type: string;
+    equipment?: 'kettlebell' | 'barbell' | 'dumbbell' | 'landmine' | 'bodyweight' | null;
+    instructions?: string | null; // GIF URL for exercise demonstration
+}
 
-const EXERCISES = [
-    { id: 'deadlift', label: 'Deadlift', currentPR: 180, lastDate: '10/01/2025', unit: 'kg' },
-    { id: 'back_squat', label: 'Back Squat', currentPR: 140, lastDate: '05/01/2025', unit: 'kg' },
-    { id: 'bench_press', label: 'Bench Press', currentPR: 100, lastDate: '28/12/2024', unit: 'kg' },
-    { id: 'clean_jerk', label: 'Clean & Jerk', currentPR: 85, lastDate: '15/12/2024', unit: 'kg' },
-    { id: '5k_run', label: 'Run 5k', currentPR: 0, lastDate: '01/01/2025', unit: 'min', isTime: true, timeStr: '21:30' },
+// --- Equipment Tabs Configuration ---
+const EQUIPMENT_TABS = [
+    { id: 'kettlebell', label: 'Kettlebell', icon: require('@/assets/eqe-icons/kettlebell-icon.png') },
+    { id: 'barbell', label: 'Barbell', icon: require('@/assets/eqe-icons/barbell-icon.png') },
+    { id: 'dumbbell', label: 'Dumbbell', icon: require('@/assets/eqe-icons/dumbell-icon.png') },
+    { id: 'landmine', label: 'Landmine', icon: require('@/assets/eqe-icons/landmine-icon.png') },
+    { id: 'bodyweight', label: 'BW', icon: require('@/assets/eqe-icons/BW-icon.png') },
 ];
 
-const CHART_DATA_MOCK = {
-    deadlift: [
-        { value: 160, date: '01/12' },
-        { value: 165, date: '08/12' },
-        { value: 170, date: '15/12' },
-        { value: 175, date: '22/12' },
-        { value: 175, date: '30/12' },
-        { value: 180, date: '10/01' },
-    ],
-    back_squat: [
-        { value: 120, date: '01/12' },
-        { value: 125, date: '10/12' },
-        { value: 130, date: '20/12' },
-        { value: 135, date: '30/12' },
-        { value: 140, date: '05/01' },
-    ],
-    bench_press: [
-        { value: 90, date: '01/12' },
-        { value: 92.5, date: '10/12' },
-        { value: 95, date: '20/12' },
-        { value: 100, date: '28/12' },
-    ],
-    clean_jerk: [
-        { value: 70, date: '01/12' },
-        { value: 75, date: '15/12' },
-        { value: 85, date: '15/12' },
-    ],
-    '5k_run': [
-        { value: 24.10, date: '01/12' },
-        { value: 23.40, date: '10/12' },
-        { value: 23.00, date: '20/12' },
-        { value: 22.30, date: '28/12' },
-        { value: 21.30, date: '01/01' },
-    ]
+// --- Equipment Tab Component ---
+interface EquipmentTabProps {
+    tab: typeof EQUIPMENT_TABS[0];
+    isSelected: boolean;
+    onSelect: () => void;
+}
+
+const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
+
+const EquipmentTab = ({ tab, isSelected, onSelect }: EquipmentTabProps) => {
+    const animatedStyle = useAnimatedStyle(() => {
+        return {
+            transform: [
+                {
+                    scale: withSpring(isSelected ? 1.15 : 1, {
+                        damping: 15,
+                        stiffness: 150,
+                    }),
+                },
+            ],
+        };
+    });
+
+    return (
+        <AnimatedTouchable
+            onPress={onSelect}
+            activeOpacity={0.8}
+            style={[
+                styles.equipmentTab,
+                isSelected && styles.equipmentTabActive,
+                animatedStyle,
+            ]}
+        >
+            <Image
+                source={tab.icon}
+                style={[
+                    styles.equipmentIcon,
+                    { opacity: isSelected ? 1 : 0.5 }
+                ]}
+                resizeMode="contain"
+            />
+            <Text style={[
+                styles.equipmentLabel,
+                { opacity: isSelected ? 1 : 0.5 }
+            ]} numberOfLines={1}>
+                {tab.label}
+            </Text>
+        </AnimatedTouchable>
+    );
 };
 
-const HISTORY_MOCK = [
-    { id: '1', date: 'מאי 15, 2026', weight: 140, reps: 1, isPR: true },
-    { id: '2', date: 'אפר 28, 2026', weight: 135, reps: 2 },
-    { id: '3', date: 'מרץ 10, 2026', weight: 130, reps: 3 },
-    { id: '4', date: 'פבר 22, 2026', weight: 125, reps: 5 },
-];
+interface LogEntry {
+    date: string;
+    weight: number;
+    reps: number;
+    time: string; // "20:00"
+    isPR?: boolean;
+    workoutId: string;
+}
 
 // --- Helpers ---
-
-const calculateRatio = (weight: number, bodyWeight: number) => {
-    if (!weight || !bodyWeight) return 0;
-    return (weight / bodyWeight).toFixed(2);
-};
-
-const getRatioColor = (ratio: number) => {
-    if (ratio >= 2.0) return { bg: '#FEF3C7', text: '#D97706', label: 'Elite', icon: '👑' }; // Gold
-    if (ratio >= 1.5) return { bg: '#F1F5F9', text: '#475569', label: 'Pro', icon: '🥈' };  // Silver
-    return { bg: '#FFF1F2', text: Colors.primary, label: 'Athlete', icon: '💪' };    // Brand
-};
-
-const calculatePercentages = (max: number) => {
-    return [
-        { pct: '50%', weight: Math.round(max * 0.5) },
-        { pct: '70%', weight: Math.round(max * 0.7) },
-        { pct: '80%', weight: Math.round(max * 0.8) },
-        { pct: '90%', weight: Math.round(max * 0.9) },
-    ];
+const getOptimizedGifUrl = (url: string | null | undefined): string | null => {
+    if (!url) return null;
+    // Check if it's a Cloudinary URL
+    if (url.includes('cloudinary.com')) {
+        // Insert transformations before /upload/
+        // f_auto = auto format, q_auto = auto quality, w_200 = width 200px
+        return url.replace('/upload/', '/upload/f_auto,q_auto,w_200/');
+    }
+    return url;
 };
 
 export default function PerformanceScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
-    const [selectedExercise, setSelectedExercise] = useState(EXERCISES[0]);
-    const [bodyWeight, setBodyWeight] = useState(USER_BODYWEIGHT);
-    const [modalVisible, setModalVisible] = useState(false);
+    const { user } = useAuth();
+    const queryClient = useQueryClient();
 
-    // Derived State
-    const currentData = CHART_DATA_MOCK[selectedExercise.id as keyof typeof CHART_DATA_MOCK] || [];
-    const isStrength = !selectedExercise.isTime;
-    const ratio = isStrength ? calculateRatio(selectedExercise.currentPR, bodyWeight) : null;
-    const ratioStyle = isStrength ? getRatioColor(Number(ratio)) : null;
-    const percentages = isStrength ? calculatePercentages(selectedExercise.currentPR) : [];
+    // State
+    const [selectedEquipment, setSelectedEquipment] = useState<string>('barbell');
+    const [expandedExerciseId, setExpandedExerciseId] = useState<string | null>(null);
+    const [inputWeight, setInputWeight] = useState('');
+    const [inputReps, setInputReps] = useState('');
 
-    // Chart Data Formatting - Gifted Charts expects specific format
-    const chartData = currentData.map(item => ({
-        value: item.value,
-        dataPointText: String(item.value),
-        label: item.date,
-        hideDataPoint: false,
-    }));
+    // 1. Fetch Exercises
+    const { data: exercises = [], isLoading: loadingExercises } = useQuery({
+        queryKey: ['exercises'],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('exercises')
+                .select('*')
+                .eq('is_active', true)
+                .eq('PR_list', true)
+                .order('name');
+            if (error) throw error;
+            return data as Exercise[];
+        }
+    });
+
+    // Filter exercises by selected equipment
+    const filteredExercises = useMemo(() => {
+        return exercises.filter(e => e.equipment === selectedEquipment);
+    }, [exercises, selectedEquipment]);
+
+    // 2. Fetch PRs for all exercises in the selected equipment category
+    const { data: exercisePRs = {}, isLoading: loadingPRs } = useQuery<Record<string, { weight: number; reps: number }>>({
+        queryKey: ['exercise_prs', user?.id, selectedEquipment, filteredExercises.map(e => e.name).join(',')],
+        enabled: !!user?.id && filteredExercises.length > 0,
+        queryFn: async () => {
+            if (!user?.id || filteredExercises.length === 0) return {};
+
+            const exerciseNames = filteredExercises.map(e => e.name);
+
+            const { data, error } = await supabase
+                .from('workout_exercises')
+                .select(`
+                    exercise_name,
+                    weight,
+                    reps,
+                    workouts!inner (
+                        user_id
+                    )
+                `)
+                .in('exercise_name', exerciseNames)
+                .eq('workouts.user_id', user.id);
+
+            if (error) throw error;
+
+            // Calculate max weight (PR) for each exercise, storing weight and reps
+            const prMap: Record<string, { weight: number; reps: number }> = {};
+            data.forEach((item: any) => {
+                const weight = Number(item.weight) || 0;
+                const reps = Number(item.reps) || 0;
+                const name = item.exercise_name;
+                if (!prMap[name] || weight > prMap[name].weight) {
+                    prMap[name] = { weight, reps };
+                }
+            });
+
+            return prMap;
+        }
+    });
+
+    // Get the expanded exercise
+    const expandedExercise = useMemo(() =>
+        filteredExercises.find(e => e.id === expandedExerciseId),
+        [filteredExercises, expandedExerciseId]
+    );
+
+    // 3. Fetch logs for expanded exercise
+    const { data: exerciseLogs = [], isLoading: loadingLogs } = useQuery({
+        queryKey: ['exercise_logs', user?.id, expandedExercise?.name],
+        enabled: !!user?.id && !!expandedExercise,
+        queryFn: async () => {
+            if (!user?.id || !expandedExercise) return [];
+
+            const { data, error } = await supabase
+                .from('workout_exercises')
+                .select(`
+                    weight,
+                    reps,
+                    created_at,
+                    workouts!inner (
+                        workout_date,
+                        user_id
+                    )
+                `)
+                .eq('exercise_name', expandedExercise.name)
+                .eq('workouts.user_id', user.id)
+                .order('created_at', { ascending: true });
+
+            if (error) throw error;
+
+            return data.map((item: any) => ({
+                date: item.workouts?.workout_date || item.created_at.split('T')[0],
+                weight: Number(item.weight) || 0,
+                reps: Number(item.reps) || 0,
+            }));
+        }
+    });
+
+    // Chart data for expanded exercise
+    const chartData = useMemo(() => {
+        if (exerciseLogs.length === 0) return [];
+
+        // Group by date and take max weight
+        const dateMap = new Map<string, number>();
+        exerciseLogs.forEach(log => {
+            const current = dateMap.get(log.date) || 0;
+            if (log.weight > current) {
+                dateMap.set(log.date, log.weight);
+            }
+        });
+
+        return Array.from(dateMap.entries()).map(([date, weight]) => ({
+            value: weight,
+            label: date.substring(5).replace('-', '/'),
+            // Remove dataPointText - we'll use custom component instead
+        }));
+    }, [exerciseLogs]);
+
+
+    const handleToggleExpand = (exerciseId: string) => {
+        // Trigger smooth layout animation
+        LayoutAnimation.configureNext({
+            duration: 300,
+            create: {
+                type: LayoutAnimation.Types.easeInEaseOut,
+                property: LayoutAnimation.Properties.opacity,
+            },
+            update: {
+                type: LayoutAnimation.Types.easeInEaseOut,
+            },
+            delete: {
+                type: LayoutAnimation.Types.easeInEaseOut,
+                property: LayoutAnimation.Properties.opacity,
+            },
+        });
+
+        if (expandedExerciseId === exerciseId) {
+            setExpandedExerciseId(null);
+            setInputWeight('');
+            setInputReps('');
+        } else {
+            setExpandedExerciseId(exerciseId);
+            setInputWeight('');
+            setInputReps('');
+        }
+    };
+
+    const handleSaveLog = async () => {
+        if (!user?.id || !expandedExercise) return;
+        if (!inputWeight && !inputReps) {
+            Alert.alert('שגיאה', 'יש להזין משקל או חזרות');
+            return;
+        }
+
+        try {
+            const date = new Date().toISOString();
+
+            // Insert Workout
+            const { data: workout, error: wError } = await supabase
+                .from('workouts')
+                .insert({
+                    user_id: user.id,
+                    title: `${expandedExercise.name} Log`,
+                    workout_date: date,
+                    duration: 0,
+                    workout_type: 'strength',
+                    created_at: date
+                })
+                .select()
+                .single();
+
+            if (wError) throw wError;
+
+            // Insert Exercise
+            const { error: eError } = await supabase
+                .from('workout_exercises')
+                .insert({
+                    workout_id: workout.id,
+                    exercise_name: expandedExercise.name,
+                    weight: inputWeight ? Number(inputWeight) : null,
+                    reps: inputReps ? Number(inputReps) : null,
+                    sets: 1,
+                });
+
+            if (eError) throw eError;
+
+            // Clear inputs and refresh data
+            setInputWeight('');
+            setInputReps('');
+            queryClient.invalidateQueries({ queryKey: ['exercise_prs'] });
+            queryClient.invalidateQueries({ queryKey: ['exercise_logs'] });
+            Alert.alert('הצלחה', 'הנתונים נשמרו בהצלחה');
+
+        } catch (err: any) {
+            Alert.alert('שגיאה', err.message);
+        }
+    };
+
 
     return (
         <View style={styles.container}>
@@ -124,25 +348,32 @@ export default function PerformanceScreen() {
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
                 <View style={styles.headerTopRow}>
                     <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                        <ChevronLeft size={28} color="#09090B" />
+                        <ChevronRight size={28} color="#09090B" />
                     </TouchableOpacity>
 
-                    {/* Bodyweight Actions Only - Removed Title as requested */}
-                    <View style={styles.bwContainer}>
-                        <View style={styles.bwInfo}>
-                            <Scale size={16} color="#64748B" />
-                            <Text style={styles.bwText}>BW: <Text style={styles.bwValue}>{bodyWeight}kg</Text></Text>
-                        </View>
-                        <TouchableOpacity
-                            onPress={() => Alert.alert('עדכון משקל גוף', 'כאן יפתח מודל לעדכון משקל')}
-                            style={styles.bwButton}
-                        >
-                            <Text style={styles.bwButtonText}>Update</Text>
-                        </TouchableOpacity>
-                    </View>
+                    {/* Page Title */}
+                    <Text style={styles.pageTitle}>יומן ביצועים</Text>
 
-                    {/* Placeholder to balance the back button */}
+                    {/* Placeholder */}
                     <View style={{ width: 40 }} />
+                </View>
+
+                {/* Equipment Tabs */}
+                <View style={styles.equipmentTabsContainer}>
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.equipmentTabsContent}
+                    >
+                        {EQUIPMENT_TABS.map((tab) => (
+                            <EquipmentTab
+                                key={tab.id}
+                                tab={tab}
+                                isSelected={selectedEquipment === tab.id}
+                                onSelect={() => setSelectedEquipment(tab.id)}
+                            />
+                        ))}
+                    </ScrollView>
                 </View>
             </View>
 
@@ -150,173 +381,198 @@ export default function PerformanceScreen() {
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
             >
-                {/* 1. Exercise Selector (Styled as Tabs) */}
-                <View style={styles.selectorContainer}>
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={[styles.selectorContent, { flexDirection: 'row-reverse' }]}
-                    >
-                        {EXERCISES.map((ex) => {
-                            const isSelected = selectedExercise.id === ex.id;
+                {/* Exercise List */}
+                {loadingExercises || loadingPRs ? (
+                    <View style={{ height: 200, justifyContent: 'center' }}>
+                        <ActivityIndicator size="large" color={Colors.primary} />
+                    </View>
+                ) : filteredExercises.length === 0 ? (
+                    <View style={styles.emptyStateContainer}>
+                        <Text style={styles.emptyStateText}>אין תרגילים לציוד זה</Text>
+                    </View>
+                ) : (
+                    <View style={styles.exerciseListContainer}>
+                        {filteredExercises.map((exercise) => {
+                            const pr = exercisePRs[exercise.name];
+                            const hasPR = pr && pr.weight > 0;
+                            const gifUrl = getOptimizedGifUrl(exercise.instructions);
+                            const isExpanded = expandedExerciseId === exercise.id;
+
                             return (
-                                <TouchableOpacity
-                                    key={ex.id}
-                                    onPress={() => setSelectedExercise(ex)}
-                                    style={[
-                                        styles.tabItem,
-                                        isSelected && styles.tabItemActive
-                                    ]}
-                                >
-                                    <Text style={[
-                                        styles.tabText,
-                                        isSelected && styles.tabTextActive
-                                    ]}>
-                                        {ex.label}
-                                    </Text>
-                                </TouchableOpacity>
+                                <View key={exercise.id} style={styles.exerciseCardWrapper}>
+                                    <LinearGradient
+                                        colors={isExpanded ? ['#000000', '#1F2937'] : ['#000000', '#000000']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 0, y: 1 }}
+                                        style={styles.exerciseCard}
+                                    >
+                                        {/* Header Row - Always visible */}
+                                        <TouchableOpacity
+                                            onPress={() => handleToggleExpand(exercise.id)}
+                                            activeOpacity={0.8}
+                                            style={styles.exerciseCardHeader}
+                                        >
+                                            {/* GIF Column */}
+                                            <View style={styles.exerciseGifContainer}>
+                                                {gifUrl ? (
+                                                    <OptimizedImage
+                                                        source={{ uri: gifUrl }}
+                                                        width={100}
+                                                        height={100}
+                                                        variant="rounded"
+                                                        cachePolicy="memory-disk"
+                                                        priority="normal"
+                                                        transition={200}
+                                                        showLoadingIndicator={true}
+                                                        showErrorFallback={false}
+                                                        loadingIndicatorColor="rgba(255,255,255,0.5)"
+                                                    />
+                                                ) : (
+                                                    <View style={styles.exerciseGifPlaceholder}>
+                                                        <Dumbbell size={32} color="rgba(255,255,255,0.3)" />
+                                                    </View>
+                                                )}
+                                            </View>
+
+                                            {/* Content Column */}
+                                            <View style={styles.exerciseContent}>
+                                                <Text style={styles.exerciseName}>{exercise.name}</Text>
+                                            </View>
+
+                                            {/* PR Column - only show if has PR */}
+                                            {hasPR && (
+                                                <View style={styles.prColumn}>
+                                                    <Image
+                                                        source={require('@/assets/images/PR.png')}
+                                                        style={{ width: 28, height: 28 }}
+                                                        resizeMode="contain"
+                                                    />
+                                                    <Text style={styles.prWeight}>
+                                                        {pr.weight}{exercise.measurement_unit}
+                                                    </Text>
+                                                    <Text style={styles.prReps}>
+                                                        {pr.reps === 1 ? '1 Rep' : `${pr.reps} Reps`}
+                                                    </Text>
+                                                </View>
+                                            )}
+
+                                            {/* Arrow - rotates when expanded */}
+                                            <Animated.View style={{
+                                                transform: [{ rotate: isExpanded ? '-90deg' : '0deg' }],
+                                            }}>
+                                                <ChevronLeft size={20} color="rgba(255,255,255,0.5)" />
+                                            </Animated.View>
+                                        </TouchableOpacity>
+
+                                        {/* Expanded Content */}
+                                        {isExpanded && (
+                                            <View style={styles.expandedContent}>
+                                                {/* Chart */}
+                                                {loadingLogs ? (
+                                                    <ActivityIndicator color="white" style={{ marginVertical: 20 }} />
+                                                ) : chartData.length > 0 ? (
+                                                    <View style={styles.chartContainer}>
+                                                        <Text style={styles.chartTitle}>התקדמות</Text>
+                                                        {/* Clean line chart - flipped for RTL, no labels */}
+                                                        <View style={[
+                                                            styles.chartWrapper,
+                                                            { transform: [{ scaleX: -1 }] }
+                                                        ]}>
+                                                            <LineChart
+                                                                data={chartData}
+                                                                height={100}
+                                                                width={SCREEN_WIDTH - 80}
+                                                                thickness={3}
+                                                                color={Colors.primary}
+                                                                startFillColor={Colors.primary}
+                                                                endFillColor="transparent"
+                                                                startOpacity={0.4}
+                                                                endOpacity={0.0}
+                                                                areaChart
+                                                                curved
+                                                                dataPointsColor={Colors.primary}
+                                                                dataPointsRadius={5}
+                                                                hideYAxisText
+                                                                hideAxesAndRules
+                                                                xAxisLabelsHeight={0}
+                                                                initialSpacing={10}
+                                                                endSpacing={10}
+                                                                spacing={40}
+                                                                isAnimated
+                                                                animationDuration={500}
+                                                            />
+                                                        </View>
+
+                                                        {/* Horizontal scroll with date/value cards */}
+                                                        <ScrollView
+                                                            horizontal
+                                                            showsHorizontalScrollIndicator={false}
+                                                            contentContainerStyle={styles.historyCardsContainer}
+                                                        >
+                                                            {chartData.map((item, index) => (
+                                                                <View key={index} style={styles.historyCard}>
+                                                                    <Text style={styles.historyCardValue}>
+                                                                        {item.value}{expandedExercise?.measurement_unit}
+                                                                    </Text>
+                                                                    <Text style={styles.historyCardDate}>
+                                                                        {item.label}
+                                                                    </Text>
+                                                                </View>
+                                                            ))}
+                                                        </ScrollView>
+                                                    </View>
+                                                ) : (
+                                                    <Text style={styles.noDataText}>אין היסטוריה עדיין</Text>
+                                                )}
+
+                                                {/* Input Form */}
+                                                <View style={styles.inputForm}>
+                                                    <View style={styles.inputRow}>
+                                                        <View style={styles.inputGroup}>
+                                                            <Text style={styles.inputLabel}>משקל ({exercise.measurement_unit})</Text>
+                                                            <TextInput
+                                                                style={styles.input}
+                                                                value={inputWeight}
+                                                                onChangeText={setInputWeight}
+                                                                keyboardType="numeric"
+                                                                placeholder="0"
+                                                                placeholderTextColor="rgba(255,255,255,0.3)"
+                                                            />
+                                                        </View>
+                                                        <View style={styles.inputGroup}>
+                                                            <Text style={styles.inputLabel}>חזרות</Text>
+                                                            <TextInput
+                                                                style={styles.input}
+                                                                value={inputReps}
+                                                                onChangeText={setInputReps}
+                                                                keyboardType="numeric"
+                                                                placeholder="0"
+                                                                placeholderTextColor="rgba(255,255,255,0.3)"
+                                                            />
+                                                        </View>
+                                                    </View>
+
+                                                    <TouchableOpacity
+                                                        style={styles.saveButton}
+                                                        onPress={handleSaveLog}
+                                                    >
+                                                        <Text style={styles.saveButtonText}>עדכן שיא אישי</Text>
+                                                    </TouchableOpacity>
+                                                </View>
+                                            </View>
+                                        )}
+                                    </LinearGradient>
+                                </View>
                             );
                         })}
-                    </ScrollView>
-                </View>
-
-                {/* 2. Hero Card - Current PR */}
-                <View style={styles.heroSection}>
-                    <LinearGradient
-                        colors={['#1F2937', '#000000']} // Black Gradient
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.heroCard}
-                    >
-                        <View style={styles.heroHeader}>
-                            <View style={styles.heroIconContainer}>
-                                <Dumbbell size={20} color="#fff" />
-                            </View>
-                            <Text style={styles.heroLabel}>שיא אישי (PR)</Text>
-                        </View>
-
-                        <View style={styles.heroMain}>
-                            <Text style={styles.heroValue}>
-                                {selectedExercise.isTime ? selectedExercise.timeStr : selectedExercise.currentPR}
-                            </Text>
-                            <Text style={styles.heroUnit}>
-                                {selectedExercise.unit}
-                            </Text>
-                        </View>
-
-                        {/* Smart Badge */}
-                        {isStrength && ratioStyle && (
-                            <View style={[styles.ratioBadge, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
-                                <Text style={styles.ratioIcon}>{ratioStyle.icon}</Text>
-                                <Text style={styles.ratioText}>
-                                    {ratio}x משקל גוף
-                                </Text>
-                            </View>
-                        )}
-                    </LinearGradient>
-                </View>
-
-                {/* 3. Pro Tools - Load Table (Only for Strength) */}
-                {isStrength && (
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>טבלת עומסים</Text>
-                        <View style={styles.loadGrid}>
-                            {percentages.map((p, index) => (
-                                <View key={index} style={styles.loadBox}>
-                                    <View style={styles.loadHeader}>
-                                        <Text style={styles.loadPct}>{p.pct}</Text>
-                                    </View>
-                                    <Text style={styles.loadWeight}>{p.weight} kg</Text>
-                                </View>
-                            ))}
-                        </View>
                     </View>
-                )}
+                )
+                }
 
-                {/* 4. Progress Chart */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeaderRow}>
-                        <TrendingUp size={20} color={Colors.primary} />
-                        <Text style={styles.sectionTitle}>גרף התקדמות</Text>
-                    </View>
+                <View style={{ height: 40 }} />
+            </ScrollView >
 
-                    <View style={styles.chartWrapper}>
-                        {/* LTR wrapper to fix mirroring issues */}
-                        <View style={{ direction: 'ltr' }}>
-                            <LineChart
-                                data={chartData}
-                                height={220}
-                                width={width - 64} // padding adjustments
-                                thickness={3}
-                                color={Colors.primary}
-                                startFillColor={Colors.primary}
-                                endFillColor={Colors.primary}
-                                startOpacity={0.2}
-                                endOpacity={0.0}
-                                areaChart
-                                curved
-                                hideDataPoints={false}
-                                dataPointsColor={Colors.primary}
-                                dataPointsRadius={4}
-                                textColor="#94A3B8"
-                                textFontSize={10}
-                                hideRules
-                                xAxisColor="transparent"
-                                yAxisColor="transparent"
-                                yAxisTextStyle={{ color: '#94A3B8', fontSize: 10 }}
-                                initialSpacing={20}
-                                spacing={50}
-                            />
-                        </View>
-                    </View>
-                </View>
-
-                {/* 5. Recent History */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeaderRow}>
-                        <History size={20} color="#64748B" />
-                        <Text style={styles.sectionTitle}>היסטוריה</Text>
-                    </View>
-
-                    <View style={styles.historyList}>
-                        {HISTORY_MOCK.map((item, index) => (
-                            <View key={item.id} style={styles.historyRow}>
-                                <View style={styles.historyLeft}>
-                                    <Text style={styles.historyWeight}>{item.weight} kg</Text>
-                                    {item.reps > 1 && <Text style={styles.historyReps}>{item.reps} reps</Text>}
-                                </View>
-                                <View style={styles.historyRight}>
-                                    <Text style={styles.historyDate}>{item.date}</Text>
-                                    {item.isPR && (
-                                        <View style={styles.miniPrBadge}>
-                                            <Text style={styles.miniPrText}>PR</Text>
-                                        </View>
-                                    )}
-                                </View>
-                            </View>
-                        ))}
-                    </View>
-                </View>
-
-                <View style={{ height: 100 }} />
-            </ScrollView>
-
-            {/* Action Button for Logging - Floating Bottom Left */}
-            <TouchableOpacity
-                style={styles.fab}
-                onPress={() => setModalVisible(true)}
-            >
-                <Dumbbell color="white" size={24} />
-                <Text style={styles.fabText}>עדכון ביצועים</Text>
-            </TouchableOpacity>
-
-            <LogProgressModal
-                visible={modalVisible}
-                onClose={() => setModalVisible(false)}
-                exercise={selectedExercise}
-            />
-
-        </View>
+        </View >
     );
 }
 
@@ -337,7 +593,7 @@ const styles = StyleSheet.create({
         borderBottomColor: '#F1F5F9',
     },
     headerTopRow: {
-        flexDirection: 'row-reverse',
+        flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
     },
@@ -346,50 +602,48 @@ const styles = StyleSheet.create({
         height: 40,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#F1F5F9',
+        backgroundColor: '#ffffff',
         borderRadius: 20,
     },
-    headerTitleContainer: {
-        alignItems: 'center',
-    },
-    headerTitle: {
+    pageTitle: {
         fontSize: 20,
         fontWeight: '800',
         color: '#0F172A',
+        textAlign: 'center',
     },
-    bwContainer: {
-        flexDirection: 'row-reverse',
+    // Equipment Tabs
+    equipmentTabsContainer: {
+        marginTop: 8,
         alignItems: 'center',
-        backgroundColor: '#F8FAFC',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: '#E2E8F0',
+    },
+    equipmentTabsContent: {
+        flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
+        paddingHorizontal: 4,
         gap: 8,
+        justifyContent: 'center',
     },
-    bwInfo: {
-        flexDirection: 'row-reverse',
+    equipmentTab: {
+        flexDirection: 'column',
         alignItems: 'center',
-        gap: 6,
+        justifyContent: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 8,
+        borderRadius: 12,
+        backgroundColor: 'transparent',
+        minWidth: 60,
     },
-    bwText: {
-        fontSize: 13,
-        color: '#64748B',
-        fontWeight: '500',
+    equipmentTabActive: {
     },
-    bwValue: {
-        color: '#0F172A',
-        fontWeight: '700',
+    equipmentIcon: {
+        width: 36,
+        height: 36,
+        marginBottom: 4,
     },
-    bwButton: {
-        // backgroundColor: '#fff',
-        // padding: 4
-    },
-    bwButtonText: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: Colors.primary,
+    equipmentLabel: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#1c1c1c',
+        textAlign: 'center',
     },
 
     // Selector
@@ -398,12 +652,31 @@ const styles = StyleSheet.create({
         marginBottom: 20,
         backgroundColor: '#fff',
         paddingVertical: 12,
+        minHeight: 60,
+    },
+    noExercisesText: {
+        textAlign: 'center',
+        color: '#94A3B8',
+        fontSize: 14,
+        paddingVertical: 20,
+    },
+    emptyStateContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 60,
+        paddingHorizontal: 40,
+    },
+    emptyStateText: {
+        textAlign: 'center',
+        color: '#94A3B8',
+        fontSize: 16,
+        lineHeight: 24,
     },
     selectorContent: {
         paddingHorizontal: 20,
         gap: 24,
     },
-    // New Tab Styles
     tabItem: {
         paddingVertical: 8,
         borderBottomWidth: 3,
@@ -427,20 +700,46 @@ const styles = StyleSheet.create({
     heroSection: {
         paddingHorizontal: 20,
         marginBottom: 24,
-        marginTop: 20,
+        marginTop: 10,
     },
     heroCard: {
         borderRadius: 24,
-        padding: 24,
-        alignItems: 'center',
+        padding: 16,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 10 },
         shadowOpacity: 0.3,
         shadowRadius: 20,
         elevation: 8,
+        overflow: 'hidden',
+    },
+    heroColumns: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+    },
+    heroGifColumn: {
+        width: 120,
+        height: 120,
+        borderRadius: 16,
+        overflow: 'hidden',
+        backgroundColor: 'rgba(255,255,255,0.1)',
+    },
+    heroGif: {
+        width: '100%',
+        height: '100%',
+    },
+    heroGifPlaceholder: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    heroPrColumn: {
+        flex: 1,
+        alignItems: 'center',
     },
     heroHeader: {
-        flexDirection: 'row-reverse', // Ensure icon is on correct side for RTL context if needed, currently centered
+        flexDirection: 'row',
         alignItems: 'center',
         marginBottom: 12,
         gap: 8,
@@ -458,14 +757,14 @@ const styles = StyleSheet.create({
     heroMain: {
         flexDirection: 'row',
         alignItems: 'flex-end',
-        gap: 6,
-        marginBottom: 16,
+        gap: 4,
+        marginBottom: 12,
     },
     heroValue: {
-        fontSize: 56, // Huge
+        fontSize: 42,
         fontWeight: '900',
         color: '#fff',
-        lineHeight: 56,
+        lineHeight: 42,
         fontVariant: ['tabular-nums'],
     },
     heroUnit: {
@@ -497,7 +796,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
     },
     sectionHeaderRow: {
-        flexDirection: 'row-reverse',
+        flexDirection: 'column',
         alignItems: 'center',
         marginBottom: 16,
         gap: 8,
@@ -548,15 +847,9 @@ const styles = StyleSheet.create({
         color: '#0F172A',
     },
 
-    // Chart Wrapper
+    // Chart Wrapper (for expanded card)
     chartWrapper: {
-        backgroundColor: '#fff',
-        borderRadius: 24,
-        padding: 16,
-        paddingBottom: 24,
         alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#E2E8F0',
     },
 
     // History
@@ -567,7 +860,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
         borderRadius: 16,
         padding: 16,
-        flexDirection: 'row-reverse', // RTL: Date on right, Weight on left logic
+        flexDirection: 'row-reverse',
         justifyContent: 'space-between',
         alignItems: 'center',
         borderWidth: 1,
@@ -607,29 +900,164 @@ const styles = StyleSheet.create({
         color: '#D97706',
     },
 
-    // FAB
-    fab: {
-        position: 'absolute',
-        bottom: 30,
-        left: 20, // Hebrew often uses Left for primary actions if context is reversed, or Right. 
-        // User asked for "action button", typically FAB is bottom-right in Material, but can be bottom-left in RTL optimization.
-        // Let's stick to Right (default thumb) or Left (RTL flipped). With pure logic, 'left: 20' is visual Left.
-        backgroundColor: Colors.primary,
+    // Exercise List
+    exerciseListContainer: {
+        paddingHorizontal: 16,
+        paddingTop: 16,
+        gap: 12,
+    },
+    exerciseCardWrapper: {
+        borderRadius: 20,
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    exerciseCard: {
+        borderRadius: 20,
+        padding: 14,
+    },
+    exerciseCardHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 12,
-        borderRadius: 30,
-        shadowColor: Colors.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 6,
+        gap: 14,
+    },
+    exerciseGifContainer: {
+        width: 100,
+        height: 100,
+        borderRadius: 12,
+        overflow: 'hidden',
+        margin: -10,
+    },
+    exerciseGifPlaceholder: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    exerciseContent: {
+        flex: 1,
         gap: 8,
     },
-    fabText: {
-        color: 'white',
-        fontWeight: 'bold',
+    exerciseName: {
+        fontSize: 20,
+        fontWeight: '800',
+        color: '#FFFFFF',
+        textAlign: 'left',
+    },
+    prColumn: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 2,
+        paddingHorizontal: 8,
+    },
+    prWeight: {
         fontSize: 16,
-    }
+        fontWeight: '800',
+        color: '#FFFFFF',
+        textAlign: 'center',
+    },
+    prReps: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: 'rgba(255,255,255,0.7)',
+        textAlign: 'center',
+    },
+    prValueEmpty: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.5)',
+        fontStyle: 'italic',
+        textAlign: 'center',
+    },
+
+    // Expanded Content
+    expandedContent: {
+        marginTop: 16,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255,255,255,0.1)',
+    },
+    chartContainer: {
+        marginBottom: 16,
+    },
+    chartTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: 'rgba(255,255,255,0.7)',
+        textAlign: 'center',
+        marginBottom: 12,
+    },
+    noDataText: {
+        textAlign: 'center',
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 14,
+        marginVertical: 25,
+    },
+    inputForm: {
+        gap: 12,
+    },
+    inputRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    inputGroup: {
+        flex: 1,
+        gap: 6,
+    },
+    inputLabel: {
+        fontSize: 14,
+        fontWeight: '900',
+        color: 'rgba(255, 255, 255, 1)',
+        textAlign: 'center',
+    },
+    input: {
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#FFFFFF',
+        textAlign: 'center',
+    },
+    saveButton: {
+        backgroundColor: Colors.primary,
+        borderRadius: 12,
+        paddingVertical: 14,
+        alignItems: 'center',
+        marginTop: 4,
+    },
+    saveButtonText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    // History cards for chart
+    historyCardsContainer: {
+        flexDirection: 'row',
+        paddingHorizontal: 4,
+        paddingTop: 12,
+        gap: 10,
+    },
+    historyCard: {
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        alignItems: 'center',
+        minWidth: 80,
+    },
+    historyCardValue: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    historyCardDate: {
+        color: 'rgba(255,255,255,0.6)',
+        fontSize: 11,
+        fontWeight: '500',
+        marginTop: 4,
+    },
 });

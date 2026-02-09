@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SymbolView } from 'expo-symbols';
 
@@ -15,20 +15,26 @@ export const CalendarSyncBar: React.FC<CalendarSyncBarProps> = ({ onPress, isSyn
             onPress={onPress}
             style={[styles.container, isSynced && styles.syncedContainer]}
         >
-            {/* Right Side: Calendar Icon (SF Symbol on iOS) */}
+            {/* Right Side: Calendar Icon */}
             <View style={styles.iconContainer}>
                 {Platform.OS === 'ios' ? (
-                    <SymbolView
-                        name={isSynced ? 'checkmark.circle.fill' : 'calendar.badge.plus'}
-                        size={28}
-                        tintColor={isSynced ? '#22c55e' : '#1F2937'} // Green if synced
-                        fallback={<Ionicons name="calendar" size={24} color="#1F2937" />}
-                    />
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <Image
+                            source={require('@/assets/images/Apple_Calendar_(iOS).svg.png')}
+                            style={{ width: 24, height: 24 }}
+                            resizeMode="contain"
+                        />
+                        <Image
+                            source={require('@/assets/images/Google_Calendar_icon_(2020).svg.png')}
+                            style={{ width: 24, height: 24 }}
+                            resizeMode="contain"
+                        />
+                    </View>
                 ) : (
-                    <Ionicons
-                        name={isSynced ? 'checkmark-circle' : 'calendar'}
-                        size={24}
-                        color={isSynced ? '#22c55e' : '#1F2937'}
+                    <Image
+                        source={require('@/assets/images/Google_Calendar_icon_(2020).svg.png')}
+                        style={{ width: 28, height: 28 }}
+                        resizeMode="contain"
                     />
                 )}
             </View>
@@ -40,14 +46,7 @@ export const CalendarSyncBar: React.FC<CalendarSyncBarProps> = ({ onPress, isSyn
 
             {/* Left Side: Action/Sync Icon */}
             <View style={styles.actionIconContainer}>
-                {/* Optional: Hide sync icon if synced, or change to X? kept simple for now */}
-                {!isSynced && (
-                    <Ionicons
-                        name="sync"
-                        size={18}
-                        color="#6B7280"
-                    />
-                )}
+                {/* Icon removed per user request */}
             </View>
         </TouchableOpacity>
     );

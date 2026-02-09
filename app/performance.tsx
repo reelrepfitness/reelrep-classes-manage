@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
     View,
     Text,
@@ -14,6 +14,9 @@ import {
     LayoutAnimation,
     Platform,
     UIManager,
+    Modal,
+    Animated as RNAnimated,
+    PanResponder,
 } from 'react-native';
 
 // Enable LayoutAnimation for Android
@@ -28,7 +31,7 @@ import { LineChart } from 'react-native-gifted-charts';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import Colors from '@/constants/colors';
-import { ChevronLeft, Dumbbell, ChevronRight } from 'lucide-react-native';
+import { ChevronLeft, Dumbbell, ChevronRight, Search, X, Edit3 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/constants/supabase';
@@ -45,69 +48,104 @@ interface Exercise {
     category: string;
     is_active: boolean;
     measurement_type: string;
-    equipment?: 'kettlebell' | 'barbell' | 'dumbbell' | 'landmine' | 'bodyweight' | null;
-    instructions?: string | null; // GIF URL for exercise demonstration
+    name_he?: string;
+    equipment?: string[] | null;
+    instructions?: string | null;
+    equipment_gifs?: Record<string, string> | null;
 }
 
 // --- Equipment Tabs Configuration ---
 const EQUIPMENT_TABS = [
-    { id: 'kettlebell', label: 'Kettlebell', icon: require('@/assets/eqe-icons/kettlebell-icon.png') },
-    { id: 'barbell', label: 'Barbell', icon: require('@/assets/eqe-icons/barbell-icon.png') },
-    { id: 'dumbbell', label: 'Dumbbell', icon: require('@/assets/eqe-icons/dumbell-icon.png') },
-    { id: 'landmine', label: 'Landmine', icon: require('@/assets/eqe-icons/landmine-icon.png') },
-    { id: 'bodyweight', label: 'BW', icon: require('@/assets/eqe-icons/BW-icon.png') },
+    { id: 'all', label: 'All', icon: require('@/assets/images/icon.png'), color: '#94A3B8' },
+    { id: 'landmine', label: 'Landmine', icon: require('@/assets/eqe-icons/landmine-icon.png'), color: '#c1ff72' },
+    { id: 'kettlebell', label: 'Kettlebell', icon: require('@/assets/eqe-icons/kettlebell-icon.png'), color: '#e2a9f1' },
+    { id: 'dumbbell', label: 'Dumbbell', icon: require('@/assets/eqe-icons/dumbell-icon.png'), color: '#0cc0df' },
+    { id: 'barbell', label: 'Barbell', icon: require('@/assets/eqe-icons/barbell-icon.png'), color: '#f2ca4b' },
+    { id: 'bodyweight', label: 'BW', icon: require('@/assets/eqe-icons/BW-icon.png'), color: '#8d6e63' },
+    { id: 'cable', label: 'Cable', icon: require('@/assets/eqe-icons/cable-icon.png'), color: '#ff6b6b' },
+    { id: 'medicine_ball', label: 'Medicine Ball', icon: require('@/assets/eqe-icons/medecine-ball.png'), color: '#FFA726' },
+    { id: 'machine', label: 'Machine', icon: require('@/assets/eqe-icons/machine.png'), color: '#78909C' },
 ];
 
-// --- Equipment Tab Component ---
-interface EquipmentTabProps {
-    tab: typeof EQUIPMENT_TABS[0];
-    isSelected: boolean;
-    onSelect: () => void;
-}
+// --- Components ---
 
-const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
+// Horizontal list of recent exercises
+const RecentExercises = ({ onSelect }: { onSelect: (exerciseName: string) => void }) => {
+    const { user } = useAuth();
 
-const EquipmentTab = ({ tab, isSelected, onSelect }: EquipmentTabProps) => {
-    const animatedStyle = useAnimatedStyle(() => {
-        return {
-            transform: [
-                {
-                    scale: withSpring(isSelected ? 1.15 : 1, {
-                        damping: 15,
-                        stiffness: 150,
-                    }),
-                },
-            ],
-        };
+    const { data: recentExercises = [] } = useQuery({
+        queryKey: ['recent_exercises', user?.id],
+        enabled: !!user?.id,
+        queryFn: async () => {
+            if (!user?.id) return [];
+
+            // Fetch distinct exercise names from workout logs, limited to last 10 unique
+            const { data, error } = await supabase
+                .from('workout_exercises')
+                .select('exercise_name, created_at')
+                .order('created_at', { ascending: false })
+                .limit(50); // Fetch more to filter unique clientside if needed
+
+            if (error) {
+                console.error('Error fetching recent exercises:', error);
+                return [];
+            }
+
+            // Manual distinct filter
+            const seen = new Set();
+            const unique: string[] = [];
+            for (const item of data) {
+                if (!seen.has(item.exercise_name)) {
+                    seen.add(item.exercise_name);
+                    unique.push(item.exercise_name);
+                    if (unique.length >= 8) break;
+                }
+            }
+            return unique;
+        }
     });
 
+    if (recentExercises.length === 0) return null;
+
     return (
-        <AnimatedTouchable
-            onPress={onSelect}
-            activeOpacity={0.8}
-            style={[
-                styles.equipmentTab,
-                isSelected && styles.equipmentTabActive,
-                animatedStyle,
-            ]}
-        >
-            <Image
-                source={tab.icon}
-                style={[
-                    styles.equipmentIcon,
-                    { opacity: isSelected ? 1 : 0.5 }
-                ]}
-                resizeMode="contain"
-            />
-            <Text style={[
-                styles.equipmentLabel,
-                { opacity: isSelected ? 1 : 0.5 }
-            ]} numberOfLines={1}>
-                {tab.label}
-            </Text>
-        </AnimatedTouchable>
+        <View style={styles.recentContainer}>
+            <Text style={styles.recentTitle}>אחרונים</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recentList}>
+                {recentExercises.map((name, index) => (
+                    <TouchableOpacity
+                        key={`${name}-${index}`}
+                        style={styles.recentChip}
+                        onPress={() => onSelect(name)}
+                    >
+                        <Text style={styles.recentChipText}>{name}</Text>
+                    </TouchableOpacity>
+                ))}
+            </ScrollView>
+        </View>
     );
 };
+
+// Search Bar Component
+const SearchBar = ({ value, onChange, onClear }: { value: string, onChange: (text: string) => void, onClear: () => void }) => (
+    <View style={styles.searchContainer}>
+        <View style={styles.searchWrapper}>
+            <Search size={20} color="#94A3B8" style={styles.searchIcon} />
+            <TextInput
+                style={styles.searchInput}
+                placeholder="חפש תרגיל..."
+                placeholderTextColor="#94A3B8"
+                value={value}
+                onChangeText={onChange}
+                textAlign="right"
+            />
+            {value.length > 0 && (
+                <TouchableOpacity onPress={onClear} style={styles.clearButton}>
+                    <X size={16} color="#94A3B8" />
+                </TouchableOpacity>
+            )}
+        </View>
+    </View>
+);
 
 interface LogEntry {
     date: string;
@@ -130,6 +168,25 @@ const getOptimizedGifUrl = (url: string | null | undefined): string | null => {
     return url;
 };
 
+// Get GIF URL based on selected equipment
+const getExerciseGif = (exercise: Exercise, selectedEquipment: string | null): string | null => {
+    // If equipment_gifs exists and has a GIF for the selected equipment, use it
+    if (exercise.equipment_gifs && selectedEquipment && exercise.equipment_gifs[selectedEquipment]) {
+        return getOptimizedGifUrl(exercise.equipment_gifs[selectedEquipment]);
+    }
+
+    // If no GIF for selected equipment, try to find ANY available equipment GIF
+    if (exercise.equipment_gifs) {
+        const availableGifs = Object.values(exercise.equipment_gifs).filter(Boolean);
+        if (availableGifs.length > 0) {
+            return getOptimizedGifUrl(availableGifs[0]);
+        }
+    }
+
+    // Fallback to default instructions field
+    return getOptimizedGifUrl(exercise.instructions);
+};
+
 export default function PerformanceScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
@@ -137,10 +194,55 @@ export default function PerformanceScreen() {
     const queryClient = useQueryClient();
 
     // State
-    const [selectedEquipment, setSelectedEquipment] = useState<string>('barbell');
+    const [activeTab, setActiveTab] = useState<'library' | 'myPRs'>('library');
+    const [searchText, setSearchText] = useState('');
     const [expandedExerciseId, setExpandedExerciseId] = useState<string | null>(null);
+    const [selectedExpandedEquipment, setSelectedExpandedEquipment] = useState<string | null>(null);
     const [inputWeight, setInputWeight] = useState('');
     const [inputReps, setInputReps] = useState('');
+
+    // Modal state for Exercise Library
+    const [modalVisible, setModalVisible] = useState(false);
+    const [selectedModalExercise, setSelectedModalExercise] = useState<Exercise | null>(null);
+
+    // Modal swipe-to-dismiss animation
+    const modalTranslateY = useRef(new RNAnimated.Value(0)).current;
+    const modalPanResponder = useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => false,
+            onMoveShouldSetPanResponder: (_, gestureState) => {
+                // Only respond to downward swipes
+                return gestureState.dy > 10 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+            },
+            onPanResponderMove: (_, gestureState) => {
+                // Only allow downward movement
+                if (gestureState.dy > 0) {
+                    modalTranslateY.setValue(gestureState.dy);
+                }
+            },
+            onPanResponderRelease: (_, gestureState) => {
+                if (gestureState.dy > 100 || gestureState.vy > 0.5) {
+                    // Swipe down threshold reached - close modal
+                    RNAnimated.timing(modalTranslateY, {
+                        toValue: 600,
+                        duration: 200,
+                        useNativeDriver: true,
+                    }).start(() => {
+                        setModalVisible(false);
+                        modalTranslateY.setValue(0);
+                    });
+                } else {
+                    // Snap back
+                    RNAnimated.spring(modalTranslateY, {
+                        toValue: 0,
+                        useNativeDriver: true,
+                        tension: 65,
+                        friction: 11,
+                    }).start();
+                }
+            },
+        })
+    ).current;
 
     // 1. Fetch Exercises
     const { data: exercises = [], isLoading: loadingExercises } = useQuery({
@@ -157,36 +259,50 @@ export default function PerformanceScreen() {
         }
     });
 
-    // Filter exercises by selected equipment
+    // Filter exercises by search text (supports English and Hebrew)
     const filteredExercises = useMemo(() => {
-        return exercises.filter(e => e.equipment === selectedEquipment);
-    }, [exercises, selectedEquipment]);
+        if (!searchText) return exercises;
+        return exercises.filter(e =>
+            e.name.toLowerCase().includes(searchText.toLowerCase()) ||
+            e.name_he?.toLowerCase().includes(searchText.toLowerCase())
+        );
+    }, [exercises, searchText]);
 
-    // 2. Fetch PRs for all exercises in the selected equipment category
+    // Helper to get equipment icon
+    const getEquipmentIcon = (equipmentId: string) => {
+        const tab = EQUIPMENT_TABS.find(t => t.id === equipmentId);
+        return tab?.icon;
+    };
+
+    // Get the expanded exercise
+    const expandedExercise = useMemo(() =>
+        filteredExercises.find(e => e.id === expandedExerciseId),
+        [filteredExercises, expandedExerciseId]
+    );
+
+    // Effect: Set default equipment when expanding
+    React.useEffect(() => {
+        if (expandedExerciseId && expandedExercise) {
+            // Default to 'all' when expanding
+            setSelectedExpandedEquipment('all');
+        }
+    }, [expandedExerciseId, expandedExercise]);
+
+    // 2. Fetch PRs (max weight) 
     const { data: exercisePRs = {}, isLoading: loadingPRs } = useQuery<Record<string, { weight: number; reps: number }>>({
-        queryKey: ['exercise_prs', user?.id, selectedEquipment, filteredExercises.map(e => e.name).join(',')],
-        enabled: !!user?.id && filteredExercises.length > 0,
+        queryKey: ['exercise_prs', user?.id],
+        enabled: !!user?.id,
         queryFn: async () => {
-            if (!user?.id || filteredExercises.length === 0) return {};
+            if (!user?.id) return {};
 
-            const exerciseNames = filteredExercises.map(e => e.name);
-
+            // Fetch max weight per exercise
             const { data, error } = await supabase
                 .from('workout_exercises')
-                .select(`
-                    exercise_name,
-                    weight,
-                    reps,
-                    workouts!inner (
-                        user_id
-                    )
-                `)
-                .in('exercise_name', exerciseNames)
-                .eq('workouts.user_id', user.id);
+                .select('exercise_name, weight, reps, workouts!inner(user_id)')
+                .eq('workouts.user_id', user.id); // Get all logs for user to calculate maxes
 
             if (error) throw error;
 
-            // Calculate max weight (PR) for each exercise, storing weight and reps
             const prMap: Record<string, { weight: number; reps: number }> = {};
             data.forEach((item: any) => {
                 const weight = Number(item.weight) || 0;
@@ -196,38 +312,109 @@ export default function PerformanceScreen() {
                     prMap[name] = { weight, reps };
                 }
             });
-
             return prMap;
         }
     });
 
-    // Get the expanded exercise
-    const expandedExercise = useMemo(() =>
-        filteredExercises.find(e => e.id === expandedExerciseId),
-        [filteredExercises, expandedExerciseId]
-    );
-
-    // 3. Fetch logs for expanded exercise
-    const { data: exerciseLogs = [], isLoading: loadingLogs } = useQuery({
-        queryKey: ['exercise_logs', user?.id, expandedExercise?.name],
-        enabled: !!user?.id && !!expandedExercise,
+    // 4. Fetch user's exercises (exercises with logged data)
+    const { data: userExerciseStats = [], isLoading: loadingUserStats } = useQuery({
+        queryKey: ['user_exercise_stats', user?.id],
+        enabled: !!user?.id && activeTab === 'myPRs',
         queryFn: async () => {
-            if (!user?.id || !expandedExercise) return [];
+            if (!user?.id) return [];
 
             const { data, error } = await supabase
+                .from('workout_exercises')
+                .select('exercise_name, weight, reps, created_at, equipment, workouts!inner(user_id)')
+                .eq('workouts.user_id', user.id)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            // Group by exercise and calculate stats
+            const statsMap: Record<string, {
+                exerciseName: string;
+                workoutCount: number;
+                currentPR: number;
+                prReps: number;
+                lastWorkout: string;
+                equipment: string[]; // Track unique equipment used
+            }> = {};
+
+            data.forEach((item: any) => {
+                const name = item.exercise_name;
+                const weight = Number(item.weight) || 0;
+                const reps = Number(item.reps) || 0;
+                const date = item.created_at;
+                const equipment = item.equipment;
+
+                if (!statsMap[name]) {
+                    statsMap[name] = {
+                        exerciseName: name,
+                        workoutCount: 0,
+                        currentPR: weight,
+                        prReps: reps,
+                        lastWorkout: date,
+                        equipment: [],
+                    };
+                }
+
+                statsMap[name].workoutCount++;
+                if (weight > statsMap[name].currentPR) {
+                    statsMap[name].currentPR = weight;
+                    statsMap[name].prReps = reps;
+                }
+                if (new Date(date) > new Date(statsMap[name].lastWorkout)) {
+                    statsMap[name].lastWorkout = date;
+                }
+                // Track unique equipment
+                if (equipment && !statsMap[name].equipment.includes(equipment)) {
+                    statsMap[name].equipment.push(equipment);
+                }
+            });
+
+            return Object.values(statsMap);
+        }
+    });
+
+    // Filter for My PR's tab - only show exercises user has logged
+    const displayedExercises = useMemo(() => {
+        if (activeTab === 'myPRs') {
+            // Filter to only exercises with user data
+            const userExerciseNames = userExerciseStats.map((s: any) => s.exerciseName);
+            return filteredExercises.filter(e => userExerciseNames.includes(e.name));
+        }
+        return filteredExercises;
+    }, [activeTab, filteredExercises, userExerciseStats]);
+
+    // 3. Fetch logs for expanded exercise AND selected equipment
+    const { data: exerciseLogs = [], isLoading: loadingLogs } = useQuery({
+        queryKey: ['exercise_logs', user?.id, expandedExercise?.name, selectedExpandedEquipment],
+        enabled: !!user?.id && !!expandedExercise && !!selectedExpandedEquipment,
+        queryFn: async () => {
+            if (!user?.id || !expandedExercise || !selectedExpandedEquipment) return [];
+
+            let query = supabase
                 .from('workout_exercises')
                 .select(`
                     weight,
                     reps,
                     created_at,
+                    equipment,
                     workouts!inner (
                         workout_date,
                         user_id
                     )
                 `)
                 .eq('exercise_name', expandedExercise.name)
-                .eq('workouts.user_id', user.id)
-                .order('created_at', { ascending: true });
+                .eq('workouts.user_id', user.id);
+
+            // Filter by selected equipment (unless 'all' is selected)
+            if (selectedExpandedEquipment && selectedExpandedEquipment !== 'all') {
+                query = query.eq('equipment', selectedExpandedEquipment);
+            }
+
+            const { data, error } = await query.order('created_at', { ascending: true });
 
             if (error) throw error;
 
@@ -314,7 +501,7 @@ export default function PerformanceScreen() {
 
             if (wError) throw wError;
 
-            // Insert Exercise
+            // Insert Exercise with EQUIPMENT
             const { error: eError } = await supabase
                 .from('workout_exercises')
                 .insert({
@@ -323,6 +510,7 @@ export default function PerformanceScreen() {
                     weight: inputWeight ? Number(inputWeight) : null,
                     reps: inputReps ? Number(inputReps) : null,
                     sets: 1,
+                    equipment: selectedExpandedEquipment,
                 });
 
             if (eError) throw eError;
@@ -358,22 +546,31 @@ export default function PerformanceScreen() {
                     <View style={{ width: 40 }} />
                 </View>
 
-                {/* Equipment Tabs */}
-                <View style={styles.equipmentTabsContainer}>
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.equipmentTabsContent}
+                {/* Search Bar */}
+                <SearchBar
+                    value={searchText}
+                    onChange={setSearchText}
+                    onClear={() => setSearchText('')}
+                />
+
+                {/* Tab Selector */}
+                <View style={styles.tabContainer}>
+                    <TouchableOpacity
+                        style={[styles.tab, activeTab === 'library' && styles.tabActive]}
+                        onPress={() => setActiveTab('library')}
                     >
-                        {EQUIPMENT_TABS.map((tab) => (
-                            <EquipmentTab
-                                key={tab.id}
-                                tab={tab}
-                                isSelected={selectedEquipment === tab.id}
-                                onSelect={() => setSelectedEquipment(tab.id)}
-                            />
-                        ))}
-                    </ScrollView>
+                        <Text style={[styles.tabText, activeTab === 'library' && styles.tabTextActive]}>
+                            ספריית תרגילים
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.tab, activeTab === 'myPRs' && styles.tabActive]}
+                        onPress={() => setActiveTab('myPRs')}
+                    >
+                        <Text style={[styles.tabText, activeTab === 'myPRs' && styles.tabTextActive]}>
+                            My PRs
+                        </Text>
+                    </TouchableOpacity>
                 </View>
             </View>
 
@@ -382,182 +579,220 @@ export default function PerformanceScreen() {
                 contentContainerStyle={styles.scrollContent}
             >
                 {/* Exercise List */}
-                {loadingExercises || loadingPRs ? (
+                {loadingExercises || (activeTab === 'myPRs' && loadingUserStats) ? (
                     <View style={{ height: 200, justifyContent: 'center' }}>
                         <ActivityIndicator size="large" color={Colors.primary} />
                     </View>
-                ) : filteredExercises.length === 0 ? (
+                ) : displayedExercises.length === 0 ? (
                     <View style={styles.emptyStateContainer}>
-                        <Text style={styles.emptyStateText}>אין תרגילים לציוד זה</Text>
+                        <Text style={styles.emptyStateText}>
+                            {activeTab === 'myPRs' ? 'עדיין לא רשמת תרגילים' : 'לא נמצאו תרגילים'}
+                        </Text>
                     </View>
-                ) : (
-                    <View style={styles.exerciseListContainer}>
-                        {filteredExercises.map((exercise) => {
-                            const pr = exercisePRs[exercise.name];
-                            const hasPR = pr && pr.weight > 0;
-                            const gifUrl = getOptimizedGifUrl(exercise.instructions);
+                ) : activeTab === 'myPRs' ? (
+                    // My PR's Tab - Personalized View
+                    <View style={styles.myPRsContainer}>
+                        {displayedExercises.map((exercise) => {
+                            const stats = userExerciseStats.find((s: any) => s.exerciseName === exercise.name);
+                            if (!stats) return null;
+
                             const isExpanded = expandedExerciseId === exercise.id;
+                            // Get GIF based on selected equipment when expanded, otherwise use first equipment
+                            const currentEquipment = isExpanded && selectedExpandedEquipment
+                                ? selectedExpandedEquipment
+                                : exercise.equipment?.[0] || null;
+                            const gifUrl = getExerciseGif(exercise, currentEquipment);
+                            const lastWorkoutDate = new Date(stats.lastWorkout);
+                            const daysAgo = Math.floor((Date.now() - lastWorkoutDate.getTime()) / (1000 * 60 * 60 * 24));
+
+                            // Determine chart color based on selected equipment
+                            const selectedEqData = EQUIPMENT_TABS.find(t => t.id === selectedExpandedEquipment);
+                            const chartColor = selectedEqData?.color || Colors.primary;
 
                             return (
-                                <View key={exercise.id} style={styles.exerciseCardWrapper}>
+                                <View key={exercise.id} style={styles.myPRCard}>
                                     <LinearGradient
-                                        colors={isExpanded ? ['#000000', '#1F2937'] : ['#000000', '#000000']}
+                                        colors={isExpanded ? ['#000000', '#1a1a1a', '#111827'] : ['#000000', '#1a1a1a']}
                                         start={{ x: 0, y: 0 }}
                                         end={{ x: 0, y: 1 }}
-                                        style={styles.exerciseCard}
+                                        style={styles.myPRCardGradient}
                                     >
-                                        {/* Header Row - Always visible */}
                                         <TouchableOpacity
-                                            onPress={() => handleToggleExpand(exercise.id)}
-                                            activeOpacity={0.8}
-                                            style={styles.exerciseCardHeader}
+                                            onPress={() => {
+                                                LayoutAnimation.configureNext({
+                                                    duration: 300,
+                                                    create: {
+                                                        type: LayoutAnimation.Types.easeInEaseOut,
+                                                        property: LayoutAnimation.Properties.opacity,
+                                                    },
+                                                    update: {
+                                                        type: LayoutAnimation.Types.easeInEaseOut,
+                                                    },
+                                                    delete: {
+                                                        type: LayoutAnimation.Types.easeInEaseOut,
+                                                        property: LayoutAnimation.Properties.opacity,
+                                                    },
+                                                });
+                                                if (isExpanded) {
+                                                    setExpandedExerciseId(null);
+                                                } else {
+                                                    setExpandedExerciseId(exercise.id);
+                                                }
+                                            }}
+                                            activeOpacity={0.7}
                                         >
-                                            {/* GIF Column */}
-                                            <View style={styles.exerciseGifContainer}>
-                                                {gifUrl ? (
-                                                    <OptimizedImage
-                                                        source={{ uri: gifUrl }}
-                                                        width={100}
-                                                        height={100}
-                                                        variant="rounded"
-                                                        cachePolicy="memory-disk"
-                                                        priority="normal"
-                                                        transition={200}
-                                                        showLoadingIndicator={true}
-                                                        showErrorFallback={false}
-                                                        loadingIndicatorColor="rgba(255,255,255,0.5)"
-                                                    />
-                                                ) : (
-                                                    <View style={styles.exerciseGifPlaceholder}>
-                                                        <Dumbbell size={32} color="rgba(255,255,255,0.3)" />
+                                            {/* Exercise Info */}
+                                            <View style={styles.myPRCardHeader}>
+                                                {gifUrl && (
+                                                    <View style={styles.myPRGifContainer}>
+                                                        <OptimizedImage
+                                                            source={{ uri: gifUrl }}
+                                                            style={styles.myPRGif}
+                                                            contentFit="cover"
+                                                        />
                                                     </View>
                                                 )}
-                                            </View>
-
-                                            {/* Content Column */}
-                                            <View style={styles.exerciseContent}>
-                                                <Text style={styles.exerciseName}>{exercise.name}</Text>
-                                            </View>
-
-                                            {/* PR Column - only show if has PR */}
-                                            {hasPR && (
-                                                <View style={styles.prColumn}>
-                                                    <Image
-                                                        source={require('@/assets/images/PR.png')}
-                                                        style={{ width: 28, height: 28 }}
-                                                        resizeMode="contain"
-                                                    />
-                                                    <Text style={styles.prWeight}>
-                                                        {pr.weight}{exercise.measurement_unit}
-                                                    </Text>
-                                                    <Text style={styles.prReps}>
-                                                        {pr.reps === 1 ? '1 Rep' : `${pr.reps} Reps`}
-                                                    </Text>
+                                                <View style={styles.myPRCardInfo}>
+                                                    <Text style={styles.myPRExerciseName}>{exercise.name}</Text>
+                                                    <View style={styles.myPREquipmentRow}>
+                                                        <Text style={styles.myPREquipmentLabel}>בוצע עם: </Text>
+                                                        {stats.equipment?.map((eq: string, index: number) => {
+                                                            const eqTab = EQUIPMENT_TABS.find(t => t.id === eq);
+                                                            if (!eqTab) return null;
+                                                            return (
+                                                                <Image
+                                                                    key={eq}
+                                                                    source={eqTab.icon}
+                                                                    style={[
+                                                                        styles.myPREquipmentIcon,
+                                                                        index > 0 && { marginLeft: -6 }
+                                                                    ]}
+                                                                    resizeMode="contain"
+                                                                />
+                                                            );
+                                                        })}
+                                                    </View>
                                                 </View>
-                                            )}
+                                            </View>
 
-                                            {/* Arrow - rotates when expanded */}
-                                            <Animated.View style={{
-                                                transform: [{ rotate: isExpanded ? '-90deg' : '0deg' }],
-                                            }}>
-                                                <ChevronLeft size={20} color="rgba(255,255,255,0.5)" />
-                                            </Animated.View>
+                                            {/* PR Badge */}
+                                            <Image
+                                                source={require('@/assets/images/PR.png')}
+                                                style={styles.myPRBadge}
+                                                resizeMode="contain"
+                                            />
                                         </TouchableOpacity>
 
-                                        {/* Expanded Content */}
+                                        {/* Expanded View with Equipment Selector & Input Form */}
                                         {isExpanded && (
                                             <View style={styles.expandedContent}>
-                                                {/* Chart */}
-                                                {loadingLogs ? (
-                                                    <ActivityIndicator color="white" style={{ marginVertical: 20 }} />
-                                                ) : chartData.length > 0 ? (
-                                                    <View style={styles.chartContainer}>
-                                                        <Text style={styles.chartTitle}>התקדמות</Text>
-                                                        {/* Clean line chart - flipped for RTL, no labels */}
-                                                        <View style={[
-                                                            styles.chartWrapper,
-                                                            { transform: [{ scaleX: -1 }] }
-                                                        ]}>
-                                                            <LineChart
-                                                                data={chartData}
-                                                                height={100}
-                                                                width={SCREEN_WIDTH - 80}
-                                                                thickness={3}
-                                                                color={Colors.primary}
-                                                                startFillColor={Colors.primary}
-                                                                endFillColor="transparent"
-                                                                startOpacity={0.4}
-                                                                endOpacity={0.0}
-                                                                areaChart
-                                                                curved
-                                                                dataPointsColor={Colors.primary}
-                                                                dataPointsRadius={5}
-                                                                hideYAxisText
-                                                                hideAxesAndRules
-                                                                xAxisLabelsHeight={0}
-                                                                initialSpacing={10}
-                                                                endSpacing={10}
-                                                                spacing={40}
-                                                                isAnimated
-                                                                animationDuration={500}
-                                                            />
+                                                {/* Equipment Tabs - Show only exercise's equipment */}
+                                                {exercise.equipment && exercise.equipment.length > 0 && (
+                                                    <View style={styles.inCardEquipmentContainer}>
+                                                        <View style={styles.equipmentTabsRow}>
+                                                            {['all', ...exercise.equipment].map(eq => {
+                                                                const tab = EQUIPMENT_TABS.find(t => t.id === eq);
+                                                                if (!tab) return null;
+                                                                const isSelected = selectedExpandedEquipment === eq;
+                                                                return (
+                                                                    <TouchableOpacity
+                                                                        key={eq}
+                                                                        onPress={() => setSelectedExpandedEquipment(eq)}
+                                                                        style={[
+                                                                            styles.navTab,
+                                                                            isSelected && styles.navTabActive,
+                                                                            isSelected && { backgroundColor: tab.color + '20', borderColor: tab.color }
+                                                                        ]}
+                                                                    >
+                                                                        <Image
+                                                                            source={tab.icon}
+                                                                            style={styles.navTabIcon}
+                                                                        />
+                                                                        {isSelected && (
+                                                                            <Text style={[styles.navTabText, { color: '#fff' }]}>
+                                                                                {tab.label}
+                                                                            </Text>
+                                                                        )}
+                                                                    </TouchableOpacity>
+                                                                );
+                                                            })}
                                                         </View>
-
-                                                        {/* Horizontal scroll with date/value cards */}
-                                                        <ScrollView
-                                                            horizontal
-                                                            showsHorizontalScrollIndicator={false}
-                                                            contentContainerStyle={styles.historyCardsContainer}
-                                                        >
-                                                            {chartData.map((item, index) => (
-                                                                <View key={index} style={styles.historyCard}>
-                                                                    <Text style={styles.historyCardValue}>
-                                                                        {item.value}{expandedExercise?.measurement_unit}
-                                                                    </Text>
-                                                                    <Text style={styles.historyCardDate}>
-                                                                        {item.label}
-                                                                    </Text>
-                                                                </View>
-                                                            ))}
-                                                        </ScrollView>
                                                     </View>
-                                                ) : (
-                                                    <Text style={styles.noDataText}>אין היסטוריה עדיין</Text>
                                                 )}
 
-                                                {/* Input Form */}
+                                                {/* Chart */}
+                                                <View style={styles.chartWrapper}>
+                                                    {loadingLogs ? (
+                                                        <ActivityIndicator size="small" color={chartColor} />
+                                                    ) : exerciseLogs.length > 0 ? (
+                                                        <LineChart
+                                                            data={exerciseLogs.map((log: any) => ({
+                                                                value: Number(log.weight) || 0,
+                                                                label: new Date(log.date).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' }),
+                                                            }))}
+                                                            width={SCREEN_WIDTH - 64}
+                                                            height={180}
+                                                            color={chartColor}
+                                                            thickness={3}
+                                                            startFillColor={chartColor}
+                                                            endFillColor={chartColor}
+                                                            startOpacity={0.3}
+                                                            endOpacity={0.1}
+                                                            spacing={60}
+                                                            initialSpacing={20}
+                                                            noOfSections={4}
+                                                            hideYAxisText
+                                                            hideAxesAndRules
+                                                            dataPointsColor={chartColor}
+                                                            dataPointsRadius={5}
+                                                            textColor="#FFFFFF"
+                                                            textFontSize={12}
+                                                            xAxisLabelTextStyle={{ color: '#FFFFFF', fontSize: 10 }}
+                                                            curved
+                                                            areaChart
+                                                        />
+                                                    ) : (
+                                                        <Text style={{ color: '#94A3B8', textAlign: 'center', marginTop: 20 }}>
+                                                            אין נתונים לציוד זה
+                                                        </Text>
+                                                    )}
+                                                </View>
+
+                                                {/* Input Form - Update PR */}
                                                 <View style={styles.inputForm}>
+                                                    <Text style={styles.inputLabel}>עדכן שיא עם {EQUIPMENT_TABS.find(t => t.id === selectedExpandedEquipment)?.label || ''}</Text>
                                                     <View style={styles.inputRow}>
-                                                        <View style={styles.inputGroup}>
-                                                            <Text style={styles.inputLabel}>משקל ({exercise.measurement_unit})</Text>
+                                                        {exercise.measurement_type !== 'time' && (
+                                                            <View style={styles.inputWrapper}>
+                                                                <TextInput
+                                                                    style={styles.input}
+                                                                    placeholder="חזרות"
+                                                                    placeholderTextColor="#6B7280"
+                                                                    keyboardType="numeric"
+                                                                    value={inputReps}
+                                                                    onChangeText={setInputReps}
+                                                                    textAlign="center"
+                                                                />
+                                                            </View>
+                                                        )}
+                                                        <View style={styles.inputWrapper}>
                                                             <TextInput
                                                                 style={styles.input}
+                                                                placeholder={exercise.measurement_unit}
+                                                                placeholderTextColor="#6B7280"
+                                                                keyboardType="numeric"
                                                                 value={inputWeight}
                                                                 onChangeText={setInputWeight}
-                                                                keyboardType="numeric"
-                                                                placeholder="0"
-                                                                placeholderTextColor="rgba(255,255,255,0.3)"
+                                                                textAlign="center"
                                                             />
                                                         </View>
-                                                        <View style={styles.inputGroup}>
-                                                            <Text style={styles.inputLabel}>חזרות</Text>
-                                                            <TextInput
-                                                                style={styles.input}
-                                                                value={inputReps}
-                                                                onChangeText={setInputReps}
-                                                                keyboardType="numeric"
-                                                                placeholder="0"
-                                                                placeholderTextColor="rgba(255,255,255,0.3)"
-                                                            />
-                                                        </View>
+                                                        <TouchableOpacity
+                                                            style={[styles.addButton, { backgroundColor: chartColor }]}
+                                                            onPress={handleSaveLog}
+                                                        >
+                                                            <Text style={styles.addButtonText}>שמור</Text>
+                                                        </TouchableOpacity>
                                                     </View>
-
-                                                    <TouchableOpacity
-                                                        style={styles.saveButton}
-                                                        onPress={handleSaveLog}
-                                                    >
-                                                        <Text style={styles.saveButtonText}>עדכן שיא אישי</Text>
-                                                    </TouchableOpacity>
                                                 </View>
                                             </View>
                                         )}
@@ -566,13 +801,305 @@ export default function PerformanceScreen() {
                             );
                         })}
                     </View>
-                )
-                }
+                ) : (
+                    <View style={styles.exerciseListContainer}>
+                        {displayedExercises.map((exercise) => {
+                            const pr = exercisePRs[exercise.name];
+                            const hasPR = pr && pr.weight > 0;
+                            const isExpanded = expandedExerciseId === exercise.id;
+                            // Get GIF based on selected equipment when expanded, otherwise use first equipment
+                            const currentEquipment = isExpanded && selectedExpandedEquipment
+                                ? selectedExpandedEquipment
+                                : exercise.equipment?.[0] || null;
+                            const gifUrl = getExerciseGif(exercise, currentEquipment);
 
-                <View style={{ height: 40 }} />
-            </ScrollView >
+                            // Determine chart color based on selected equipment
+                            const selectedEqData = EQUIPMENT_TABS.find(t => t.id === selectedExpandedEquipment);
+                            const chartColor = selectedEqData?.color || Colors.primary;
 
-        </View >
+                            return (
+                                <View key={exercise.id} style={[
+                                    styles.exerciseCardWrapper,
+                                    isExpanded && styles.exerciseCardWrapperExpanded
+                                ]}>
+                                    <LinearGradient
+                                        colors={isExpanded ? ['#000000', '#1F2937'] : ['#000000', '#000000']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 0, y: 1 }}
+                                        style={styles.exerciseCard}
+                                    >
+                                        {/* PR Badge - top left of card */}
+                                        {hasPR && !isExpanded && (
+                                            <View style={styles.libraryPrBadge}>
+                                                <Image
+                                                    source={require('@/assets/images/PR.png')}
+                                                    style={{ width: 28, height: 28 }}
+                                                    resizeMode="contain"
+                                                />
+                                                <Text style={styles.libraryPrText}>
+                                                    {pr.weight}{exercise.measurement_unit}
+                                                </Text>
+                                            </View>
+                                        )}
+
+                                        {/* Card Content - Column Layout */}
+                                        <TouchableOpacity
+                                            onPress={() => {
+                                                setSelectedModalExercise(exercise);
+                                                setSelectedExpandedEquipment(exercise.equipment?.[0] || null);
+                                                setModalVisible(true);
+                                            }}
+                                            activeOpacity={0.8}
+                                            style={styles.libraryCardColumn}
+                                        >
+                                            {/* Row 1: GIF - smaller when expanded */}
+                                            <View style={[
+                                                styles.libraryGifContainer,
+                                                isExpanded && styles.libraryGifContainerExpanded
+                                            ]}>
+                                                {gifUrl ? (
+                                                    <OptimizedImage
+                                                        source={{ uri: gifUrl }}
+                                                        style={styles.libraryGif}
+                                                        contentFit="cover"
+                                                        cachePolicy="memory-disk"
+                                                        priority="normal"
+                                                        transition={200}
+                                                        showLoadingIndicator={true}
+                                                        showErrorFallback={false}
+                                                        loadingIndicatorColor="rgba(255,255,255,0.5)"
+                                                    />
+                                                ) : (
+                                                    <View style={styles.libraryGifPlaceholder}>
+                                                        <Dumbbell size={isExpanded ? 32 : 48} color="rgba(255,255,255,0.3)" />
+                                                    </View>
+                                                )}
+                                            </View>
+
+                                            {/* Row 2: Exercise Name */}
+                                            <Text style={styles.libraryExerciseName}>{exercise.name}</Text>
+
+                                            {/* Row 3: Equipment Icons */}
+                                            {exercise.equipment && exercise.equipment.length > 0 && (
+                                                <View style={styles.libraryEquipmentRow}>
+                                                    {exercise.equipment.map((eq, index) => {
+                                                        const icon = getEquipmentIcon(eq);
+                                                        if (!icon) return null;
+                                                        return (
+                                                            <Image
+                                                                key={eq}
+                                                                source={icon}
+                                                                style={styles.libraryEquipmentIcon}
+                                                            />
+                                                        );
+                                                    })}
+                                                </View>
+                                            )}
+                                        </TouchableOpacity>
+                                    </LinearGradient>
+                                </View>
+                            );
+                        })}
+                    </View>
+                )}
+
+                {/* Exercise Library Modal */}
+                {selectedModalExercise && (
+                    <Modal
+                        visible={modalVisible}
+                        animationType="slide"
+                        transparent={true}
+                        onRequestClose={() => setModalVisible(false)}
+                    >
+                        <TouchableOpacity
+                            style={styles.modalOverlay}
+                            activeOpacity={1}
+                            onPress={() => setModalVisible(false)}
+                        >
+                            <RNAnimated.View
+                                {...modalPanResponder.panHandlers}
+                                style={[
+                                    styles.modalContent,
+                                    { transform: [{ translateY: modalTranslateY }] }
+                                ]}
+                            >
+                                {/* Modal Header - Drawer Handle (swipe area) */}
+                                <View style={styles.modalHeader}>
+                                    <View style={styles.drawerHandle} />
+                                </View>
+
+                                <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false} bounces={false}>
+                                    {/* 2-Column Layout: GIF + Name/Equipment */}
+                                    <View style={styles.modalTopRow}>
+                                        {/* Column 1: GIF */}
+                                        {(() => {
+                                            const currentEquipment = selectedExpandedEquipment || selectedModalExercise.equipment?.[0] || null;
+                                            const gifUrl = getExerciseGif(selectedModalExercise, currentEquipment);
+                                            return gifUrl ? (
+                                                <View style={styles.modalGifContainer}>
+                                                    <OptimizedImage
+                                                        source={{ uri: gifUrl }}
+                                                        style={styles.modalGif}
+                                                        contentFit="contain"
+                                                        cachePolicy="memory-disk"
+                                                        priority="normal"
+                                                        transition={200}
+                                                    />
+                                                </View>
+                                            ) : (
+                                                <View style={[styles.modalGifContainer, styles.modalGifPlaceholder]}>
+                                                    <Dumbbell size={48} color="rgba(255,255,255,0.3)" />
+                                                </View>
+                                            );
+                                        })()}
+
+                                        {/* Column 2: Name */}
+                                        <View style={styles.modalInfoColumn}>
+                                            {/* Exercise Name */}
+                                            <Text style={styles.modalTitle}>{selectedModalExercise.name}</Text>
+                                        </View>
+                                    </View>
+
+                                    {/* Equipment Selector - Under GIF Row */}
+                                    {selectedModalExercise.equipment && selectedModalExercise.equipment.length > 0 && (
+                                        <View style={styles.modalEquipmentRow}>
+                                            {selectedModalExercise.equipment.map(eq => {
+                                                const tab = EQUIPMENT_TABS.find(t => t.id === eq);
+                                                if (!tab) return null;
+                                                const isSelected = selectedExpandedEquipment === eq;
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={eq}
+                                                        onPress={() => setSelectedExpandedEquipment(eq)}
+                                                        style={[
+                                                            styles.modalEquipmentTab,
+                                                            isSelected && { backgroundColor: tab.color + '20', borderColor: tab.color }
+                                                        ]}
+                                                    >
+                                                        <Image
+                                                            source={tab.icon}
+                                                            style={styles.modalEquipmentIcon}
+                                                        />
+                                                        {isSelected && (
+                                                            <Text style={styles.modalEquipmentLabel}>
+                                                                {tab.label}
+                                                            </Text>
+                                                        )}
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                        </View>
+                                    )}
+
+                                    {/* Chart */}
+                                    {(() => {
+                                        const selectedEqData = EQUIPMENT_TABS.find(t => t.id === selectedExpandedEquipment);
+                                        const chartColor = selectedEqData?.color || Colors.primary;
+
+                                        return (
+                                            <View style={styles.chartWrapper}>
+                                                {loadingLogs ? (
+                                                    <ActivityIndicator color={chartColor} />
+                                                ) : (
+                                                    <LineChart
+                                                        data={chartData}
+                                                        height={160}
+                                                        width={SCREEN_WIDTH - 80}
+                                                        spacing={60}
+                                                        initialSpacing={20}
+                                                        color={chartColor}
+                                                        thickness={3}
+                                                        startFillColor={chartColor}
+                                                        endFillColor={chartColor}
+                                                        startOpacity={0.2}
+                                                        endOpacity={0.0}
+                                                        areaChart
+                                                        yAxisSide={require('react-native-gifted-charts').yAxisSides.LEFT}
+                                                        yAxisColor="transparent"
+                                                        xAxisColor="rgba(255,255,255,0.1)"
+                                                        yAxisTextStyle={{ color: '#9CA3AF', fontSize: 10 }}
+                                                        xAxisLabelTextStyle={{ color: '#9CA3AF', fontSize: 10 }}
+                                                        hideDataPoints={false}
+                                                        dataPointsColor={chartColor}
+                                                        dataPointsRadius={4}
+                                                        textFontSize={12}
+                                                        textColor="#FFFFFF"
+                                                        hideRules
+                                                        yAxisOffset={0}
+                                                        curved
+                                                        isAnimated
+                                                    />
+                                                )}
+                                            </View>
+                                        );
+                                    })()}
+
+                                    {/* Stats Row */}
+                                    {(() => {
+                                        const selectedEqData = EQUIPMENT_TABS.find(t => t.id === selectedExpandedEquipment);
+                                        return (
+                                            <View style={styles.statsRow}>
+                                                <View style={styles.statItem}>
+                                                    <Text style={styles.statValue}>
+                                                        {chartData.length > 0 ? Math.max(...chartData.map(d => d.value)) : 0}
+                                                        <Text style={styles.statUnit}> {selectedModalExercise.measurement_unit}</Text>
+                                                    </Text>
+                                                    <Text style={styles.statLabel}>שיא {selectedEqData?.label || ''}</Text>
+                                                </View>
+                                            </View>
+                                        );
+                                    })()}
+
+                                    {/* Input Form */}
+                                    {(() => {
+                                        const selectedEqData = EQUIPMENT_TABS.find(t => t.id === selectedExpandedEquipment);
+                                        const chartColor = selectedEqData?.color || Colors.primary;
+
+                                        return (
+                                            <View style={styles.inputForm}>
+                                                <Text style={styles.inputLabel}>הוסף שיא חדש</Text>
+                                                <View style={styles.inputRow}>
+                                                    {selectedModalExercise.measurement_type !== 'time' && (
+                                                        <View style={styles.inputWrapper}>
+                                                            <TextInput
+                                                                style={styles.input}
+                                                                placeholder="חזרות"
+                                                                placeholderTextColor="#6B7280"
+                                                                keyboardType="numeric"
+                                                                value={inputReps}
+                                                                onChangeText={setInputReps}
+                                                                textAlign="center"
+                                                            />
+                                                        </View>
+                                                    )}
+                                                    <View style={styles.inputWrapper}>
+                                                        <TextInput
+                                                            style={styles.input}
+                                                            placeholder={selectedModalExercise.measurement_unit}
+                                                            placeholderTextColor="#6B7280"
+                                                            keyboardType="numeric"
+                                                            value={inputWeight}
+                                                            onChangeText={setInputWeight}
+                                                            textAlign="center"
+                                                        />
+                                                    </View>
+                                                    <TouchableOpacity
+                                                        style={[styles.addButton, { backgroundColor: chartColor }]}
+                                                        onPress={handleSaveLog}
+                                                    >
+                                                        <Text style={styles.addButtonText}>שמור</Text>
+                                                    </TouchableOpacity>
+                                                </View>
+                                            </View>
+                                        );
+                                    })()}
+                                </ScrollView>
+                            </RNAnimated.View>
+                        </TouchableOpacity>
+                    </Modal>
+                )}
+            </ScrollView>
+        </View>
     );
 }
 
@@ -581,483 +1108,595 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#F8FAFC',
     },
-    scrollContent: {
-        paddingBottom: 40,
-    },
-    // Header
     header: {
-        backgroundColor: '#fff',
-        paddingHorizontal: 20,
-        paddingBottom: 16,
+        backgroundColor: '#FFFFFF',
         borderBottomWidth: 1,
-        borderBottomColor: '#F1F5F9',
+        borderBottomColor: '#E2E8F0',
+        paddingBottom: 16,
+        paddingHorizontal: 20,
     },
     headerTopRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 16,
     },
     backButton: {
         width: 40,
         height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F1F5F9',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#ffffff',
-        borderRadius: 20,
     },
     pageTitle: {
         fontSize: 20,
-        fontWeight: '800',
+        fontWeight: '700',
         color: '#0F172A',
-        textAlign: 'center',
     },
-    // Equipment Tabs
-    equipmentTabsContainer: {
-        marginTop: 8,
-        alignItems: 'center',
-    },
-    equipmentTabsContent: {
-        flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
-        paddingHorizontal: 4,
-        gap: 8,
-        justifyContent: 'center',
-    },
-    equipmentTab: {
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 8,
-        paddingVertical: 8,
-        borderRadius: 12,
-        backgroundColor: 'transparent',
-        minWidth: 60,
-    },
-    equipmentTabActive: {
-    },
-    equipmentIcon: {
-        width: 36,
-        height: 36,
-        marginBottom: 4,
-    },
-    equipmentLabel: {
-        fontSize: 11,
-        fontWeight: '600',
-        color: '#1c1c1c',
-        textAlign: 'center',
-    },
-
-    // Selector
-    selectorContainer: {
+    searchContainer: {
         marginTop: 0,
-        marginBottom: 20,
-        backgroundColor: '#fff',
-        paddingVertical: 12,
-        minHeight: 60,
+        marginBottom: 16,
     },
-    noExercisesText: {
-        textAlign: 'center',
-        color: '#94A3B8',
-        fontSize: 14,
-        paddingVertical: 20,
-    },
-    emptyStateContainer: {
-        flex: 1,
-        justifyContent: 'center',
+    searchWrapper: {
+        flexDirection: 'row-reverse',
         alignItems: 'center',
-        paddingVertical: 60,
-        paddingHorizontal: 40,
+        backgroundColor: '#F1F5F9',
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        height: 44,
     },
-    emptyStateText: {
-        textAlign: 'center',
-        color: '#94A3B8',
+    searchIcon: {
+        marginLeft: 8,
+    },
+    searchInput: {
+        flex: 1,
         fontSize: 16,
-        lineHeight: 24,
+        color: '#0F172A',
+        textAlign: 'right',
+        height: '100%',
     },
-    selectorContent: {
-        paddingHorizontal: 20,
-        gap: 24,
+    clearButton: {
+        padding: 4,
     },
-    tabItem: {
-        paddingVertical: 8,
-        borderBottomWidth: 3,
-        borderBottomColor: 'transparent',
+    recentContainer: {
+        marginTop: 0,
     },
-    tabItemActive: {
-        borderBottomColor: Colors.primary,
+    recentTitle: {
+        fontSize: 18,
+        fontWeight: '900',
+        color: '#000000ff',
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+    recentList: {
+        gap: 8,
+        paddingRight: 4,
+    },
+    recentChip: {
+        backgroundColor: '#F1F5F9',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#ffffff',
+    },
+    recentChipText: {
+        fontSize: 13,
+        color: '#475569',
+        fontWeight: '800',
+    },
+    tabContainer: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 16,
+    },
+    tab: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 12,
+        backgroundColor: '#F1F5F9',
+        alignItems: 'center',
+    },
+    tabActive: {
+        backgroundColor: Colors.primary,
     },
     tabText: {
         fontSize: 16,
-        fontWeight: '500',
-        color: '#94A3B8',
+        fontWeight: '700',
+        color: '#64748B',
     },
     tabTextActive: {
+        color: '#FFFFFF',
+    },
+    scrollContent: {
+        paddingBottom: 40,
+    },
+    emptyStateContainer: {
+        padding: 40,
+        alignItems: 'center',
+    },
+    emptyStateText: {
         fontSize: 16,
-        fontWeight: '800',
-        color: '#0F172A',
-    },
-
-    // Hero Section
-    heroSection: {
-        paddingHorizontal: 20,
-        marginBottom: 24,
-        marginTop: 10,
-    },
-    heroCard: {
-        borderRadius: 24,
-        padding: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.3,
-        shadowRadius: 20,
-        elevation: 8,
-        overflow: 'hidden',
-    },
-    heroColumns: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 16,
-    },
-    heroGifColumn: {
-        width: 120,
-        height: 120,
-        borderRadius: 16,
-        overflow: 'hidden',
-        backgroundColor: 'rgba(255,255,255,0.1)',
-    },
-    heroGif: {
-        width: '100%',
-        height: '100%',
-    },
-    heroGifPlaceholder: {
-        width: '100%',
-        height: '100%',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    heroPrColumn: {
-        flex: 1,
-        alignItems: 'center',
-    },
-    heroHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
-        gap: 8,
-    },
-    heroIconContainer: {
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        padding: 6,
-        borderRadius: 12,
-    },
-    heroLabel: {
-        color: 'rgba(255,255,255,0.9)',
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    heroMain: {
-        flexDirection: 'row',
-        alignItems: 'flex-end',
-        gap: 4,
-        marginBottom: 12,
-    },
-    heroValue: {
-        fontSize: 42,
-        fontWeight: '900',
-        color: '#fff',
-        lineHeight: 42,
-        fontVariant: ['tabular-nums'],
-    },
-    heroUnit: {
-        fontSize: 20,
-        fontWeight: '600',
-        color: 'rgba(255,255,255,0.8)',
-        marginBottom: 8,
-    },
-    ratioBadge: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 16,
-        gap: 6,
-    },
-    ratioIcon: {
-        fontSize: 14,
-    },
-    ratioText: {
-        color: '#fff',
-        fontSize: 14,
-        fontWeight: '700',
-    },
-
-    // Section Common
-    section: {
-        marginBottom: 24,
-        paddingHorizontal: 20,
-    },
-    sectionHeaderRow: {
-        flexDirection: 'column',
-        alignItems: 'center',
-        marginBottom: 16,
-        gap: 8,
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: '800',
-        color: '#0F172A',
-        textAlign: 'right',
-        marginBottom: 12,
-    },
-
-    // Load Grid
-    loadGrid: {
-        flexDirection: 'row-reverse',
-        justifyContent: 'space-between',
-        gap: 8,
-    },
-    loadBox: {
-        flex: 1,
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 12,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#E2E8F0',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.03,
-        shadowRadius: 4,
-        elevation: 1,
-    },
-    loadHeader: {
-        backgroundColor: '#F1F5F9',
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 6,
-        marginBottom: 6,
-    },
-    loadPct: {
-        fontSize: 11,
-        fontWeight: '700',
         color: '#64748B',
     },
-    loadWeight: {
-        fontSize: 16,
-        fontWeight: '800',
-        color: '#0F172A',
-    },
-
-    // Chart Wrapper (for expanded card)
-    chartWrapper: {
-        alignItems: 'center',
-    },
-
-    // History
-    historyList: {
-        gap: 12,
-    },
-    historyRow: {
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 16,
-        flexDirection: 'row-reverse',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
-    },
-    historyRight: {
-        alignItems: 'flex-end',
-    },
-    historyDate: {
-        fontSize: 14,
-        color: '#64748B',
-        fontWeight: '500',
-    },
-    historyLeft: {
-        alignItems: 'flex-start',
-    },
-    historyWeight: {
-        fontSize: 18,
-        fontWeight: '800',
-        color: '#0F172A',
-    },
-    historyReps: {
-        fontSize: 12,
-        color: '#94A3B8',
-        marginTop: 2,
-    },
-    miniPrBadge: {
-        marginTop: 4,
-        backgroundColor: '#FEF3C7',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 4,
-    },
-    miniPrText: {
-        fontSize: 10,
-        fontWeight: '800',
-        color: '#D97706',
-    },
-
-    // Exercise List
     exerciseListContainer: {
-        paddingHorizontal: 16,
-        paddingTop: 16,
+        padding: 16,
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
         gap: 12,
     },
     exerciseCardWrapper: {
-        borderRadius: 20,
+        width: '48%',
+        borderRadius: 16,
         overflow: 'hidden',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-        elevation: 4,
+        backgroundColor: '#000000',
+    },
+    exerciseCardWrapperExpanded: {
+        width: '100%',
     },
     exerciseCard: {
-        borderRadius: 20,
-        padding: 14,
+        width: '100%',
+        flex: 1,
     },
     exerciseCardHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 14,
+        padding: 12,
+        gap: 12,
     },
-    exerciseGifContainer: {
-        width: 100,
-        height: 100,
-        borderRadius: 12,
+    // Library Tab - Column Layout Styles
+    libraryCardColumn: {
+        alignItems: 'center',
+        padding: 16,
+    },
+    libraryGifContainer: {
+        width: '100%',
+        height: 150,
+        borderRadius: 16,
         overflow: 'hidden',
-        margin: -10,
+        marginBottom: 12,
+        position: 'relative',
     },
-    exerciseGifPlaceholder: {
+    libraryGifContainerExpanded: {
+        height: 100,
+        width: 100,
+        alignSelf: 'center',
+    },
+    libraryGif: {
         width: '100%',
         height: '100%',
-        justifyContent: 'center',
+    },
+    libraryGifPlaceholder: {
+        flex: 1,
+        backgroundColor: '#334155',
         alignItems: 'center',
+        justifyContent: 'center',
+    },
+    libraryPrBadge: {
+        position: 'absolute',
+        top: 8,
+        left: 8,
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        borderRadius: 12,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        zIndex: 10,
+    },
+    libraryPrText: {
+        fontSize: 14,
+        fontWeight: '800',
+        color: '#FBBF24',
+    },
+    libraryExerciseName: {
+        fontSize: 20,
+        fontWeight: '900',
+        color: '#F8FAFC',
+        textAlign: 'center',
+        marginBottom: 8,
+    },
+    libraryEquipmentRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    libraryEquipmentIcon: {
+        width: 28,
+        height: 28,
+        resizeMode: 'contain',
+    },
+    // Old styles kept for backwards compatibility
+    exerciseGifContainer: {
+        width: 60,
+        height: 60,
+        borderRadius: 12,
+        overflow: 'hidden',
+    },
+    exerciseGifPlaceholder: {
+        flex: 1,
+        backgroundColor: '#334155',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     exerciseContent: {
         flex: 1,
-        gap: 8,
+        alignItems: 'flex-start',
+        justifyContent: 'center',
+        height: 60,
     },
     exerciseName: {
-        fontSize: 20,
-        fontWeight: '800',
-        color: '#FFFFFF',
-        textAlign: 'left',
+        fontSize: 18,
+        fontWeight: '900',
+        color: '#F8FAFC',
+        marginBottom: 6,
+        textAlign: 'right',
+    },
+    equipmentIconsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    equipmentIconSmallNoTint: {
+        width: 25,
+        height: 25,
+        resizeMode: 'contain',
     },
     prColumn: {
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 2,
-        paddingHorizontal: 8,
+        paddingLeft: 8,
+        borderLeftWidth: 1,
+        borderLeftColor: 'rgba(255,255,255,0.1)',
+        minWidth: 70,
     },
     prWeight: {
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: '800',
-        color: '#FFFFFF',
-        textAlign: 'center',
+        color: '#FBBF24',
+        marginTop: 2,
     },
     prReps: {
         fontSize: 11,
-        fontWeight: '600',
-        color: 'rgba(255,255,255,0.7)',
-        textAlign: 'center',
+        color: '#94A3B8',
+        fontWeight: '500',
     },
-    prValueEmpty: {
-        fontSize: 12,
-        color: 'rgba(255,255,255,0.5)',
-        fontStyle: 'italic',
-        textAlign: 'center',
+    expandedContent: {
+        padding: 16,
     },
 
-    // Expanded Content
-    expandedContent: {
-        marginTop: 16,
-        paddingTop: 16,
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(255,255,255,0.1)',
+    // In-Card Equipment Selector
+    inCardEquipmentContainer: {
+        marginBottom: 20,
+        paddingHorizontal: 0,
     },
-    chartContainer: {
+    equipmentTabsRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    navTab: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        padding: 8,
+        borderRadius: 20,
+        backgroundColor: '#374151',
+        borderWidth: 1,
+        borderColor: 'transparent',
+    },
+    navTabActive: {
+        paddingHorizontal: 12,
+        // Background and border color set dynamically inline
+    },
+    navTabIcon: {
+        width: 24,
+        height: 24,
+        resizeMode: 'contain',
+    },
+    navTabText: {
+        marginRight: 6,
+        fontSize: 14,
+        fontWeight: '900',
+        color: '#FFFFFF',
+    },
+    equipmentTabsContainer: {
+        flexDirection: 'row-reverse',
+        justifyContent: 'center',
+        gap: 12,
         marginBottom: 16,
     },
-    chartTitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: 'rgba(255,255,255,0.7)',
-        textAlign: 'center',
-        marginBottom: 12,
+    equipmentTab: {
+        padding: 10,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        borderWidth: 2,
+        borderColor: 'transparent',
     },
-    noDataText: {
-        textAlign: 'center',
-        color: 'rgba(255,255,255,0.5)',
+    equipmentTabActive: {
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        borderColor: 'rgba(255, 255, 255, 0.3)',
+    },
+    equipmentTabIcon: {
+        width: 28,
+        height: 28,
+    },
+
+    chartWrapper: {
+        marginVertical: 10,
+        marginHorizontal: 10,
+        height: 240,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    statsRow: {
+        flexDirection: 'row-reverse',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 24,
+        backgroundColor: '#1F2937',
+        padding: 16,
+        borderRadius: 16,
+        marginHorizontal: 8,
+    },
+    statItem: {
+        alignItems: 'center',
+        paddingHorizontal: 20,
+    },
+    statValue: {
+        fontSize: 24,
+        fontWeight: '800',
+        color: '#F8FAFC',
+    },
+    statUnit: {
         fontSize: 14,
-        marginVertical: 25,
+        color: '#94A3B8',
+        fontWeight: '500',
+    },
+    statLabel: {
+        fontSize: 13,
+        color: '#94A3B8',
+        marginTop: 4,
+    },
+    statDivider: {
+        width: 1,
+        height: 40,
+        backgroundColor: 'rgba(255,255,255,0.1)',
     },
     inputForm: {
-        gap: 12,
-    },
-    inputRow: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    inputGroup: {
-        flex: 1,
-        gap: 6,
+        backgroundColor: '#1F2937',
+        borderRadius: 16,
+        padding: 16,
+        marginHorizontal: 8,
     },
     inputLabel: {
         fontSize: 14,
-        fontWeight: '900',
-        color: 'rgba(255, 255, 255, 1)',
+        fontWeight: '800',
+        color: '#E2E8F0',
+        marginBottom: 12,
         textAlign: 'center',
+    },
+    inputRow: {
+        flexDirection: 'row-reverse',
+        gap: 12,
+    },
+    inputWrapper: {
+        flex: 1,
+        height: 48,
+        backgroundColor: '#374151',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#4B5563',
+        overflow: 'hidden',
     },
     input: {
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        fontSize: 16,
-        fontWeight: '600',
+        flex: 1,
+        height: '100%',
         color: '#FFFFFF',
+        fontSize: 18,
+        fontWeight: '600',
         textAlign: 'center',
     },
-    saveButton: {
-        backgroundColor: Colors.primary,
+    addButton: {
+        width: 60,
+        height: 48,
         borderRadius: 12,
-        paddingVertical: 14,
         alignItems: 'center',
-        marginTop: 4,
+        justifyContent: 'center',
     },
-    saveButtonText: {
-        color: '#FFFFFF',
-        fontSize: 16,
+    addButtonText: {
+        color: '#000',
         fontWeight: '700',
+        fontSize: 14,
     },
-    // History cards for chart
-    historyCardsContainer: {
+    // My PR's Tab Styles
+    myPRsContainer: {
+        padding: 16,
+        gap: 16,
+    },
+    myPRCard: {
+        borderRadius: 16,
+        overflow: 'hidden',
+        marginBottom: 0,
+    },
+    myPRCardGradient: {
+        padding: 16,
+        position: 'relative',
+    },
+    myPRCardHeader: {
         flexDirection: 'row',
-        paddingHorizontal: 4,
-        paddingTop: 12,
-        gap: 10,
-    },
-    historyCard: {
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
         alignItems: 'center',
-        minWidth: 80,
+        gap: 12,
+        marginBottom: 16,
     },
-    historyCardValue: {
+    myPRGifContainer: {
+        width: 100,
+        height: 100,
+        overflow: 'hidden',
+    },
+    myPRGif: {
+        width: '100%',
+        height: '100%',
+    },
+    myPRCardInfo: {
+        flex: 1,
+    },
+    myPRExerciseName: {
+        fontSize: 22,
+        textAlign: 'left',
+        fontWeight: '900',
         color: '#FFFFFF',
-        fontSize: 16,
-        fontWeight: '700',
+        marginBottom: 6,
     },
-    historyCardDate: {
-        color: 'rgba(255,255,255,0.6)',
+    myPREquipmentRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    myPREquipmentLabel: {
+        fontSize: 12,
+        color: '#CBD5E1',
+        marginRight: 6,
+    },
+    myPREquipmentIcon: {
+        width: 24,
+        height: 24,
+    },
+    myPRStatsRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        gap: 12,
+    },
+    myPRStatBox: {
+        flex: 1,
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        padding: 12,
+        borderRadius: 12,
+    },
+    myPRStatLabel: {
+        fontSize: 12,
+        color: '#94A3B8',
+        marginBottom: 4,
+    },
+    myPRStatValue: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#FFFFFF',
+    },
+    myPRStatSubtext: {
         fontSize: 11,
-        fontWeight: '500',
-        marginTop: 4,
+        color: '#CBD5E1',
+        marginTop: 2,
+    },
+    myPRBadge: {
+        position: 'absolute',
+        top: 12,
+        right: 12,
+        width: 40,
+        height: 40,
+    },
+
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: '#000000',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        maxHeight: '92%',
+        width: '100%',
+        paddingLeft: 20,
+        paddingRight: 20,
+    },
+    modalHeader: {
+        alignItems: 'center',
+        paddingTop: 12,
+        paddingBottom: 8,
+    },
+    drawerHandle: {
+        width: 40,
+        height: 5,
+        backgroundColor: 'rgba(255,255,255,0.3)',
+        borderRadius: 3,
+    },
+    modalTitle: {
+        fontSize: 25,
+        fontWeight: '900',
+        color: '#FFFFFF',
+        textAlign: 'right',
+        marginBottom: 12,
+    },
+    modalBody: {
+        paddingBottom: 20,
+    },
+    modalTopRow: {
+        flexDirection: 'row',
+        gap: 16,
+        marginBottom: 16,
+        marginTop: 15,
+    },
+    modalGifContainer: {
+        width: 140,
+        height: 140,
+        borderRadius: 12,
+        overflow: 'hidden',
+        backgroundColor: '#000000',
+    },
+    modalGif: {
+        width: '100%',
+        height: '100%',
+        backgroundColor: '#000000',
+    },
+    modalGifPlaceholder: {
+        backgroundColor: '#000000',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    modalInfoColumn: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'flex-end',
+        paddingRight: 8,
+    },
+    modalEquipmentRow: {
+        flexDirection: 'row-reverse',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 8,
+        marginTop: 12,
+    },
+    modalEquipmentTab: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
+        gap: 6,
+    },
+    modalEquipmentIcon: {
+        width: 30,
+        height: 30,
+    },
+    modalEquipmentLabel: {
+        fontSize: 14,
+        fontWeight: '900',
+        color: '#FFFFFF',
+    },
+    modalCloseArea: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: -1,
     },
 });

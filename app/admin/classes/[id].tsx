@@ -727,6 +727,19 @@ export default function AdminClassDetailsScreen() {
     }, [id]);
 
     useEffect(() => {
+        // Auto-complete attendance for past classes
+        const autoCompletePastClasses = async () => {
+            try {
+                const { data } = await supabase.rpc('auto_complete_past_classes');
+                if (data && data > 0) {
+                    console.log(`Auto-marked ${data} bookings as attended`);
+                }
+            } catch (err) {
+                console.error('Auto-complete error:', err);
+            }
+        };
+        autoCompletePastClasses();
+
         fetchClassData();
     }, [fetchClassData]);
 
@@ -1258,7 +1271,7 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     progressContainer: {
-        flexDirection: 'row',
+        flexDirection: 'row-reverse',
         alignItems: 'center',
         gap: 8,
         marginTop: 8,
@@ -1275,8 +1288,8 @@ const styles = StyleSheet.create({
         borderRadius: 3,
     },
     progressText: {
-        fontSize: 12,
-        fontWeight: '600',
+        fontSize: 14,
+        fontWeight: '900',
         color: '#FFFFFF',
     },
     headerSpacer: {
@@ -1299,7 +1312,7 @@ const styles = StyleSheet.create({
     detailText: {
         fontSize: 16,
         color: '#374151',
-        fontWeight: '500',
+        fontWeight: '900',
     },
     countdown: {
         fontSize: 14,
@@ -1341,7 +1354,7 @@ const styles = StyleSheet.create({
     },
     trainerName: {
         fontSize: 17,
-        fontWeight: '700',
+        fontWeight: '900',
         color: '#111827',
         textAlign: 'left',
     },
@@ -1366,7 +1379,7 @@ const styles = StyleSheet.create({
     },
     sectionTitle: {
         fontSize: 15,
-        fontWeight: '700',
+        fontWeight: '900',
         color: '#111827',
         textAlign: 'left',
         marginBottom: 6,
@@ -1423,7 +1436,7 @@ const styles = StyleSheet.create({
         width: 28,
         height: 28,
         borderRadius: 6,
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        backgroundColor: 'rgba(220, 220, 220, 0.17)',
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -1448,15 +1461,15 @@ const styles = StyleSheet.create({
         gap: 4,
     },
     slotFirstName: {
-        fontSize: 15,
-        fontWeight: '700',
-        color: '#FFFFFF',
+        fontSize: 18,
+        fontWeight: '900',
+        color: '#000000ff',
         textAlign: 'left',
     },
     slotLastName: {
         fontSize: 12,
         fontWeight: '500',
-        color: '#9CA3AF',
+        color: '#000000ff',
         textAlign: 'left',
     },
     slotAvailable: {

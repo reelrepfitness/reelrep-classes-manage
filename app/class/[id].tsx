@@ -39,9 +39,9 @@ const getTimeUntilClass = (dateStr: string, timeStr: string) => {
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
     if (hours > 0) {
-        return `מתחיל בעוד: ${hours}h ${minutes}m`;
+        return `מתחיל בעוד: ${hours} שעות ו${minutes} דקות`;
     }
-    return `מתחיל בעוד: ${minutes}m`;
+    return `מתחיל בעוד: ${minutes} דקות`;
 };
 
 // --- Interfaces ---
@@ -126,40 +126,33 @@ const AnimatedSlot = ({
                     },
                 ]}
             >
-                <LinearGradient
-                    colors={['#1F2937', '#111827']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={slotStyles.slotTakenGradient}
-                >
-                    <View style={slotStyles.slotTakenRow}>
-                        <View style={slotStyles.slotAvatarContainer}>
-                            {avatarUrl ? (
-                                <Image source={{ uri: avatarUrl }} style={slotStyles.slotAvatar} />
-                            ) : (
-                                <View style={slotStyles.slotAvatarPlaceholder}>
-                                    <Icon name="user" size={14} color="#FFFFFF" strokeWidth={2} />
-                                </View>
-                            )}
-                        </View>
-                        <View style={slotStyles.slotNameContainer}>
-                            <Text style={slotStyles.slotFirstName} numberOfLines={1}>
-                                {firstName || 'משתתף'}
-                            </Text>
-                            {lastName ? (
-                                <Text style={slotStyles.slotLastName} numberOfLines={1}>
-                                    {lastName}
-                                </Text>
-                            ) : null}
-                        </View>
+                <View style={slotStyles.slotTakenRow}>
+                    <View style={slotStyles.slotAvatarContainer}>
+                        {avatarUrl ? (
+                            <Image source={{ uri: avatarUrl }} style={slotStyles.slotAvatar} />
+                        ) : (
+                            <View style={slotStyles.slotAvatarPlaceholder}>
+                                <Icon name="user" size={28} color="#FFFFFF" strokeWidth={2} />
+                            </View>
+                        )}
+                        {highestBadge?.icon && (
+                            <Image
+                                source={{ uri: highestBadge.icon }}
+                                style={slotStyles.achievementBadge}
+                            />
+                        )}
                     </View>
-                </LinearGradient>
-                {highestBadge?.icon && (
-                    <Image
-                        source={{ uri: highestBadge.icon }}
-                        style={slotStyles.achievementBadge}
-                    />
-                )}
+                    <View style={slotStyles.slotNameColumn}>
+                        <Text style={slotStyles.slotFirstName} numberOfLines={1}>
+                            {firstName || 'משתתף'}
+                        </Text>
+                        {lastName ? (
+                            <Text style={slotStyles.slotLastName} numberOfLines={1}>
+                                {lastName}
+                            </Text>
+                        ) : null}
+                    </View>
+                </View>
             </Animated.View>
         );
     }
@@ -181,83 +174,83 @@ const AnimatedSlot = ({
 const slotStyles = StyleSheet.create({
     slotBox: {
         width: '48%',
-        height: 80,
+        height: 90,
         backgroundColor: '#F9FAFB',
-        borderRadius: 12,
+        borderRadius: 16,
         borderWidth: 2,
         borderColor: '#E5E7EB',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 8,
+        padding: 14,
     },
     slotTaken: {
-        borderColor: '#374151',
+        backgroundColor: 'transparent',
+        borderColor: 'transparent',
         overflow: 'visible',
-        padding: 0,
-    },
-    slotTakenGradient: {
-        flex: 1,
-        width: '100%',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: 10,
-        paddingHorizontal: 8,
+        padding: 10,
     },
     slotTakenRow: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
+        gap: 12,
     },
     slotAvatarContainer: {
         position: 'relative',
     },
     slotAvatar: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
+        width: 62,
+        height: 62,
+        borderRadius: 31,
+        borderWidth: 2,
+        borderColor: 'rgba(0,0,0,0.1)',
     },
     slotAvatarPlaceholder: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
+        width: 62,
+        height: 62,
+        borderRadius: 31,
         backgroundColor: '#374151',
         alignItems: 'center',
         justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: 'rgba(0,0,0,0.1)',
     },
     achievementBadge: {
         position: 'absolute',
-        right: 8,
-        top: '50%',
-        marginTop: -24,
-        width: 48,
-        height: 48,
+        right: -6,
+        bottom: -4,
+        width: 32,
+        height: 32,
         resizeMode: 'contain',
         zIndex: 10,
     },
-    slotNameContainer: {
+    slotNameColumn: {
         flex: 1,
-        gap: 0,
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: 2,
+    },
+    slotFirstName: {
+        fontSize: 20,
+        fontWeight: '900',
+        color: '#000000',
+        letterSpacing: -0.3,
+        textAlign: 'right',
+    },
+    slotLastName: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: '#4B5563',
+        textAlign: 'right',
     },
     slotContent: {
         alignItems: 'center',
         justifyContent: 'center',
         gap: 4,
     },
-    slotFirstName: {
-        fontSize: 17,
-        fontWeight: '700',
-        color: '#FFFFFF',
-        textAlign: 'left',
-    },
-    slotLastName: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: '#9CA3AF',
-        textAlign: 'left',
-    },
     slotAvailable: {
         fontSize: 9,
-        fontWeight: '600',
+        fontWeight: '800',
         color: '#9CA3AF',
         textAlign: 'center',
     },
@@ -770,13 +763,17 @@ export default function ClassDetailsScreen() {
                     </TouchableOpacity>
                     <View style={styles.headerTitleContainer}>
                         <Text style={styles.headerTitle} numberOfLines={1}>{classItem.title}</Text>
-                        {(isBooked || isOnWaitingList) && (
+                        {isOnWaitingList && (
                             <View style={styles.headerBadge}>
-                                <Text style={styles.headerBadgeText}>
-                                    {isOnWaitingList ? 'בהמתנה' : 'רשום'}
-                                </Text>
+                                <Text style={styles.headerBadgeText}>בהמתנה</Text>
                             </View>
                         )}
+                        <View style={styles.headerDateTimeRow}>
+                            <Text style={styles.headerDateTime}>{formattedDate}</Text>
+                            <Text style={styles.headerDateTimeSeparator}>•</Text>
+                            <Text style={styles.headerDateTime}>{classItem.time}</Text>
+                        </View>
+                        <Text style={styles.headerCountdown}>{countdown}</Text>
                     </View>
                     <View style={styles.headerSpacer} />
                 </View>
@@ -789,23 +786,6 @@ export default function ClassDetailsScreen() {
                     }}
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* Hero Section */}
-                    <View style={styles.heroSection}>
-                        <View style={styles.heroDetails}>
-                            <View style={styles.detailRow}>
-                                <Icon name="calendar" size={18} color="#6B7280" strokeWidth={2} />
-                                <Text style={styles.detailText}>{formattedDate}</Text>
-                            </View>
-                            <View style={styles.detailRow}>
-                                <Icon name="clock" size={18} color="#6B7280" strokeWidth={2} />
-                                <Text style={styles.detailText}>{classItem.time}</Text>
-                            </View>
-                        </View>
-
-                        {/* Subtle Countdown */}
-                        <Text style={styles.countdown}>{countdown}</Text>
-                    </View>
-
                     {/* Trainer Info */}
                     <View style={styles.trainerCard}>
                         <View style={styles.trainerRow}>
@@ -1100,6 +1080,27 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#FFFFFF',
     },
+    headerDateTimeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 8,
+        gap: 8,
+    },
+    headerDateTime: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: 'rgba(255,255,255,0.85)',
+    },
+    headerDateTimeSeparator: {
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.5)',
+    },
+    headerCountdown: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: 'rgba(255,255,255,0.7)',
+        marginTop: 6,
+    },
     headerSpacer: {
         width: 44,
     },
@@ -1202,14 +1203,14 @@ const styles = StyleSheet.create({
     },
     trainerName: {
         fontSize: 17,
-        fontWeight: '700',
+        fontWeight: '900',
         color: '#111827',
         textAlign: 'left',
     },
     trainerRole: {
         fontSize: 13,
         color: '#6B7280',
-        fontWeight: '500',
+        fontWeight: '800',
         textAlign: 'left',
     },
 
@@ -1308,7 +1309,7 @@ const styles = StyleSheet.create({
         textAlign: 'left',
     },
     slotAvailable: {
-        fontSize: 9,
+        fontSize: 12,
         fontWeight: '600',
         color: '#9CA3AF',
         textAlign: 'center',
@@ -1421,7 +1422,7 @@ const styles = StyleSheet.create({
     // White button styles for black gradient footer
     whiteButton: {
         flex: 1,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#ffffff',
         borderRadius: 16,
         paddingVertical: 14,
         flexDirection: 'row',

@@ -231,7 +231,7 @@ export default function SubscriptionManagementScreen() {
 
             <ScrollView contentContainerStyle={styles.content}>
 
-                <Text style={styles.sectionHeader}>פעולות זמינות</Text>
+                <Text style={styles.sectionHeader}>שליחת בקשה</Text>
 
                 {/* Freeze Option */}
                 <View style={[styles.optionWrapper, activeForm === 'freeze' && styles.optionWrapperActive]}>
@@ -454,7 +454,7 @@ const styles = StyleSheet.create({
         marginTop: -8,
     },
 
-    sectionHeader: { fontSize: 18, fontWeight: '900', color: '#374151', marginBottom: 16, textAlign: 'left' },
+    sectionHeader: { fontSize: 18, fontWeight: '900', color: '#374151', marginBottom: 16, textAlign: 'center' },
 
     // Options
     optionWrapper: { marginBottom: 16, backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },

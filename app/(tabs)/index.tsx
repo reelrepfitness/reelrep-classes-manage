@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Dimensions,
   Modal,
   Animated,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,6 +21,7 @@ import { supabase } from '@/constants/supabase';
 import { Icon } from '@/components/ui/icon';
 import { DumbbellIcon, TrophyIcon, ShoppingCartIcon } from '@/components/QuickToolsIcons';
 import { Lock } from 'lucide-react-native';
+import { ProgressRing } from '@/components/ProgressRing';
 
 const { width } = Dimensions.get('window');
 const cardWidth = (width - 52) / 2; // splitRow padding (20*2) + gap (12)
@@ -38,7 +40,14 @@ const formatExpiryDate = (dateStr?: string) => {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refreshUser();
+    setRefreshing(false);
+  };
   const {
     getCurrentTask,
     newlyUnlockedAchievement,
@@ -52,8 +61,6 @@ export default function HomeScreen() {
   const [workoutsThisWeek, setWorkoutsThisWeek] = useState(0);
   const [workoutsLastWeek, setWorkoutsLastWeek] = useState(0);
   const [motivationText, setMotivationText] = useState('');
-  const [toolsActiveIndex, setToolsActiveIndex] = useState(0);
-  const toolsScrollRef = useRef<ScrollView>(null);
   const [showUnlockDialog, setShowUnlockDialog] = useState(false);
 
   // Get current active task
@@ -169,6 +176,9 @@ export default function HomeScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
         {/* 1. Upcoming Classes Widget */}
         <View style={styles.heroSection}>
@@ -178,108 +188,34 @@ export default function HomeScreen() {
         {/* Divider after upcoming classes */}
         <View style={styles.divider} />
 
-        {/* 3. Membership Status Widget */}
-        {(() => {
-          const sub = user?.subscription;
-          const hasActiveSubscription = sub?.status === 'active';
-          const isTicket = sub?.isTicket;
-          const totalSessions = sub?.totalSessions || 0;
-          const sessionsRemaining = sub?.sessionsRemaining || 0;
-          // Progress fills as user books classes (used = total - remaining)
-          const sessionsUsed = totalSessions - sessionsRemaining;
-          const progressPercent = totalSessions > 0 ? (sessionsUsed / totalSessions) * 100 : 0;
+        {/* 3. Action Cards Row (Achievements, Store, Performance Log) */}
+        <View style={styles.actionCardsRow}>
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => router.push('/achievements' as any)}
+          >
+            <TrophyIcon size={36} />
+            <Text style={styles.actionCardLabel}>הישגים</Text>
+          </TouchableOpacity>
 
-          // Render plan title/image
-          const renderPlanTitle = () => {
-            if (!sub?.planName) {
-              return <Text style={styles.membershipTitle}>הסטטוס שלי</Text>;
-            }
-            const name = sub.planName.toUpperCase();
-            if (name.includes('ELITE')) {
-              return <Image source={require('@/assets/images/reel-elite.png')} style={styles.planImage} resizeMode="contain" />;
-            } else if (name.includes('ONE')) {
-              return <Image source={require('@/assets/images/reel-one.png')} style={styles.planImage} resizeMode="contain" />;
-            } else if (name.includes('10') || totalSessions === 10) {
-              return <Image source={require('@/assets/images/10sessions.png')} style={styles.planImage} resizeMode="contain" />;
-            } else if (name.includes('20') || totalSessions === 20) {
-              return <Image source={require('@/assets/images/20sessions.png')} style={styles.planImage} resizeMode="contain" />;
-            }
-            return <Text style={styles.membershipTitle}>{sub.planName}</Text>;
-          };
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => router.push('/shop' as any)}
+          >
+            <ShoppingCartIcon size={36} />
+            <Text style={styles.actionCardLabel}>חנות</Text>
+          </TouchableOpacity>
 
-          return (
-            <View style={styles.membershipCard}>
-              <View style={styles.membershipHeader}>
-                {renderPlanTitle()}
-                <View style={[styles.activeBadge, !hasActiveSubscription && styles.inactiveBadge]}>
-                  <View style={[styles.activeDot, !hasActiveSubscription && styles.inactiveDot]} />
-                  <Text style={[styles.activeText, !hasActiveSubscription && styles.inactiveText]}>
-                    {hasActiveSubscription ? 'פעיל' : 'לא פעיל'}
-                  </Text>
-                </View>
-              </View>
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => router.push('/performance' as any)}
+          >
+            <DumbbellIcon size={36} />
+            <Text style={styles.actionCardLabel}>יומן ביצועים</Text>
+          </TouchableOpacity>
+        </View>
 
-              {/* Progress bar - only for tickets - fills as user books */}
-              {hasActiveSubscription && isTicket && (
-                <View style={styles.punchProgressContainer}>
-                  <View style={styles.punchTrack}>
-                    <View style={[styles.punchFill, { width: `${progressPercent}%` }]} />
-                  </View>
-                  <Text style={styles.punchText}>
-                    נותרו לך {sessionsRemaining} אימונים
-                  </Text>
-                </View>
-              )}
-
-              {/* For unlimited subscriptions, show active task instead of "unlimited" text */}
-              {hasActiveSubscription && !isTicket && currentTask && (
-                <View style={styles.activeTaskContainer}>
-                  <View style={styles.taskIconWrapper}>
-                    <Image source={{ uri: currentTask.icon }} style={styles.taskIcon} />
-                    <View style={styles.taskLockOverlay}>
-                      <Lock size={10} color="#fff" />
-                    </View>
-                  </View>
-                  <View style={styles.taskProgressSection}>
-                    <Text style={styles.taskProgressText}>
-                      {attendedCount} / {currentTask.task_requirement}
-                    </Text>
-                    <View style={styles.taskProgressBar}>
-                      <View style={[styles.taskProgressFill, { width: `${taskProgress}%` }]} />
-                    </View>
-                  </View>
-                </View>
-              )}
-
-              {/* Fallback for unlimited if no task available */}
-              {hasActiveSubscription && !isTicket && !currentTask && (
-                <View style={styles.unlimitedContainer}>
-                  <Icon name="infinity" size={16} color={Colors.primary} />
-                  <Text style={styles.unlimitedText}>כניסות ללא הגבלה</Text>
-                </View>
-              )}
-
-              <View style={styles.membershipFooter}>
-                <Text style={styles.validUntilText}>
-                  {hasActiveSubscription
-                    ? `בתוקף עד ${formatExpiryDate(sub?.endDate)}`
-                    : 'אין מנוי פעיל'
-                  }
-                </Text>
-                <TouchableOpacity
-                  style={styles.renewButton}
-                  onPress={() => router.push(hasActiveSubscription ? '/subscription-management' as any : '/shop' as any)}
-                >
-                  <Text style={styles.renewButtonText}>
-                    {hasActiveSubscription ? 'ניהול מנוי' : 'לחנות'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          );
-        })()}
-
-        {/* 4. Split Row: Weekly Goal & Quick Actions */}
+        {/* 4. Split Row: Weekly Goal & Plan Card */}
         <View style={styles.splitRow}>
           {/* Weekly Goal (Left) */}
           <View style={styles.weeklyCard}>
@@ -297,41 +233,72 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Quick Actions (Right) */}
-          <View style={styles.toolsCard}>
-            <ScrollView
-              ref={toolsScrollRef}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={(e) => {
-                const index = Math.round(e.nativeEvent.contentOffset.x / (cardWidth - 32));
-                setToolsActiveIndex(index);
-              }}
-              style={styles.toolsCarousel}
-            >
-              <TouchableOpacity style={[styles.carouselPage, { width: cardWidth - 32 }]} onPress={() => router.push('/performance' as any)}>
-                <DumbbellIcon size={48} />
-                <Text style={styles.toolName} numberOfLines={1}>יומן ביצועים</Text>
-              </TouchableOpacity>
+          {/* Plan Card (Right) */}
+          {(() => {
+            const sub = user?.subscription;
+            const hasActiveSubscription = sub?.status === 'active';
+            const isTicket = sub?.isTicket;
+            const totalSessions = sub?.totalSessions || 0;
+            const sessionsRemaining = sub?.sessionsRemaining || 0;
+            const sessionsUsed = totalSessions - sessionsRemaining;
+            const progressPercent = totalSessions > 0 ? (sessionsUsed / totalSessions) * 100 : 0;
 
-              <TouchableOpacity style={[styles.carouselPage, { width: cardWidth - 32 }]} onPress={() => router.push('/shop' as any)}>
-                <ShoppingCartIcon size={48} />
-                <Text style={styles.toolName}>חנות</Text>
-              </TouchableOpacity>
+            const getPlanImage = () => {
+              if (!sub?.planName) return null;
+              const name = sub.planName.toUpperCase();
+              if (name.includes('ELITE')) return require('@/assets/images/reel-elite.png');
+              if (name.includes('ONE')) return require('@/assets/images/reel-one.png');
+              if (name.includes('10') || totalSessions === 10) return require('@/assets/images/10sessions.png');
+              if (name.includes('20') || totalSessions === 20) return require('@/assets/images/20sessions.png');
+              return null;
+            };
 
-              <TouchableOpacity style={[styles.carouselPage, { width: cardWidth - 32 }]} onPress={() => router.push('/achievements' as any)}>
-                <TrophyIcon size={48} />
-                <Text style={styles.toolName}>הישגים</Text>
-              </TouchableOpacity>
-            </ScrollView>
+            const planImage = getPlanImage();
 
-            <View style={styles.pagination}>
-              {[0, 1, 2].map((i) => (
-                <View key={i} style={[styles.dot, toolsActiveIndex === i && styles.dotActive]} />
-              ))}
-            </View>
-          </View>
+            return (
+              <TouchableOpacity
+                style={styles.planCardCompact}
+                onPress={() => router.push(hasActiveSubscription ? '/subscription-management' as any : '/shop' as any)}
+              >
+                {/* Plan Header - Centered */}
+                {planImage ? (
+                  <Image source={planImage} style={styles.planImageSmall} resizeMode="contain" />
+                ) : (
+                  <Text style={styles.planNameSmall}>{sub?.planName || 'אין מנוי'}</Text>
+                )}
+
+                {/* Progress Ring or Infinity for Unlimited */}
+                {hasActiveSubscription && isTicket ? (
+                  <ProgressRing
+                    progress={progressPercent}
+                    size={70}
+                    strokeWidth={7}
+                    color={Colors.primary}
+                    backgroundColor="#E5E7EB"
+                  >
+                    <Text style={styles.ringValue}>{sessionsRemaining}</Text>
+                    <Text style={styles.ringLabel}>נותרו</Text>
+                  </ProgressRing>
+                ) : hasActiveSubscription && !isTicket ? (
+                  <View style={styles.unlimitedRing}>
+                    <Icon name="infinity" size={28} color={Colors.primary} />
+                  </View>
+                ) : (
+                  <View style={styles.noSubRing}>
+                    <Icon name="shopping-cart" size={24} color="#9CA3AF" />
+                  </View>
+                )}
+
+                {/* Expiry */}
+                <Text style={styles.expirySmall}>
+                  {hasActiveSubscription
+                    ? `בתוקף עד ${formatExpiryDate(sub?.endDate)}`
+                    : 'לחנות'
+                  }
+                </Text>
+              </TouchableOpacity>
+            );
+          })()}
         </View>
 
         <View style={{ height: 120 }} />
@@ -694,70 +661,91 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
 
-  // Tools Card
-  toolsCard: {
+  // Action Cards Row
+  actionCardsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    gap: 12,
+    marginBottom: 16,
+  },
+  actionCard: {
     flex: 1,
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    gap: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
     shadowRadius: 12,
     elevation: 3,
   },
-  toolsLabel: {
-    fontSize: 14,
+  actionCardLabel: {
+    fontSize: 11,
     fontWeight: '600',
-    color: '#4B5563',
-    marginBottom: 16,
-    textAlign: 'left',
+    color: '#374151',
+    textAlign: 'center',
   },
-  toolsGrid: {
-    flexDirection: 'row',
+
+  // Compact Plan Card
+  planCardCompact: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
   },
-  toolItem: {
-    alignItems: 'center',
-    gap: 6,
+  planImageSmall: {
+    width: 90,
+    height: 20,
+    marginBottom: 8,
   },
-  toolIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  toolName: {
+  planNameSmall: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#4B5563',
-    marginTop: 8,
+    color: '#374151',
+    marginBottom: 8,
   },
-  toolsCarousel: {
-    flexGrow: 0,
+  ringValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#111827',
   },
-  carouselPage: {
+  ringLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#6B7280',
+    marginTop: -2,
+  },
+  unlimitedRing: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
   },
-  pagination: {
-    flexDirection: 'row',
+  noSubRing: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    marginTop: 12,
   },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#D1D5DB',
-  },
-  dotActive: {
-    backgroundColor: Colors.primary,
-    width: 16,
+  expirySmall: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 8,
   },
 
   // Active Task Styles

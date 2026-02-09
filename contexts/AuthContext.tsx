@@ -33,7 +33,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('id, name, full_name, avatar_url, is_admin, is_coach, classes_used, total_workouts, gender, phone_number, birthday')
+          .select('id, name, full_name, avatar_url, is_admin, is_coach, total_workouts, gender, phone_number, birthday')
           .eq('id', sessionId)
           .single();
         if (error) {
@@ -152,7 +152,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             classesPerMonth: plan?.sessions_per_week ? plan.sessions_per_week * 4 : (subscription.total_sessions || 0),
             classesUsed: subscription.sessions_remaining !== undefined
               ? (subscription.total_sessions - subscription.sessions_remaining)
-              : (profile?.classes_used || 0),
+              : 0,
             // New fields for plan display
             planName: plan?.name,
             planImageUrl: plan?.image_url,
@@ -282,9 +282,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     resetPassword,
     signOut,
     updateUser,
-    refreshUser: () => {
-      profileQuery.refetch();
-      subscriptionQuery.refetch();
+    refreshUser: async () => {
+      await Promise.all([
+        profileQuery.refetch(),
+        subscriptionQuery.refetch()
+      ]);
     },
   }), [currentUser, session, authQuery.isLoading, profileQuery.isLoading, subscriptionQuery.isLoading, signInWithPassword, signInWithOTP, verifyOTP, resetPassword, signOut, updateUser, profileQuery.refetch, subscriptionQuery.refetch]);
 });

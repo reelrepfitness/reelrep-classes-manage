@@ -821,7 +821,7 @@ export default function ClassesScreen() {
                       onPress={(e) => { e.stopPropagation(); handleSwitchClass(classItem); }}
                       className="flex-1 bg-gray-50 py-2 rounded-lg items-center border border-gray-200"
                     >
-                      <View className="flex-row items-center justify-center gap-1.5">
+                      <View className="flex-row-reverse items-center justify-center gap-1.5">
                         <Text className="text-xs font-bold text-gray-700">החלפה</Text>
                         <Image source={require('@/assets/images/replace.webp')} style={{ width: 14, height: 14, tintColor: '#374151' }} resizeMode="contain" />
                       </View>
@@ -833,7 +833,7 @@ export default function ClassesScreen() {
                         !canCancelClass(classItem) ? "bg-red-50 border-red-200" : "bg-white border-gray-200"
                       )}
                     >
-                      <View className="flex-row items-center justify-center gap-1.5">
+                      <View className="flex-row-reverse items-center justify-center gap-1.5">
                         <Text className={cn("text-xs font-bold", !canCancelClass(classItem) ? "text-red-600" : "text-gray-700")}>
                           {canCancelClass(classItem) ? 'ביטול' : 'ביטול מאוחר'}
                         </Text>

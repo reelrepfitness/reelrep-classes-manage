@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Image, I18nManager, StyleSheet, Switch } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, Alert, Image, I18nManager, StyleSheet, Switch, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -8,14 +8,35 @@ import { AdminHeader } from '@/components/admin/AdminHeader';
 import Colors from '@/constants/colors';
 import { ChevronDown } from 'lucide-react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 // --- Equipment Tabs Configuration ---
 const EQUIPMENT_TABS = [
-  { id: 'kettlebell', label: 'Kettlebell', icon: require('@/assets/eqe-icons/kettlebell-icon.png') },
-  { id: 'barbell', label: 'Barbell', icon: require('@/assets/eqe-icons/barbell-icon.png') },
-  { id: 'dumbbell', label: 'Dumbbell', icon: require('@/assets/eqe-icons/dumbell-icon.png') },
-  { id: 'landmine', label: 'Landmine', icon: require('@/assets/eqe-icons/landmine-icon.png') },
-  { id: 'bodyweight', label: 'BW', icon: require('@/assets/eqe-icons/BW-icon.png') },
+  { id: 'kettlebell', label: 'קטלבל', labelEn: 'Kettlebell', icon: require('@/assets/eqe-icons/kettlebell-icon.png') },
+  { id: 'barbell', label: 'מוט', labelEn: 'Barbell', icon: require('@/assets/eqe-icons/barbell-icon.png') },
+  { id: 'dumbbell', label: 'משקולת יד', labelEn: 'Dumbbell', icon: require('@/assets/eqe-icons/dumbell-icon.png') },
+  { id: 'landmine', label: 'מוקש', labelEn: 'Landmine', icon: require('@/assets/eqe-icons/landmine-icon.png') },
+  { id: 'bodyweight', label: 'משקל גוף', labelEn: 'BW', icon: require('@/assets/eqe-icons/BW-icon.png') },
+  { id: 'cable', label: 'כבל קרוס', labelEn: 'Cable', icon: require('@/assets/eqe-icons/cable-icon.png') },
+  { id: 'medicine_ball', label: 'כדור כוח', labelEn: 'Medicine Ball', icon: require('@/assets/eqe-icons/medecine-ball.png') },
+  { id: 'machine', label: 'מכשיר', labelEn: 'Machine', icon: require('@/assets/eqe-icons/machine.png') },
+];
+
+// --- Muscle Groups Configuration ---
+const MUSCLE_GROUPS = [
+  { id: 'chest', label: 'חזה', labelEn: 'Chest' },
+  { id: 'back', label: 'גב', labelEn: 'Back' },
+  { id: 'shoulders', label: 'כתפיים', labelEn: 'Shoulders' },
+  { id: 'biceps', label: 'יד קדמית', labelEn: 'Biceps' },
+  { id: 'triceps', label: 'יד אחורית', labelEn: 'Triceps' },
+  { id: 'forearms', label: 'אמות', labelEn: 'Forearms' },
+  { id: 'core', label: 'בטן', labelEn: 'Core' },
+  { id: 'quads', label: 'ירך קדמי', labelEn: 'Quads' },
+  { id: 'hamstrings', label: 'ירך אחורי', labelEn: 'Hamstrings' },
+  { id: 'glutes', label: 'ישבן', labelEn: 'Glutes' },
+  { id: 'calves', label: 'שוקיים', labelEn: 'Calves' },
+  { id: 'full_body', label: 'כל הגוף', labelEn: 'Full Body' },
 ];
 
 // --- Equipment Tab Component ---
@@ -138,15 +159,38 @@ export default function NewExerciseScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const { keyboardHeight } = useKeyboardHeight();
 
   const [name, setName] = useState('');
+  const [nameHe, setNameHe] = useState('');
 
   const [measurementType, setMeasurementType] = useState('weight');
   const [measurementUnit, setMeasurementUnit] = useState('kg');
   const [difficulty, setDifficulty] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner');
   const [instructions, setInstructions] = useState('');
-  const [equipment, setEquipment] = useState<string>('barbell');
-  const [prList, setPrList] = useState(false);
+  const [equipment, setEquipment] = useState<string[]>(['barbell']);
+  const [equipmentGifs, setEquipmentGifs] = useState<Record<string, string>>({});
+  const [muscleGroups, setMuscleGroups] = useState<string[]>([]);
+
+  // Toggle equipment selection (multi-select)
+  const toggleEquipment = (id: string) => {
+    setEquipment(prev =>
+      prev.includes(id)
+        ? prev.filter(e => e !== id)  // Remove if already selected
+        : [...prev, id]               // Add if not selected
+    );
+  };
+
+  // Toggle muscle group selection (multi-select)
+  const toggleMuscleGroup = (id: string) => {
+    setMuscleGroups(prev =>
+      prev.includes(id)
+        ? prev.filter(m => m !== id)
+        : [...prev, id]
+    );
+  };
+
+  const [prList, setPrList] = useState(true);
 
   const createMutation = useMutation({
     mutationFn: async (exercise: any) => {
@@ -175,21 +219,33 @@ export default function NewExerciseScreen() {
 
   const handleSubmit = () => {
     if (!name.trim()) {
-      Alert.alert('שגיאה', 'נא להזין שם תרגיל');
+      Alert.alert('שגיאה', 'נא להזין שם תרגיל באנגלית');
+      return;
+    }
+
+    if (!nameHe.trim()) {
+      Alert.alert('שגיאה', 'נא להזין שם תרגיל בעברית');
+      return;
+    }
+
+    if (equipment.length === 0) {
+      Alert.alert('שגיאה', 'נא לבחור לפחות סוג ציוד אחד');
       return;
     }
 
     createMutation.mutate({
       name: name.trim(),
-      name_en: null,
+      name_he: nameHe.trim(),
       description: null,
       category: 'strength', // Default value since selector removal
       subcategory: null,
       measurement_type: measurementType,
       measurement_unit: measurementUnit,
       difficulty,
-      instructions: instructions.trim() || null,
+      instructions: equipmentGifs[equipment[0]] || instructions.trim() || null,
       equipment,
+      equipment_gifs: equipmentGifs,
+      muscle_groups: muscleGroups.length > 0 ? muscleGroups : null,
       is_active: true,
       PR_list: prList,
     });
@@ -223,7 +279,36 @@ export default function NewExerciseScreen() {
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
       <AdminHeader title="תרגיל חדש" />
 
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 100 }}>
+      <KeyboardAwareScrollView
+        contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        enableOnAndroid={true}
+        enableAutomaticScroll={true}
+        extraScrollHeight={150}
+        keyboardOpeningTime={0}
+      >
+        {/* Name (English) */}
+        <View style={{ marginBottom: 16 }}>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: '#475569', marginBottom: 8, textAlign: 'left' }}>
+            שם התרגיל (אנגלית) *
+          </Text>
+          <TextInput
+            style={{
+              backgroundColor: '#F8FAFC',
+              borderRadius: 12,
+              padding: 16,
+              fontSize: 16,
+              textAlign: 'left',
+              borderWidth: 1,
+              borderColor: '#E2E8F0',
+            }}
+            placeholder="Deadlift"
+            value={name}
+            onChangeText={setName}
+          />
+        </View>
+
         {/* Name (Hebrew) */}
         <View style={{ marginBottom: 16 }}>
           <Text style={{ fontSize: 14, fontWeight: '600', color: '#475569', marginBottom: 8, textAlign: 'left' }}>
@@ -240,8 +325,8 @@ export default function NewExerciseScreen() {
               borderColor: '#E2E8F0',
             }}
             placeholder="דדליפט"
-            value={name}
-            onChangeText={setName}
+            value={nameHe}
+            onChangeText={setNameHe}
           />
         </View>
 
@@ -255,15 +340,48 @@ export default function NewExerciseScreen() {
           <Text style={{ fontSize: 14, fontWeight: '600', color: '#475569', marginBottom: 12, textAlign: 'left' }}>
             ציוד *
           </Text>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 12, paddingRight: 20 }}
+          >
             {EQUIPMENT_TABS.map((tab) => (
               <EquipmentTab
                 key={tab.id}
                 tab={tab}
-                isSelected={equipment === tab.id}
-                onSelect={() => setEquipment(tab.id)}
+                isSelected={equipment.includes(tab.id)}
+                onSelect={() => toggleEquipment(tab.id)}
               />
             ))}
+          </ScrollView>
+        </View>
+
+        {/* Muscle Groups */}
+        <View style={{ marginBottom: 24 }}>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: '#475569', marginBottom: 12, textAlign: 'left' }}>
+            קבוצות שרירים
+          </Text>
+          <View style={styles.muscleGroupsContainer}>
+            {MUSCLE_GROUPS.map((group) => {
+              const isSelected = muscleGroups.includes(group.id);
+              return (
+                <TouchableOpacity
+                  key={group.id}
+                  onPress={() => toggleMuscleGroup(group.id)}
+                  style={[
+                    styles.muscleGroupChip,
+                    isSelected && styles.muscleGroupChipSelected
+                  ]}
+                >
+                  <Text style={[
+                    styles.muscleGroupChipText,
+                    isSelected && styles.muscleGroupChipTextSelected
+                  ]}>
+                    {group.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
@@ -322,28 +440,39 @@ export default function NewExerciseScreen() {
 
 
 
-        {/* Instructions */}
+        {/* GIF URLs per Equipment */}
         <View style={{ marginBottom: 16 }}>
-          <Text style={{ fontSize: 14, fontWeight: '600', color: '#475569', marginBottom: 8, textAlign: 'right' }}>
-            הוראות ביצוע
+          <Text style={{ fontSize: 14, fontWeight: '600', color: '#475569', marginBottom: 12, textAlign: 'right' }}>
+            קישורי GIF לפי ציוד
           </Text>
-          <TextInput
-            style={{
-              backgroundColor: '#F8FAFC',
-              borderRadius: 12,
-              padding: 16,
-              fontSize: 16,
-              textAlign: 'right',
-              borderWidth: 1,
-              borderColor: '#E2E8F0',
-              minHeight: 120,
-            }}
-            placeholder="הוראות מפורטות לביצוע התרגיל..."
-            value={instructions}
-            onChangeText={setInstructions}
-            multiline
-            numberOfLines={5}
-          />
+          {equipment.length === 0 ? (
+            <Text style={{ color: '#94A3B8', fontSize: 14, textAlign: 'right' }}>
+              בחר ציוד כדי להוסיף קישורי GIF
+            </Text>
+          ) : (
+            equipment.map(eq => {
+              const tab = EQUIPMENT_TABS.find(t => t.id === eq);
+              if (!tab) return null;
+              return (
+                <View key={eq} style={styles.gifInputRow}>
+                  <View style={styles.gifInputHeader}>
+                    <Image source={tab.icon} style={styles.gifEquipmentIcon} resizeMode="contain" />
+                    <Text style={styles.gifEquipmentLabel}>{tab.label}</Text>
+                  </View>
+                  <TextInput
+                    style={styles.gifInput}
+                    placeholder="https://cloudinary.com/..."
+                    placeholderTextColor="#94A3B8"
+                    value={equipmentGifs[eq] || ''}
+                    onChangeText={(text) => setEquipmentGifs(prev => ({
+                      ...prev,
+                      [eq]: text
+                    }))}
+                  />
+                </View>
+              );
+            })
+          )}
         </View>
 
         {/* Submit Button */}
@@ -362,7 +491,7 @@ export default function NewExerciseScreen() {
             {createMutation.isPending ? 'שומר...' : 'שמור תרגיל'}
           </Text>
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }
@@ -372,7 +501,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 8,
-    width: '18%', // Ensure 5 items fit well
+    width: 60,
+    marginRight: 8,
   },
   equipmentIcon: {
     width: 40,
@@ -383,5 +513,63 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#1E293B',
     textAlign: 'center',
+  },
+  gifInputRow: {
+    marginBottom: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 12,
+  },
+  gifInputHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  gifEquipmentIcon: {
+    width: 24,
+    height: 24,
+  },
+  gifEquipmentLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  gifInput: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    textAlign: 'left',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  muscleGroupsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  muscleGroupChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  muscleGroupChipSelected: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  muscleGroupChipText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748B',
+  },
+  muscleGroupChipTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
 });

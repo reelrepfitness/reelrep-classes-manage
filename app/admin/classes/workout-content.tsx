@@ -46,6 +46,17 @@ export default function WorkoutContentScreen() {
     }, [classId]);
 
     const fetchWorkoutData = async () => {
+        // Handle virtual IDs (not yet saved to DB)
+        if (classId.startsWith('virtual_') || classId.includes('_')) {
+            setSections([{
+                id: Date.now().toString(),
+                title: '',
+                exercises: []
+            }]);
+            setLoading(false);
+            return;
+        }
+
         try {
             const { data, error } = await supabase
                 .from('classes')

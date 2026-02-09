@@ -152,6 +152,19 @@ export default function ClassesListScreen() {
 
     useFocusEffect(
         useCallback(() => {
+            // Auto-complete attendance for past classes
+            const autoCompletePastClasses = async () => {
+                try {
+                    const { data } = await supabase.rpc('auto_complete_past_classes');
+                    if (data && data > 0) {
+                        console.log(`Auto-marked ${data} bookings as attended`);
+                    }
+                } catch (err) {
+                    console.error('Auto-complete error:', err);
+                }
+            };
+            autoCompletePastClasses();
+
             fetchClasses();
         }, [selectedDate]) // Refetch when date changes
     );

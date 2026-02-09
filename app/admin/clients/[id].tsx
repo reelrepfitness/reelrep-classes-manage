@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     View,
     Text,
@@ -9,7 +9,8 @@ import {
     Alert,
     Platform,
     ActivityIndicator,
-    TextInput
+    TextInput,
+    RefreshControl
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -71,6 +72,7 @@ export default function ClientManagerScreen() {
 
     // UI State
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [saving, setSaving] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
 
@@ -80,124 +82,132 @@ export default function ClientManagerScreen() {
     const [ticket, setTicket] = useState<TicketData | null>(null);
 
     // --- Fetch Real Data from Supabase ---
-    useEffect(() => {
-        const fetchClientData = async () => {
-            if (!id) return;
-            setLoading(true);
+    const fetchClientData = useCallback(async () => {
+        if (!id) return;
 
-            try {
-                // 1. Fetch profile
-                const { data: profile, error: profileError } = await supabase
-                    .from('profiles')
-                    .select('id, full_name, phone_number, avatar_url, email')
-                    .eq('id', id)
-                    .single();
+        try {
+            // 1. Fetch profile
+            const { data: profile, error: profileError } = await supabase
+                .from('profiles')
+                .select('id, full_name, phone_number, avatar_url, email')
+                .eq('id', id)
+                .single();
 
-                if (profileError) {
-                    console.error('Error fetching profile:', profileError);
-                    setLoading(false);
-                    return;
-                }
-
-                // 2. Fetch active subscription
-                const { data: subscriptionData } = await supabase
-                    .from('user_subscriptions')
-                    .select('*, subscription_plans(*)')
-                    .eq('user_id', id)
-                    .eq('is_active', true)
-                    .order('created_at', { ascending: false })
-                    .limit(1)
-                    .maybeSingle();
-
-                // 3. Fetch active ticket
-                const { data: ticketData } = await supabase
-                    .from('user_tickets')
-                    .select('*, ticket_plans(*)')
-                    .eq('user_id', id)
-                    .eq('status', 'active')
-                    .order('created_at', { ascending: false })
-                    .limit(1)
-                    .maybeSingle();
-
-                // 4. Fetch completed achievements to get highest badge
-                const { data: userAchievements } = await supabase
-                    .from('user_achievements')
-                    .select(`
-                        achievement_id,
-                        achievements:achievement_id (
-                            id,
-                            name,
-                            icon,
-                            task_requirement
-                        )
-                    `)
-                    .eq('user_id', id)
-                    .eq('completed', true);
-
-                // 5. Count total attended classes
-                const { count: attendedCount } = await supabase
-                    .from('class_bookings')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('user_id', id)
-                    .or('status.eq.completed,attended_at.not.is.null');
-
-                // Find highest achievement (by task_requirement)
-                const sortedAchievements = (userAchievements || [])
-                    .filter((ua: any) => ua.achievements)
-                    .map((ua: any) => ua.achievements)
-                    .sort((a: any, b: any) => (b.task_requirement || 0) - (a.task_requirement || 0));
-
-                const highestAchievement = sortedAchievements[0] || null;
-
-                // Determine client status
-                let status: 'active' | 'frozen' | 'inactive' = 'inactive';
-                if (subscriptionData?.is_frozen || ticketData?.is_frozen) {
-                    status = 'frozen';
-                } else if (subscriptionData?.is_active || ticketData?.status === 'active') {
-                    status = 'active';
-                }
-
-                setClient({
-                    id: profile.id,
-                    full_name: profile.full_name || profile.email || 'לקוח',
-                    phone: profile.phone_number || '',
-                    avatar_url: profile.avatar_url || '',
-                    status,
-                    highestAchievement,
-                    attendedCount: attendedCount || 0,
-                });
-
-                // Set subscription if exists
-                if (subscriptionData) {
-                    setSubscription({
-                        id: subscriptionData.id,
-                        classes_remaining: subscriptionData.classes_remaining || 0,
-                        expiry_date: new Date(subscriptionData.end_date || subscriptionData.expiry_date),
-                        is_frozen: subscriptionData.is_frozen || false,
-                        plan_name: subscriptionData.subscription_plans?.name || 'מנוי',
-                    });
-                }
-
-                // Set ticket if exists
-                if (ticketData) {
-                    setTicket({
-                        id: ticketData.id,
-                        punches_remaining: ticketData.punches_remaining || 0,
-                        expiry_date: new Date(ticketData.expiry_date),
-                        is_frozen: ticketData.is_frozen || false,
-                        plan_name: ticketData.ticket_plans?.name || 'כרטיסייה',
-                    });
-                }
-
-            } catch (error) {
-                console.error('Error fetching client data:', error);
-            } finally {
-                setLoading(false);
+            if (profileError) {
+                console.error('Error fetching profile:', profileError);
+                return;
             }
-        };
 
-        fetchClientData();
+            // 2. Fetch active subscription
+            const { data: subscriptionData } = await supabase
+                .from('user_subscriptions')
+                .select('*, subscription_plans(*)')
+                .eq('user_id', id)
+                .eq('is_active', true)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            // 3. Fetch active ticket
+            const { data: ticketData } = await supabase
+                .from('user_tickets')
+                .select('*, ticket_plans(*)')
+                .eq('user_id', id)
+                .eq('status', 'active')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            // 4. Fetch completed achievements to get highest badge
+            const { data: userAchievements } = await supabase
+                .from('user_achievements')
+                .select(`
+                    achievement_id,
+                    achievements:achievement_id (
+                        id,
+                        name,
+                        icon,
+                        task_requirement
+                    )
+                `)
+                .eq('user_id', id)
+                .eq('completed', true);
+
+            // 5. Count total attended classes
+            const { count: attendedCount } = await supabase
+                .from('class_bookings')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', id)
+                .or('status.eq.completed,attended_at.not.is.null');
+
+            // Find highest achievement (by task_requirement)
+            const sortedAchievements = (userAchievements || [])
+                .filter((ua: any) => ua.achievements)
+                .map((ua: any) => ua.achievements)
+                .sort((a: any, b: any) => (b.task_requirement || 0) - (a.task_requirement || 0));
+
+            const highestAchievement = sortedAchievements[0] || null;
+
+            // Determine client status
+            let status: 'active' | 'frozen' | 'inactive' = 'inactive';
+            if (subscriptionData?.is_frozen || ticketData?.is_frozen) {
+                status = 'frozen';
+            } else if (subscriptionData?.is_active || ticketData?.status === 'active') {
+                status = 'active';
+            }
+
+            setClient({
+                id: profile.id,
+                full_name: profile.full_name || profile.email || 'לקוח',
+                phone: profile.phone_number || '',
+                avatar_url: profile.avatar_url || '',
+                status,
+                highestAchievement,
+                attendedCount: attendedCount || 0,
+            });
+
+            // Set subscription if exists
+            if (subscriptionData) {
+                setSubscription({
+                    id: subscriptionData.id,
+                    classes_remaining: subscriptionData.classes_remaining || 0,
+                    expiry_date: new Date(subscriptionData.end_date || subscriptionData.expiry_date),
+                    is_frozen: subscriptionData.is_frozen || false,
+                    plan_name: subscriptionData.subscription_plans?.name || 'מנוי',
+                });
+            } else {
+                setSubscription(null);
+            }
+
+            // Set ticket if exists
+            if (ticketData) {
+                setTicket({
+                    id: ticketData.id,
+                    punches_remaining: ticketData.punches_remaining || 0,
+                    expiry_date: new Date(ticketData.expiry_date),
+                    is_frozen: ticketData.is_frozen || false,
+                    plan_name: ticketData.ticket_plans?.name || 'כרטיסייה',
+                });
+            } else {
+                setTicket(null);
+            }
+
+        } catch (error) {
+            console.error('Error fetching client data:', error);
+        }
     }, [id]);
+
+    useEffect(() => {
+        setLoading(true);
+        fetchClientData().finally(() => setLoading(false));
+    }, [fetchClientData]);
+
+    // Pull-to-refresh handler
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        await fetchClientData();
+        setRefreshing(false);
+    }, [fetchClientData]);
 
     const handleUpdateSubscription = async (updates: Partial<SubscriptionData>) => {
         if (!subscription) return;
@@ -354,6 +364,9 @@ export default function ClientManagerScreen() {
             <ScrollView
                 contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
                 showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
             >
                 {/* 1. Profile Section */}
                 <View style={styles.profileSection}>

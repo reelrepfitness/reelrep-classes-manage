@@ -394,7 +394,7 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
         }
 
         // Refresh user data to update UI (home screen header, profile)
-        refreshUser();
+        await refreshUser();
       } else {
         console.log('No active ticket found to decrement (or user has unlimited plan)');
       }

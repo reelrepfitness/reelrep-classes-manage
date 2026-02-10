@@ -33,6 +33,7 @@ const MENU_ITEMS = [
     { label: 'דשבורד', value: '/admin', icon: 'speedometer' },
     { label: 'יומן', value: '/admin/classes', icon: 'calendar' },
     { label: 'לקוחות', value: '/admin/clients', icon: 'people' },
+    { label: 'לידים', value: '/admin/leads', icon: 'person-add' },
     { label: 'ניהול תרגילים', value: '/admin/exercises', icon: 'barbell' },
     { label: 'טפסים', value: '/admin/forms', icon: 'document-text' },
     { label: 'דוחות', value: '/admin/financial', icon: 'bar-chart' },
@@ -114,6 +115,7 @@ export function AdminHeader({ title, disabled = false }: AdminHeaderProps) {
             case 'speedometer': return 'speedometer-outline';
             case 'calendar': return 'calendar-outline';
             case 'people': return 'people-outline';
+            case 'person-add': return 'person-add-outline';
             case 'barbell': return 'barbell-outline';
             case 'document-text': return 'document-text-outline';
             case 'bar-chart': return 'stats-chart-outline';

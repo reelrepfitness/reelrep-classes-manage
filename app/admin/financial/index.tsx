@@ -16,7 +16,7 @@ import { BarChart, PieChart } from 'react-native-gifted-charts';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUpRight, ArrowDownRight, TrendingUp, Users, RefreshCw } from 'lucide-react-native';
-import { useGreenInvoice } from '@/app/hooks/useGreenInvoice';
+import { useGreenInvoice } from '@/hooks/useGreenInvoice';
 
 const { width } = Dimensions.get('window');
 

@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
-import { useGreenInvoice } from '../hooks/useGreenInvoice';
+import { useGreenInvoice } from '@/hooks/useGreenInvoice';
 import { supabase } from '@/constants/supabase';
 
 export default function GreenInvoiceTestScreen() {

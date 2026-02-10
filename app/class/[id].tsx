@@ -19,6 +19,8 @@ import SwapIcon from '@/components/SwapIcon';
 import CustomDialog, { DialogButton } from '@/components/ui/CustomDialog';
 import Colors from '@/constants/colors';
 import { supabase } from '@/constants/supabase';
+import { Image as ExpoImage } from 'expo-image';
+import { EQUIPMENT_TABS } from '@/constants/equipment';
 
 // --- Helper Functions ---
 const formatDate = (dateStr: string) => {
@@ -49,13 +51,65 @@ interface WorkoutExercise {
     id: string;
     name: string;
     repsOrTime: string;
+    exerciseDbId?: string;
+    equipment?: string[] | null;
+    equipmentGifs?: Record<string, string> | null;
+    selectedEquipment?: string[];
+    assignedGifUrl?: string | null;
 }
 
 interface WorkoutSection {
     id: string;
     title: string;
+    workoutMethodName?: string;
+    workoutMethodDescription?: string;
     exercises: WorkoutExercise[];
 }
+
+// --- GIF Helpers ---
+const getOptimizedGifUrl = (url: string | null | undefined): string | null => {
+    if (!url) return null;
+    if (url.includes('cloudinary.com')) {
+        return url.replace('/upload/', '/upload/q_auto,w_400/');
+    }
+    return url;
+};
+
+const getWodExerciseGif = (exercise: WorkoutExercise): string | null => {
+    // New data: use pre-resolved URL from admin save
+    if (exercise.assignedGifUrl) return getOptimizedGifUrl(exercise.assignedGifUrl);
+
+    // Old data fallback: resolve from equipmentGifs
+    if (!exercise.equipmentGifs) return null;
+    if (exercise.selectedEquipment?.length) {
+        // Try each selected equipment (handles old multi-select)
+        for (const eq of exercise.selectedEquipment) {
+            const gif = exercise.equipmentGifs[eq];
+            if (gif) return getOptimizedGifUrl(gif);
+        }
+    }
+    // No match or no selection: show any available GIF
+    const firstGif = Object.values(exercise.equipmentGifs).find(Boolean);
+    return firstGif ? getOptimizedGifUrl(firstGif) : null;
+};
+
+// Resolve the assigned equipment ID — ensures icon matches the GIF
+const getAssignedEquipment = (exercise: WorkoutExercise): string | null => {
+    // New data: single-select
+    if (exercise.selectedEquipment?.length === 1) return exercise.selectedEquipment[0];
+
+    // Old data: find first selected equipment that has a GIF
+    if (exercise.selectedEquipment?.length && exercise.equipmentGifs) {
+        const match = exercise.selectedEquipment.find(eq => exercise.equipmentGifs![eq]);
+        if (match) return match;
+    }
+
+    // No selection: infer from first GIF key
+    if (exercise.equipmentGifs) {
+        return Object.keys(exercise.equipmentGifs).find(k => exercise.equipmentGifs![k]) || null;
+    }
+    return null;
+};
 
 // --- Helper: Get highest completed achievement badge ---
 const getHighestBadge = (participant: any) => {
@@ -257,7 +311,17 @@ const slotStyles = StyleSheet.create({
 });
 
 // --- Workout Viewer Component ---
-const WorkoutViewer = ({ workoutData, description }: { workoutData?: WorkoutSection[] | null, description?: string }) => {
+const WorkoutViewer = ({
+    workoutData,
+    description,
+    exercisePRs,
+    exerciseEnglishNames,
+}: {
+    workoutData?: WorkoutSection[] | null;
+    description?: string;
+    exercisePRs?: Record<string, { weight: number; reps: number; equipment?: string }>;
+    exerciseEnglishNames?: Record<string, string>;
+}) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const hasWorkoutData = workoutData && workoutData.length > 0;
     const hasDescription = !!description;
@@ -265,13 +329,13 @@ const WorkoutViewer = ({ workoutData, description }: { workoutData?: WorkoutSect
     if (!hasWorkoutData && !hasDescription) return null;
 
     return (
-        <View style={workoutViewerStyles.card}>
+        <View style={wodStyles.card}>
             <TouchableOpacity
-                style={workoutViewerStyles.header}
+                style={wodStyles.header}
                 onPress={() => setIsExpanded(!isExpanded)}
                 activeOpacity={0.7}
             >
-                <Text style={workoutViewerStyles.title}>תוכן האימון</Text>
+                <Text style={wodStyles.headerTitle}>תוכן האימון</Text>
                 <Icon
                     name={isExpanded ? "chevron-up" : "chevron-down"}
                     size={20}
@@ -281,40 +345,108 @@ const WorkoutViewer = ({ workoutData, description }: { workoutData?: WorkoutSect
             </TouchableOpacity>
 
             {isExpanded && (
-                <View style={workoutViewerStyles.content}>
+                <View style={wodStyles.content}>
                     {hasWorkoutData ? (
-                        <View style={workoutViewerStyles.sectionsList}>
+                        <View style={wodStyles.sectionsList}>
                             {workoutData.map((section) => (
-                                <View key={section.id} style={workoutViewerStyles.section}>
-                                    {!!section.title && (
-                                        <Text style={workoutViewerStyles.sectionTitle}>{section.title}</Text>
-                                    )}
-                                    <View style={workoutViewerStyles.exercisesList}>
-                                        {section.exercises.map((exercise, index) => (
-                                            <View key={exercise.id}>
-                                                <View style={workoutViewerStyles.exerciseRow}>
-                                                    {/* Visual Order (LTR container): [Name] [Time] */}
-                                                    {/* "Time/Reps FIRST (Rightmost)" means it appears on the Right side.
-                                                        "Followed by Name" means Name is to its Left.
-                                                        In a flex-row (LTR default), [Name, Time] puts Name Left, Time Right.
-                                                        This matches the visual requirement.
-                                                    */}
-                                                    <Text style={workoutViewerStyles.exerciseName}>{exercise.name}</Text>
-                                                    <Text style={workoutViewerStyles.exerciseTime}>{exercise.repsOrTime}</Text>
+                                <View key={section.id} style={wodStyles.section}>
+                                    {/* Section Header: Title + Method Badge + Description (centered column) */}
+                                    {(!!section.title || !!section.workoutMethodName || !!section.workoutMethodDescription) && (
+                                        <View style={wodStyles.sectionHeader}>
+                                            {!!section.title && (
+                                                <Text style={wodStyles.sectionTitle}>{section.title}</Text>
+                                            )}
+                                            {!!section.workoutMethodName && (
+                                                <View style={wodStyles.methodBadge}>
+                                                    <Text style={wodStyles.methodBadgeText}>{section.workoutMethodName}</Text>
                                                 </View>
-                                                {index < section.exercises.length - 1 && (
-                                                    <View style={workoutViewerStyles.separator} />
-                                                )}
-                                            </View>
-                                        ))}
+                                            )}
+                                            {!!section.workoutMethodDescription && (
+                                                <Text style={wodStyles.methodDescription}>{section.workoutMethodDescription}</Text>
+                                            )}
+                                        </View>
+                                    )}
+
+                                    {/* Exercises */}
+                                    <View style={wodStyles.exercisesList}>
+                                        {section.exercises.map((exercise) => {
+                                            const gifUrl = getWodExerciseGif(exercise);
+                                            const pr = exercise.exerciseDbId && exercisePRs
+                                                ? exercisePRs[exercise.exerciseDbId]
+                                                : null;
+                                            const assignedEquipmentId = getAssignedEquipment(exercise);
+                                            const assignedEquipmentTab = assignedEquipmentId
+                                                ? EQUIPMENT_TABS.find(t => t.id === assignedEquipmentId)
+                                                : null;
+
+                                            return (
+                                                <View key={exercise.id} style={wodStyles.exerciseCard}>
+                                                    {/* GIF background */}
+                                                    {gifUrl ? (
+                                                        <ExpoImage
+                                                            source={{ uri: gifUrl }}
+                                                            style={wodStyles.exerciseGifBg}
+                                                            contentFit="cover"
+                                                            transition={300}
+                                                        />
+                                                    ) : null}
+
+                                                    {/* Gradient: black on left, transparent on right to reveal GIF */}
+                                                    <LinearGradient
+                                                        colors={['#000000', 'transparent']}
+                                                        locations={[0.45, 1]}
+                                                        start={{ x: 0, y: 0 }}
+                                                        end={{ x: 1, y: 0 }}
+                                                        style={wodStyles.exerciseGradient}
+                                                    />
+
+                                                    {/* Exercise Content */}
+                                                    <View style={wodStyles.exerciseContent}>
+                                                        {/* Top: Reps + Name in one row */}
+                                                        <View style={wodStyles.exerciseTopRow}>
+                                                            <Text style={wodStyles.exerciseName}>{(exercise.exerciseDbId && exerciseEnglishNames?.[exercise.exerciseDbId]) || exercise.name}</Text>
+                                                            {!!exercise.repsOrTime && (
+                                                                <Text style={wodStyles.exerciseReps}>{exercise.repsOrTime}</Text>
+                                                            )}
+                                                        </View>
+
+                                                        {/* Bottom: PR + Equipment icon together */}
+                                                        {(assignedEquipmentTab || (pr && pr.weight > 0)) && (
+                                                            <View style={wodStyles.exerciseBottomRow}>
+                                                                <View />
+                                                                <View style={wodStyles.prEquipmentGroup}>
+                                                                    {pr && pr.weight > 0 && (
+                                                                        <View style={wodStyles.prBadge}>
+                                                                            <Image
+                                                                                source={require('@/assets/images/PR.png')}
+                                                                                style={wodStyles.prIcon}
+                                                                                resizeMode="contain"
+                                                                            />
+                                                                            <Text style={wodStyles.prText}>
+                                                                                {pr.weight} kg
+                                                                            </Text>
+                                                                        </View>
+                                                                    )}
+                                                                    {assignedEquipmentTab && (
+                                                                        <Image
+                                                                            source={assignedEquipmentTab.icon}
+                                                                            style={wodStyles.equipmentIcon}
+                                                                            resizeMode="contain"
+                                                                        />
+                                                                    )}
+                                                                </View>
+                                                            </View>
+                                                        )}
+                                                    </View>
+                                                </View>
+                                            );
+                                        })}
                                     </View>
                                 </View>
                             ))}
                         </View>
                     ) : (
-                        <Text style={workoutViewerStyles.description}>
-                            {description}
-                        </Text>
+                        <Text style={wodStyles.description}>{description}</Text>
                     )}
                 </View>
             )}
@@ -322,7 +454,7 @@ const WorkoutViewer = ({ workoutData, description }: { workoutData?: WorkoutSect
     );
 };
 
-const workoutViewerStyles = StyleSheet.create({
+const wodStyles = StyleSheet.create({
     card: {
         backgroundColor: '#FFFFFF',
         borderRadius: 16,
@@ -340,7 +472,7 @@ const workoutViewerStyles = StyleSheet.create({
         justifyContent: 'space-between',
         padding: 16,
     },
-    title: {
+    headerTitle: {
         fontSize: 15,
         fontWeight: '700',
         color: '#111827',
@@ -358,50 +490,113 @@ const workoutViewerStyles = StyleSheet.create({
         lineHeight: 22,
         textAlign: 'right',
     },
-
-    // Workout Data Styles
     sectionsList: {
-        gap: 20,
+        gap: 24,
     },
     section: {
-        gap: 12,
+        gap: 10,
+    },
+    sectionHeader: {
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 6,
     },
     sectionTitle: {
-        fontSize: 20, // Large
-        fontWeight: '800', // Heavy
-        color: '#000000', // Black
-        textAlign: 'right',
+        fontSize: 20,
+        fontWeight: '800',
+        color: '#000000',
+        textAlign: 'center',
+    },
+    methodBadge: {
+        backgroundColor: '#111827',
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+    },
+    methodBadgeText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#FFFFFF',
+    },
+    methodDescription: {
+        fontSize: 12,
+        color: '#6B7280',
+        textAlign: 'center',
+        lineHeight: 18,
     },
     exercisesList: {
         gap: 8,
     },
-    exerciseRow: {
+    exerciseCard: {
+        borderRadius: 14,
+        overflow: 'hidden',
+        backgroundColor: '#000000',
+        height: 80,
+        position: 'relative' as const,
+    },
+    exerciseGifBg: {
+        position: 'absolute' as const,
+        top: 8,
+        bottom: 8,
+        left: -10,
+        width: '30%',
+    },
+    exerciseGradient: {
+        ...StyleSheet.absoluteFillObject,
+    },
+    exerciseContent: {
+        flex: 1,
+        justifyContent: 'center',
+        paddingHorizontal: 14,
+        position: 'relative' as const,
+        zIndex: 1,
+        gap: 4,
+    },
+    exerciseTopRow: {
         flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between', // Puts Name left, Time right
-        paddingVertical: 4,
+        alignItems: 'baseline',
+        justifyContent: 'flex-end',
+        gap: 7,
+    },
+    exerciseReps: {
+        fontSize: 18,
+        fontWeight: '900',
+        color: Colors.primary,
     },
     exerciseName: {
-        fontSize: 15, // Regular
-        color: '#374151', // Dark Gray
-        textAlign: 'right', // Just in case
-        flex: 1,
-        marginRight: 16,
+        fontSize: 18,
+        fontWeight: '900',
+        color: '#FFFFFF',
+        letterSpacing: 0.3,
     },
-    exerciseTime: {
+    exerciseBottomRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    prEquipmentGroup: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    equipmentIcon: {
+        width: 28,
+        height: 28,
+    },
+    prBadge: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        gap: 6,
+    },
+    prIcon: {
+        width: 23,
+        height: 23,
+    },
+    prText: {
         fontSize: 15,
-        fontWeight: '700', // Bold
-        color: Colors.primary, // Brand Color
-        textAlign: 'right',
-        minWidth: 60,
+        fontWeight: '800',
+        color: '#FACC15',
     },
-    separator: {
-        height: 1,
-        backgroundColor: '#E5E7EB',
-        borderStyle: 'dotted', // dotted doesn't work on View borderStyle directly on Android/iOS sometimes without borderWidth
-        borderWidth: 1, // Need to use dashed for RN View usually
-        borderColor: '#F3F4F6',
-    }
 });
 
 export default function ClassDetailsScreen() {
@@ -415,6 +610,8 @@ export default function ClassDetailsScreen() {
     const [participants, setParticipants] = useState<any[]>([]);
     const [waitlistParticipants, setWaitlistParticipants] = useState<any[]>([]);
     const [workoutData, setWorkoutData] = useState<WorkoutSection[] | null>(null);
+    const [exercisePRs, setExercisePRs] = useState<Record<string, { weight: number; reps: number; equipment?: string }>>({});
+    const [exerciseEnglishNames, setExerciseEnglishNames] = useState<Record<string, string>>({});
     const [activeTab, setActiveTab] = useState<'booked' | 'waitlist'>('booked');
 
     // Dialog states
@@ -522,6 +719,59 @@ export default function ClassDetailsScreen() {
     }, [id, classes, classesLoading, fetchParticipants, fetchWorkoutData]);
 
     const { user } = useAuth();
+
+    // Fetch user's PRs for exercises in this WOD
+    useEffect(() => {
+        if (!workoutData || !user?.id) return;
+
+        const fetchPRs = async () => {
+            const dbIds = workoutData
+                .flatMap(s => s.exercises)
+                .map(e => e.exerciseDbId)
+                .filter(Boolean) as string[];
+
+            if (dbIds.length === 0) return;
+
+            const { data: exercises } = await supabase
+                .from('exercises')
+                .select('id, name')
+                .in('id', dbIds);
+
+            if (!exercises?.length) return;
+
+            // Build English name map (exerciseDbId -> English name)
+            const englishNames: Record<string, string> = {};
+            const nameToIdMap: Record<string, string> = {};
+            exercises.forEach((ex: any) => {
+                nameToIdMap[ex.name] = ex.id;
+                englishNames[ex.id] = ex.name;
+            });
+            setExerciseEnglishNames(englishNames);
+
+            const { data: logs } = await supabase
+                .from('workout_exercises')
+                .select('exercise_name, weight, reps, equipment, workouts!inner(user_id)')
+                .eq('workouts.user_id', user.id)
+                .in('exercise_name', exercises.map((e: any) => e.name));
+
+            if (!logs?.length) return;
+
+            const prMap: Record<string, { weight: number; reps: number; equipment?: string }> = {};
+            logs.forEach((log: any) => {
+                const dbId = nameToIdMap[log.exercise_name];
+                if (!dbId) return;
+                const weight = Number(log.weight) || 0;
+                if (!prMap[dbId] || weight > prMap[dbId].weight) {
+                    prMap[dbId] = { weight, reps: Number(log.reps) || 0, equipment: log.equipment };
+                }
+            });
+
+            setExercisePRs(prMap);
+        };
+
+        fetchPRs();
+    }, [workoutData, user?.id]);
+
     const isUserInParticipants = participants.some(p => p.profiles?.id === user?.id && ['confirmed', 'completed', 'late', 'no_show'].includes(p.status));
     const isBooked = (classItem ? isClassBooked(classItem) : false) || isUserInParticipants;
 
@@ -758,11 +1008,15 @@ export default function ClassDetailsScreen() {
                     </Animated.View>
 
                     {/* Content Overlay */}
-                    <TouchableOpacity onPress={() => router.back()} style={styles.headerBackButton}>
-                        <Icon name="chevron-right" size={24} color="#FFFFFF" strokeWidth={2.5} />
-                    </TouchableOpacity>
-                    <View style={styles.headerTitleContainer}>
-                        <Text style={styles.headerTitle} numberOfLines={1}>{classItem.title}</Text>
+                    <View style={styles.headerContent}>
+                        {/* Top row: back arrow + title */}
+                        <View style={styles.headerTopRow}>
+                            <TouchableOpacity onPress={() => router.back()} style={styles.headerBackButton}>
+                                <Icon name="chevron-right" size={24} color="#FFFFFF" strokeWidth={2.5} />
+                            </TouchableOpacity>
+                            <Text style={styles.headerTitle} numberOfLines={1}>{classItem.title}</Text>
+                            <View style={styles.headerSpacer} />
+                        </View>
                         {isOnWaitingList && (
                             <View style={styles.headerBadge}>
                                 <Text style={styles.headerBadgeText}>בהמתנה</Text>
@@ -774,8 +1028,18 @@ export default function ClassDetailsScreen() {
                             <Text style={styles.headerDateTime}>{classItem.time}</Text>
                         </View>
                         <Text style={styles.headerCountdown}>{countdown}</Text>
+                        <View style={styles.headerDivider} />
+                        <View style={styles.headerInstructorRow}>
+                            <Image
+                                source={require('@/assets/images/coach.png')}
+                                style={styles.headerInstructorAvatar}
+                            />
+                            <View style={styles.headerInstructorText}>
+                                <Text style={styles.headerInstructorName}>{classItem.instructor || 'מאמן'}</Text>
+                                <Text style={styles.headerInstructorRole}>מאמן</Text>
+                            </View>
+                        </View>
                     </View>
-                    <View style={styles.headerSpacer} />
                 </View>
 
                 <ScrollView
@@ -786,26 +1050,12 @@ export default function ClassDetailsScreen() {
                     }}
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* Trainer Info */}
-                    <View style={styles.trainerCard}>
-                        <View style={styles.trainerRow}>
-                            <View style={styles.trainerInfo}>
-                                <Image
-                                    source={require('@/assets/images/coach.png')}
-                                    style={styles.trainerAvatarImage}
-                                />
-                                <View style={styles.trainerText}>
-                                    <Text style={styles.trainerName}>{classItem.instructor || 'מאמן'}</Text>
-                                    <Text style={styles.trainerRole}>מאמן</Text>
-                                </View>
-                            </View>
-                        </View>
-                    </View>
-
                     {/* Workout Content */}
                     <WorkoutViewer
                         workoutData={workoutData}
                         description={classItem.description}
+                        exercisePRs={exercisePRs}
+                        exerciseEnglishNames={exerciseEnglishNames}
                     />
 
                     {/* Slots Section with Tabs */}
@@ -958,7 +1208,7 @@ export default function ClassDetailsScreen() {
                                         style={styles.redGradientButton}
                                     >
                                         <Icon
-                                            name="alert-triangle"
+                                            name="alert-circle"
                                             size={18}
                                             color="#FFFFFF"
                                             strokeWidth={2.5}
@@ -1040,8 +1290,6 @@ const styles = StyleSheet.create({
     headerNotch: {
         paddingHorizontal: 16,
         paddingBottom: 20,
-        flexDirection: 'row',
-        alignItems: 'center',
         borderBottomLeftRadius: 24,
         borderBottomRightRadius: 24,
         overflow: 'hidden',
@@ -1051,18 +1299,22 @@ const styles = StyleSheet.create({
         shadowRadius: 12,
         elevation: 8,
     },
+    headerContent: {
+        alignItems: 'center',
+    },
+    headerTopRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'stretch',
+    },
     headerBackButton: {
         width: 44,
         height: 44,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    headerTitleContainer: {
-        flex: 1,
-        alignItems: 'center',
-        marginHorizontal: 8,
-    },
     headerTitle: {
+        flex: 1,
         fontSize: 20,
         fontWeight: '700',
         color: '#FFFFFF',
@@ -1100,6 +1352,38 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: 'rgba(255,255,255,0.7)',
         marginTop: 6,
+    },
+    headerDivider: {
+        height: 1,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        alignSelf: 'stretch',
+        marginTop: 12,
+        marginBottom: 10,
+    },
+    headerInstructorRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    headerInstructorAvatar: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        borderWidth: 1.5,
+        borderColor: 'rgba(255,255,255,0.3)',
+    },
+    headerInstructorText: {
+        alignItems: 'flex-start',
+    },
+    headerInstructorName: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#FFFFFF',
+    },
+    headerInstructorRole: {
+        fontSize: 11,
+        fontWeight: '500',
+        color: 'rgba(255,255,255,0.6)',
     },
     headerSpacer: {
         width: 44,

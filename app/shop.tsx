@@ -21,7 +21,7 @@ import { Icon } from '@/components/ui/icon';
 import { supabase } from '@/constants/supabase';
 import { useShop } from '@/contexts/ShopContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { useGreenInvoice } from '@/app/hooks/useGreenInvoice';
+import { useGreenInvoice } from '@/hooks/useGreenInvoice';
 import { CartBottomSheet } from '@/components/shop/CartBottomSheet';
 import { hebrew } from '@/constants/hebrew';
 import { cn } from '@/lib/utils';

@@ -26,5 +26,7 @@
   "less.validate": false,
   "files.associations": {
     "*.css": "tailwindcss"
-  }
+  },
+  "snyk.advanced.organization": "ca402176-cd62-4ab4-a454-cdeb729ca839",
+  "snyk.advanced.autoSelectOrganization": true
 }

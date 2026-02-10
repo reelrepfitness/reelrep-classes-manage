@@ -32,7 +32,7 @@ import Colors from '@/constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/constants/supabase';
-import { useGreenInvoice } from '@/app/hooks/useGreenInvoice';
+import { useGreenInvoice } from '@/hooks/useGreenInvoice';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';

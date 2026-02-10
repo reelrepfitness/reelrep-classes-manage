@@ -591,6 +591,24 @@ export class CRMManager {
   }
 
   /**
+   * Delete a lead and all its interactions (cascade)
+   */
+  static async deleteLead(leadId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .delete()
+        .eq('id', leadId);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error deleting lead:', error);
+      return false;
+    }
+  }
+
+  /**
    * Helper: Map status to trigger type
    */
   private static mapStatusToTrigger(status: LeadStatus): string {

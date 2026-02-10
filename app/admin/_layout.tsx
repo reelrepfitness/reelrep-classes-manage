@@ -16,14 +16,11 @@ export default function AdminLayout() {
                 }}
             >
                 <Stack.Screen name="index" />
-                <Stack.Screen name="clients/index" />
-                <Stack.Screen name="clients/active" />
-                <Stack.Screen name="clients/[id]" />
-                <Stack.Screen name="classes/index" />
+                <Stack.Screen name="clients" />
+                <Stack.Screen name="classes" />
+                <Stack.Screen name="leads" />
                 <Stack.Screen name="forms/index" />
-                <Stack.Screen name="financial/index" />
-                <Stack.Screen name="settings/index" />
-                <Stack.Screen name="boss-dashboard" />
+                <Stack.Screen name="financial" />
                 <Stack.Screen name="store" />
                 <Stack.Screen
                     name="pos/payment"

@@ -20,6 +20,17 @@ import { Lead, LeadStatus, LeadStats } from '@/constants/crm-types';
 import colors from '@/constants/colors';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 
+const SOURCE_LABELS: Record<string, string> = {
+  direct: 'ישירות',
+  referral: 'חבר מביא חבר',
+  instagram: 'אינסטגרם',
+  facebook: 'פייסבוק',
+  google: 'גוגל',
+  website: 'אתר',
+  whatsapp: 'וואטסאפ',
+  other: 'אחר',
+};
+
 const STATUS_CONFIG: Record<LeadStatus, { title: string; icon: string; color: string }> = {
   new: { title: 'חדשים', icon: 'add-circle', color: '#3b82f6' },
   contacted: { title: 'יצרנו קשר', icon: 'call', color: '#8b5cf6' },
@@ -67,7 +78,8 @@ export default function LeadsManagementScreen() {
     const matchesSearch =
       searchQuery === '' ||
       lead.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lead.phone.includes(searchQuery);
+      lead.phone.includes(searchQuery) ||
+      (lead.email && lead.email.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const matchesStatus = selectedStatus === 'all' || lead.status === selectedStatus;
 
@@ -182,66 +194,76 @@ export default function LeadsManagementScreen() {
           styles.leadCard,
           needsAttention && styles.leadCardAttention,
         ]}
+        activeOpacity={0.7}
         onPress={() => router.push(`/admin/leads/${lead.id}` as any)}
       >
-        <View style={styles.leadCardHeader}>
+        {/* Main Row: Avatar | Info | Badge */}
+        <View style={styles.cardMain}>
+          {/* Avatar */}
+          <View style={[styles.leadAvatar, { backgroundColor: statusConfig.color + '20' }]}>
+            <Text style={[styles.avatarText, { color: statusConfig.color }]}>
+              {lead.name?.charAt(0) || '?'}
+            </Text>
+          </View>
+
+          {/* Info */}
           <View style={styles.leadCardInfo}>
             <Text style={styles.leadName}>{lead.name}</Text>
             <Text style={styles.leadPhone}>{lead.phone}</Text>
+            {lead.email && (
+              <Text style={styles.leadEmail} numberOfLines={1}>{lead.email}</Text>
+            )}
           </View>
 
-          <View style={[styles.statusBadge, { backgroundColor: statusConfig.color }]}>
-            <Ionicons name={statusConfig.icon as any} size={14} color="#fff" />
-            <Text style={styles.statusText}>{statusConfig.title}</Text>
+          {/* Status Badge */}
+          <View style={styles.cardRight}>
+            <View style={[styles.statusBadge, { backgroundColor: statusConfig.color }]}>
+              <Ionicons name={statusConfig.icon as any} size={12} color="#fff" />
+              <Text style={styles.statusText}>{statusConfig.title}</Text>
+            </View>
+            <Ionicons name="chevron-back" size={18} color="#CBD5E1" />
           </View>
         </View>
 
-        <View style={styles.leadCardMeta}>
-          <View style={styles.metaItem}>
-            <Ionicons name="location" size={14} color="#6b7280" />
-            <Text style={styles.metaText}>{lead.source}</Text>
+        {/* Footer */}
+        <View style={styles.cardFooter}>
+          <View style={styles.footerItem}>
+            <Ionicons name="globe-outline" size={13} color="#94A3B8" />
+            <Text style={styles.footerText}>{SOURCE_LABELS[lead.source] || lead.source}</Text>
           </View>
 
           {lead.referred_by_user_id && (
-            <View style={styles.metaItem}>
-              <Ionicons name="people" size={14} color={colors.primary} />
-              <Text style={[styles.metaText, { color: colors.primary }]}>
-                חבר מביא חבר
-              </Text>
+            <View style={styles.footerItem}>
+              <Ionicons name="people-outline" size={13} color={colors.primary} />
+              <Text style={[styles.footerText, { color: colors.primary }]}>הפניה</Text>
             </View>
           )}
 
           {daysSinceContact !== null && (
-            <View style={styles.metaItem}>
+            <View style={styles.footerItem}>
               <Ionicons
-                name="time"
-                size={14}
-                color={needsAttention ? '#ef4444' : '#6b7280'}
+                name="time-outline"
+                size={13}
+                color={needsAttention ? '#ef4444' : '#94A3B8'}
               />
               <Text
                 style={[
-                  styles.metaText,
-                  needsAttention && { color: '#ef4444', fontWeight: '600' },
+                  styles.footerText,
+                  needsAttention && { color: '#ef4444', fontWeight: '700' },
                 ]}
               >
                 {daysSinceContact} ימים
               </Text>
             </View>
           )}
-        </View>
 
-        {lead.tags && lead.tags.length > 0 && (
-          <View style={styles.tagsContainer}>
-            {lead.tags.slice(0, 3).map((tag, index) => (
-              <View key={index} style={styles.tag}>
-                <Text style={styles.tagText}>{tag}</Text>
-              </View>
-            ))}
-            {lead.tags.length > 3 && (
-              <Text style={styles.moreTagsText}>+{lead.tags.length - 3}</Text>
-            )}
-          </View>
-        )}
+          {lead.tags && lead.tags.length > 0 && (
+            <View style={styles.footerItem}>
+              <Ionicons name="pricetag-outline" size={13} color="#94A3B8" />
+              <Text style={styles.footerText}>{lead.tags.length} תגיות</Text>
+            </View>
+          )}
+        </View>
       </TouchableOpacity>
     );
   };
@@ -285,6 +307,7 @@ export default function LeadsManagementScreen() {
       {/* Leads List */}
       <ScrollView
         style={styles.leadsContainer}
+        contentContainerStyle={styles.leadsContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
@@ -376,7 +399,7 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 24,
     fontWeight: '700',
-    color: colors.background,
+    color: '#111827',
     marginBottom: 4,
   },
   statLabel: {
@@ -417,92 +440,96 @@ const styles = StyleSheet.create({
   },
   leadsContainer: {
     flex: 1,
+  },
+  leadsContent: {
     paddingHorizontal: 16,
   },
   leadCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
-    shadowRadius: 3,
+    shadowRadius: 10,
     elevation: 2,
+    overflow: 'hidden',
   },
   leadCardAttention: {
-    borderRightWidth: 4,
-    borderRightColor: '#ef4444',
+    borderColor: '#FECACA',
   },
-  leadCardHeader: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
+  cardMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
+  },
+  leadAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontSize: 20,
+    fontWeight: '800',
   },
   leadCardInfo: {
     flex: 1,
+    alignItems: 'flex-start',
   },
   leadName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.background,
-    marginBottom: 4,
-    textAlign: 'right',
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 2,
   },
   leadPhone: {
-    fontSize: 14,
-    color: '#6b7280',
-    textAlign: 'right',
+    fontSize: 13,
+    color: '#64748B',
+  },
+  leadEmail: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 2,
+  },
+  cardRight: {
+    alignItems: 'center',
+    gap: 8,
   },
   statusBadge: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
     gap: 4,
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     color: '#fff',
   },
-  leadCardMeta: {
+  cardFooter: {
     flexDirection: 'row-reverse',
-    gap: 12,
-    marginBottom: 8,
+    alignItems: 'center',
+    backgroundColor: '#FBFCFE',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 16,
   },
-  metaItem: {
+  footerItem: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 4,
   },
-  metaText: {
-    fontSize: 12,
-    color: '#6b7280',
-  },
-  tagsContainer: {
-    flexDirection: 'row-reverse',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 8,
-  },
-  tag: {
-    backgroundColor: '#f3f4f6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  tagText: {
+  footerText: {
     fontSize: 11,
-    color: '#6b7280',
-    fontWeight: '500',
-  },
-  moreTagsText: {
-    fontSize: 11,
-    color: '#9ca3af',
-    alignSelf: 'center',
+    fontWeight: '600',
+    color: '#94A3B8',
   },
   emptyState: {
     alignItems: 'center',

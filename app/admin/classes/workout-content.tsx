@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
     View,
     Text,
@@ -7,6 +7,10 @@ import {
     TouchableOpacity,
     Alert,
     ActivityIndicator,
+    Modal,
+    Image,
+    ScrollView,
+    Platform,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,20 +19,330 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import { Icon } from '@/components/ui/icon';
 import Colors from '@/constants/colors';
 import { supabase } from '@/constants/supabase';
+import { EQUIPMENT_TABS } from '@/constants/equipment';
 
-// --- Interfaces ---
+// --- DB Types (cached on mount) ---
+interface ExerciseFromDB {
+    id: string;
+    name: string;
+    name_he: string | null;
+    equipment: string[] | null;
+    equipment_gifs: Record<string, string> | null;
+}
+
+interface WorkoutMethodFromDB {
+    id: string;
+    name: string;
+    stands_for: string | null;
+    description: string | null;
+}
+
+// --- Workout Data Interfaces (saved to classes.workout_data) ---
 export interface WorkoutExercise {
     id: string;
-    name: string;      // Input 1 (Right side)
-    repsOrTime: string; // Input 2 (Left side)
+    name: string;
+    repsOrTime: string;
+    exerciseDbId?: string;
+    equipment?: string[] | null;
+    equipmentGifs?: Record<string, string> | null;
+    selectedEquipment?: string[];
 }
 
 export interface WorkoutSection {
     id: string;
-    title: string;     // e.g., "Warm Up", "Metcon"
+    title: string;
+    workoutMethodId?: string;
+    workoutMethodName?: string;
+    workoutMethodDescription?: string;
     exercises: WorkoutExercise[];
 }
 
+// ============================
+// Inline Components
+// ============================
+
+// --- Workout Method Picker ---
+function WorkoutMethodPicker({
+    currentMethodName,
+    currentMethodDescription,
+    methods,
+    onSelectMethod,
+    onCustomMethod,
+    onClear,
+}: {
+    currentMethodName?: string;
+    currentMethodDescription?: string;
+    methods: WorkoutMethodFromDB[];
+    onSelectMethod: (method: WorkoutMethodFromDB) => void;
+    onCustomMethod: (name: string) => void;
+    onClear: () => void;
+}) {
+    const [showModal, setShowModal] = useState(false);
+    const [isCustom, setIsCustom] = useState(false);
+    const [customText, setCustomText] = useState('');
+
+    const hasMethod = !!currentMethodName && currentMethodName.length > 0;
+
+    return (
+        <View style={styles.methodPickerContainer}>
+            <TouchableOpacity
+                style={styles.methodPickerButton}
+                onPress={() => {
+                    setIsCustom(false);
+                    setCustomText('');
+                    setShowModal(true);
+                }}
+                activeOpacity={0.7}
+            >
+                <Text style={[styles.methodPickerText, !hasMethod && styles.methodPickerPlaceholder]}>
+                    {hasMethod ? currentMethodName : 'שיטת אימון (אופציונלי)'}
+                </Text>
+                {hasMethod ? (
+                    <TouchableOpacity
+                        onPress={onClear}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        style={{ padding: 2 }}
+                    >
+                        <Icon name="x" size={16} color="#9CA3AF" strokeWidth={2} />
+                    </TouchableOpacity>
+                ) : (
+                    <Icon name="chevron-down" size={16} color="#9CA3AF" strokeWidth={2} />
+                )}
+            </TouchableOpacity>
+
+            {hasMethod && currentMethodDescription ? (
+                <Text style={styles.methodDescription}>{currentMethodDescription}</Text>
+            ) : null}
+
+            {/* Method Selection Modal */}
+            <Modal visible={showModal} transparent animationType="fade">
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setShowModal(false)}
+                >
+                    <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+                        <Text style={styles.modalTitle}>בחר שיטת אימון</Text>
+
+                        <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+                            {methods.map((method) => (
+                                <TouchableOpacity
+                                    key={method.id}
+                                    style={styles.methodOption}
+                                    onPress={() => {
+                                        onSelectMethod(method);
+                                        setShowModal(false);
+                                    }}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={styles.methodOptionName}>{method.name}</Text>
+                                    {method.stands_for ? (
+                                        <Text style={styles.methodOptionStandsFor}>{method.stands_for}</Text>
+                                    ) : null}
+                                    {method.description ? (
+                                        <Text style={styles.methodOptionDesc} numberOfLines={3}>{method.description}</Text>
+                                    ) : null}
+                                </TouchableOpacity>
+                            ))}
+
+                            {/* Custom option */}
+                            <View style={[styles.methodOption, { borderBottomWidth: 0 }]}>
+                                {!isCustom ? (
+                                    <TouchableOpacity
+                                        onPress={() => setIsCustom(true)}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Text style={[styles.methodOptionName, { color: Colors.primary }]}>
+                                            + שיטה מותאמת אישית
+                                        </Text>
+                                    </TouchableOpacity>
+                                ) : (
+                                    <View style={{ gap: 8 }}>
+                                        <TextInput
+                                            style={styles.customMethodInput}
+                                            placeholder="שם השיטה..."
+                                            placeholderTextColor="#9CA3AF"
+                                            value={customText}
+                                            onChangeText={setCustomText}
+                                            textAlign="right"
+                                            autoFocus
+                                        />
+                                        <TouchableOpacity
+                                            style={styles.customMethodConfirm}
+                                            onPress={() => {
+                                                if (customText.trim()) {
+                                                    onCustomMethod(customText.trim());
+                                                    setShowModal(false);
+                                                }
+                                            }}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Text style={styles.customMethodConfirmText}>אישור</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                            </View>
+                        </ScrollView>
+
+                        <TouchableOpacity
+                            style={styles.modalCloseBtn}
+                            onPress={() => setShowModal(false)}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={styles.modalCloseBtnText}>ביטול</Text>
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+        </View>
+    );
+}
+
+// --- Exercise Autocomplete ---
+function ExerciseAutocomplete({
+    exerciseRowId,
+    value,
+    allExercises,
+    activeAutocompleteId,
+    onFocus,
+    onChangeText,
+    onSelectExercise,
+}: {
+    exerciseRowId: string;
+    value: string;
+    allExercises: ExerciseFromDB[];
+    activeAutocompleteId: string | null;
+    onFocus: () => void;
+    onChangeText: (text: string) => void;
+    onSelectExercise: (exercise: ExerciseFromDB) => void;
+}) {
+    // Local state so the TextInput doesn't re-render from parent setSections
+    const [localText, setLocalText] = useState(value);
+    const isActive = activeAutocompleteId === exerciseRowId;
+    const inputRef = useRef<any>(null);
+
+    // Sync when parent value changes (e.g., after selecting a suggestion)
+    useEffect(() => { setLocalText(value); }, [value]);
+
+    const handleChangeText = useCallback((text: string) => {
+        setLocalText(text);
+        onChangeText(text);
+    }, [onChangeText]);
+
+    const suggestions = useMemo(() => {
+        if (!isActive || !localText || localText.length < 1) return [];
+        const query = localText.toLowerCase();
+        return allExercises
+            .filter(ex =>
+                ex.name.toLowerCase().includes(query) ||
+                (ex.name_he && ex.name_he.toLowerCase().includes(query))
+            )
+            .slice(0, 6);
+    }, [isActive, localText, allExercises]);
+
+    return (
+        <View style={[styles.autocompleteWrapper, isActive && suggestions.length > 0 && { zIndex: 1000 }]}>
+            <TextInput
+                ref={inputRef}
+                style={[styles.input, styles.nameInput]}
+                placeholder="שם התרגיל"
+                placeholderTextColor="#9CA3AF"
+                value={localText}
+                onChangeText={handleChangeText}
+                onFocus={onFocus}
+                textAlign="right"
+            />
+            {isActive && suggestions.length > 0 && (
+                <View style={styles.suggestionsDropdown}>
+                    <ScrollView
+                        keyboardShouldPersistTaps="always"
+                        nestedScrollEnabled
+                        style={{ maxHeight: 220 }}
+                    >
+                        {suggestions.map((ex, idx) => (
+                            <TouchableOpacity
+                                key={ex.id}
+                                style={[
+                                    styles.suggestionItem,
+                                    idx === suggestions.length - 1 && { borderBottomWidth: 0 },
+                                ]}
+                                onPress={() => onSelectExercise(ex)}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={styles.suggestionName}>{ex.name}</Text>
+                                {ex.name_he && ex.name_he !== ex.name ? (
+                                    <Text style={styles.suggestionNameHe}>{ex.name_he}</Text>
+                                ) : null}
+                                {ex.equipment && ex.equipment.length > 0 ? (
+                                    <View style={styles.suggestionEquipmentRow}>
+                                        {ex.equipment.slice(0, 4).map(eqId => {
+                                            const tab = EQUIPMENT_TABS.find(t => t.id === eqId);
+                                            if (!tab) return null;
+                                            return (
+                                                <Image
+                                                    key={eqId}
+                                                    source={tab.icon}
+                                                    style={styles.suggestionEquipmentIcon}
+                                                    resizeMode="contain"
+                                                />
+                                            );
+                                        })}
+                                    </View>
+                                ) : null}
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                </View>
+            )}
+        </View>
+    );
+}
+
+// --- Exercise Equipment Selector ---
+function ExerciseEquipmentSelector({
+    availableEquipment,
+    selectedEquipment,
+    equipmentGifs,
+    onToggle,
+}: {
+    availableEquipment: string[];
+    selectedEquipment: string[];
+    equipmentGifs?: Record<string, string> | null;
+    onToggle: (equipmentId: string) => void;
+}) {
+    const tabs = EQUIPMENT_TABS.filter(t => availableEquipment.includes(t.id));
+    if (tabs.length === 0) return null;
+
+    return (
+        <View style={styles.equipmentRow}>
+            {tabs.map(tab => {
+                const isSelected = selectedEquipment.includes(tab.id);
+                const hasGif = !!equipmentGifs?.[tab.id];
+                return (
+                    <TouchableOpacity
+                        key={tab.id}
+                        onPress={() => onToggle(tab.id)}
+                        activeOpacity={0.7}
+                        style={styles.equipmentIconBtn}
+                    >
+                        <Image
+                            source={tab.icon}
+                            style={[
+                                styles.equipmentIconSmall,
+                                { opacity: isSelected ? 1 : hasGif ? 0.35 : 0.12 },
+                            ]}
+                            resizeMode="contain"
+                        />
+                    </TouchableOpacity>
+                );
+            })}
+        </View>
+    );
+}
+
+// ============================
+// Main Screen
+// ============================
 export default function WorkoutContentScreen() {
     const { classId } = useLocalSearchParams<{ classId: string }>();
     const router = useRouter();
@@ -38,7 +352,37 @@ export default function WorkoutContentScreen() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
-    // --- Data Fetching ---
+    // Reference data from DB
+    const [allExercises, setAllExercises] = useState<ExerciseFromDB[]>([]);
+    const [workoutMethods, setWorkoutMethods] = useState<WorkoutMethodFromDB[]>([]);
+
+    // Autocomplete focus tracking
+    const [activeAutocompleteId, setActiveAutocompleteId] = useState<string | null>(null);
+
+    // --- Load reference data on mount ---
+    useEffect(() => {
+        const loadExercises = async () => {
+            const { data } = await supabase
+                .from('exercises')
+                .select('id, name, name_he, equipment, equipment_gifs')
+                .eq('is_active', true)
+                .order('name');
+            if (data) setAllExercises(data as ExerciseFromDB[]);
+        };
+
+        const loadMethods = async () => {
+            const { data } = await supabase
+                .from('workout_methods')
+                .select('id, name, stands_for, description')
+                .order('created_at');
+            if (data) setWorkoutMethods(data as WorkoutMethodFromDB[]);
+        };
+
+        loadExercises();
+        loadMethods();
+    }, []);
+
+    // --- Workout Data Fetching ---
     useEffect(() => {
         if (classId) {
             fetchWorkoutData();
@@ -67,11 +411,9 @@ export default function WorkoutContentScreen() {
             if (error) throw error;
 
             if (data?.workout_data) {
-                // Ensure data structure is correct (handle legacy or empty)
                 const loadedData = Array.isArray(data.workout_data) ? data.workout_data : [];
                 setSections(loadedData);
             } else {
-                // Initialize with one empty section if nothing exists
                 setSections([{
                     id: Date.now().toString(),
                     title: '',
@@ -86,8 +428,7 @@ export default function WorkoutContentScreen() {
         }
     };
 
-    // --- Actions ---
-    // --- Actions ---
+    // --- Section Actions ---
     const handleSave = async () => {
         if (!classId) return;
 
@@ -95,22 +436,15 @@ export default function WorkoutContentScreen() {
         try {
             let actualClassId = classId;
 
-            // Handle Virtual/Generated ID (e.g., "scheduleId_date" or "virtual_scheduleId")
             if (classId.includes('_') && !classId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
                 let scheduleId = '';
                 let dateStr = '';
 
                 if (classId.startsWith('virtual_')) {
-                    // ID format: virtual_scheduleId (Assuming today or passed metadata?)
-                    // *Warning*: logic in AdminClassDetails uses Today for virtual_. 
-                    // This might be risky if we don't have the date. 
-                    // But usually IDs are scheduleId_YYYY-MM-DD in the main app.
                     scheduleId = classId.replace('virtual_', '');
                     dateStr = new Date().toISOString().split('T')[0];
                 } else {
-                    // ID format: scheduleId_YYYY-MM-DD
                     const parts = classId.split('_');
-                    // Last part is date, first parts are scheduleId (in case scheduleId has underscores? UUIDs don't)
                     dateStr = parts.pop() || '';
                     scheduleId = parts.join('_');
                 }
@@ -119,7 +453,6 @@ export default function WorkoutContentScreen() {
                     throw new Error('Invalid class ID format');
                 }
 
-                // fetch schedule to get time/details for creation
                 const { data: schedule, error: schedError } = await supabase
                     .from('class_schedules')
                     .select('*')
@@ -128,12 +461,9 @@ export default function WorkoutContentScreen() {
 
                 if (schedError || !schedule) throw new Error('Schedule not found');
 
-                // Construct full timestamp
-                // start_time is "HH:MM:SS" or "HH:MM"
                 const classDateTime = new Date(`${dateStr}T${schedule.start_time}`);
 
-                // Check if class exists
-                const { data: existingClass, error: findError } = await supabase
+                const { data: existingClass } = await supabase
                     .from('classes')
                     .select('id')
                     .eq('schedule_id', scheduleId)
@@ -143,12 +473,11 @@ export default function WorkoutContentScreen() {
                 if (existingClass) {
                     actualClassId = existingClass.id;
                 } else {
-                    // Create Class
                     const { data: newClass, error: createError } = await supabase
                         .from('classes')
                         .insert({
                             name: schedule.name,
-                            name_hebrew: schedule.name, // or localized if available
+                            name_hebrew: schedule.name,
                             coach_name: schedule.coach_name,
                             class_date: classDateTime.toISOString(),
                             duration_minutes: schedule.duration_minutes,
@@ -156,10 +485,10 @@ export default function WorkoutContentScreen() {
                             current_participants: 0,
                             required_subscription_level: schedule.required_subscription_level || 1,
                             location: schedule.location,
-                            location_hebrew: schedule.location, // or localized
+                            location_hebrew: schedule.location,
                             class_type: 'general',
                             schedule_id: scheduleId,
-                            workout_data: sections // Save workout data immediately on creation
+                            workout_data: sections
                         })
                         .select('id')
                         .single();
@@ -167,14 +496,12 @@ export default function WorkoutContentScreen() {
                     if (createError) throw createError;
                     actualClassId = newClass.id;
 
-                    // Note: We don't need to run the update below since we inserted it
                     Alert.alert('הצלחה', 'תוכנית האימון נשמרה בהצלחה');
                     router.back();
                     return;
                 }
             }
 
-            // Update existing class (UUID)
             const { error } = await supabase
                 .from('classes')
                 .update({ workout_data: sections })
@@ -221,6 +548,39 @@ export default function WorkoutContentScreen() {
         setSections(sections.map(s => s.id === sectionId ? { ...s, title } : s));
     };
 
+    const updateSectionMethod = (
+        sectionId: string,
+        method: WorkoutMethodFromDB | null,
+        customName?: string
+    ) => {
+        setSections(sections.map(s => {
+            if (s.id !== sectionId) return s;
+            if (method) {
+                return {
+                    ...s,
+                    workoutMethodId: method.id,
+                    workoutMethodName: method.name,
+                    workoutMethodDescription: method.description || undefined,
+                };
+            }
+            if (customName !== undefined) {
+                return {
+                    ...s,
+                    workoutMethodId: undefined,
+                    workoutMethodName: customName,
+                    workoutMethodDescription: undefined,
+                };
+            }
+            return {
+                ...s,
+                workoutMethodId: undefined,
+                workoutMethodName: undefined,
+                workoutMethodDescription: undefined,
+            };
+        }));
+    };
+
+    // --- Exercise Actions ---
     const addExercise = (sectionId: string) => {
         setSections(sections.map(s => {
             if (s.id === sectionId) {
@@ -249,18 +609,77 @@ export default function WorkoutContentScreen() {
         }));
     };
 
-    const updateExercise = (sectionId: string, exerciseId: string, field: keyof WorkoutExercise, value: string) => {
+    const updateExerciseField = (sectionId: string, exerciseId: string, field: 'name' | 'repsOrTime', value: string) => {
         setSections(sections.map(s => {
             if (s.id === sectionId) {
                 return {
                     ...s,
-                    exercises: s.exercises.map(e => e.id === exerciseId ? { ...e, [field]: value } : e)
+                    exercises: s.exercises.map(e => {
+                        if (e.id !== exerciseId) return e;
+                        const updated = { ...e, [field]: value };
+                        // If user edits the name after selecting a DB exercise, revert to custom
+                        if (field === 'name' && e.exerciseDbId) {
+                            updated.exerciseDbId = undefined;
+                            updated.equipment = undefined;
+                            updated.equipmentGifs = undefined;
+                            updated.selectedEquipment = undefined;
+                        }
+                        return updated;
+                    })
                 };
             }
             return s;
         }));
     };
 
+    const handleSelectExercise = (sectionId: string, exerciseId: string, dbExercise: ExerciseFromDB) => {
+        setSections(sections.map(s => {
+            if (s.id !== sectionId) return s;
+            return {
+                ...s,
+                exercises: s.exercises.map(e => {
+                    if (e.id !== exerciseId) return e;
+                    const pick = (() => {
+                        const withGif = dbExercise.equipment?.find(
+                            eq => dbExercise.equipment_gifs?.[eq]
+                        );
+                        return withGif || dbExercise.equipment?.[0] || null;
+                    })();
+                    return {
+                        ...e,
+                        name: dbExercise.name,
+                        exerciseDbId: dbExercise.id,
+                        equipment: dbExercise.equipment,
+                        equipmentGifs: dbExercise.equipment_gifs,
+                        selectedEquipment: pick ? [pick] : [],
+                        assignedGifUrl: pick ? (dbExercise.equipment_gifs?.[pick] || null) : null,
+                    };
+                }),
+            };
+        }));
+        setActiveAutocompleteId(null);
+    };
+
+    const toggleExerciseEquipment = (sectionId: string, exerciseId: string, equipmentId: string) => {
+        setSections(sections.map(s => {
+            if (s.id !== sectionId) return s;
+            return {
+                ...s,
+                exercises: s.exercises.map(e => {
+                    if (e.id !== exerciseId) return e;
+                    // Single-select: tap selects this one, tap again deselects
+                    const isAlreadySelected = e.selectedEquipment?.includes(equipmentId);
+                    return {
+                        ...e,
+                        selectedEquipment: isAlreadySelected ? [] : [equipmentId],
+                        assignedGifUrl: isAlreadySelected ? null : (e.equipmentGifs?.[equipmentId] || null),
+                    };
+                }),
+            };
+        }));
+    };
+
+    // --- Render ---
     if (loading) {
         return (
             <View style={[styles.container, styles.loadingContainer]}>
@@ -297,9 +716,13 @@ export default function WorkoutContentScreen() {
                     showsVerticalScrollIndicator={false}
                     enableOnAndroid
                     extraScrollHeight={20}
+                    keyboardShouldPersistTaps="handled"
                 >
-                    {sections.map((section, index) => (
-                        <View key={section.id} style={styles.sectionCard}>
+                    {sections.map((section, sectionIndex) => (
+                        <View
+                            key={section.id}
+                            style={[styles.sectionCard, { zIndex: sections.length - sectionIndex }]}
+                        >
                             {/* Section Header */}
                             <View style={styles.sectionHeader}>
                                 <TouchableOpacity
@@ -318,37 +741,64 @@ export default function WorkoutContentScreen() {
                                 />
                             </View>
 
+                            {/* Workout Method Picker */}
+                            <WorkoutMethodPicker
+                                currentMethodName={section.workoutMethodName}
+                                currentMethodDescription={section.workoutMethodDescription}
+                                methods={workoutMethods}
+                                onSelectMethod={(method) => updateSectionMethod(section.id, method)}
+                                onCustomMethod={(name) => updateSectionMethod(section.id, null, name)}
+                                onClear={() => updateSectionMethod(section.id, null)}
+                            />
+
                             {/* Exercises */}
                             <View style={styles.exercisesList}>
-                                {section.exercises.map((exercise) => (
-                                    <View key={exercise.id} style={styles.exerciseRow}>
-                                        {/* Input B (Left): Time/Reps - Flex 1 */}
-                                        <TextInput
-                                            style={[styles.input, styles.timeInput]}
-                                            placeholder="זמן/חזרות"
-                                            placeholderTextColor="#9CA3AF"
-                                            value={exercise.repsOrTime}
-                                            onChangeText={(text) => updateExercise(section.id, exercise.id, 'repsOrTime', text)}
-                                            textAlign="right"
-                                        />
+                                {section.exercises.map((exercise, exIndex) => (
+                                    <View
+                                        key={exercise.id}
+                                        style={{ zIndex: section.exercises.length - exIndex }}
+                                    >
+                                        {/* Main Exercise Row */}
+                                        <View style={styles.exerciseRow}>
+                                            {/* Time/Reps (Left) */}
+                                            <TextInput
+                                                style={[styles.input, styles.timeInput]}
+                                                placeholder="זמן/חזרות"
+                                                placeholderTextColor="#9CA3AF"
+                                                value={exercise.repsOrTime}
+                                                onChangeText={(text) => updateExerciseField(section.id, exercise.id, 'repsOrTime', text)}
+                                                textAlign="right"
+                                            />
 
-                                        {/* Input A (Right): Name - Flex 2 */}
-                                        <TextInput
-                                            style={[styles.input, styles.nameInput]}
-                                            placeholder="שם התרגיל"
-                                            placeholderTextColor="#9CA3AF"
-                                            value={exercise.name}
-                                            onChangeText={(text) => updateExercise(section.id, exercise.id, 'name', text)}
-                                            textAlign="right"
-                                        />
+                                            {/* Exercise Name with Autocomplete (Right) */}
+                                            <ExerciseAutocomplete
+                                                exerciseRowId={exercise.id}
+                                                value={exercise.name}
+                                                allExercises={allExercises}
+                                                activeAutocompleteId={activeAutocompleteId}
+                                                onFocus={() => setActiveAutocompleteId(exercise.id)}
+                                                onChangeText={(text) => updateExerciseField(section.id, exercise.id, 'name', text)}
+                                                onSelectExercise={(dbExercise) => handleSelectExercise(section.id, exercise.id, dbExercise)}
+                                            />
 
-                                        {/* Delete Exercise Button */}
-                                        <TouchableOpacity
-                                            onPress={() => removeExercise(section.id, exercise.id)}
-                                            style={styles.deleteExerciseBtn}
-                                        >
-                                            <Icon name="x" size={16} color="#EF4444" strokeWidth={2.5} />
-                                        </TouchableOpacity>
+                                            {/* Delete Exercise */}
+                                            <TouchableOpacity
+                                                onPress={() => removeExercise(section.id, exercise.id)}
+                                                style={styles.deleteExerciseBtn}
+                                            >
+                                                <Icon name="x" size={16} color="#EF4444" strokeWidth={2.5} />
+                                            </TouchableOpacity>
+                                        </View>
+
+                                        {/* Equipment Icons (only for DB exercises) */}
+                                        {exercise.exerciseDbId && exercise.equipment && exercise.equipment.length > 0 && (
+                                            <ExerciseEquipmentSelector
+                                                availableEquipment={exercise.equipment}
+                                                selectedEquipment={exercise.selectedEquipment || []}
+                                                equipmentGifs={exercise.equipmentGifs}
+                                                onToggle={(eqId) => toggleExerciseEquipment(section.id, exercise.id, eqId)}
+                                            />
+                                        )}
                                     </View>
                                 ))}
                             </View>
@@ -388,6 +838,9 @@ export default function WorkoutContentScreen() {
     );
 }
 
+// ============================
+// Styles
+// ============================
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -434,7 +887,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: 16,
+        marginBottom: 12,
         gap: 12,
     },
     sectionTitleInput: {
@@ -448,6 +901,117 @@ const styles = StyleSheet.create({
     },
     deleteSectionBtn: {
         padding: 4,
+    },
+
+    // Workout Method Picker
+    methodPickerContainer: {
+        marginBottom: 14,
+    },
+    methodPickerButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#F3F4F6',
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+    },
+    methodPickerText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#374151',
+        textAlign: 'right',
+        flex: 1,
+    },
+    methodPickerPlaceholder: {
+        color: '#9CA3AF',
+        fontWeight: '400',
+    },
+    methodDescription: {
+        fontSize: 12,
+        color: '#6B7280',
+        textAlign: 'right',
+        marginTop: 6,
+        paddingHorizontal: 4,
+        lineHeight: 18,
+    },
+
+    // Method Modal
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    modalContent: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
+        padding: 20,
+        width: '100%',
+        maxWidth: 400,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#111827',
+        textAlign: 'center',
+        marginBottom: 16,
+    },
+    methodOption: {
+        paddingVertical: 14,
+        paddingHorizontal: 4,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+    },
+    methodOptionName: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#111827',
+        textAlign: 'right',
+    },
+    methodOptionStandsFor: {
+        fontSize: 13,
+        color: '#6B7280',
+        textAlign: 'right',
+        marginTop: 2,
+    },
+    methodOptionDesc: {
+        fontSize: 12,
+        color: '#9CA3AF',
+        textAlign: 'right',
+        marginTop: 4,
+        lineHeight: 17,
+    },
+    customMethodInput: {
+        backgroundColor: '#F3F4F6',
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        height: 44,
+        fontSize: 15,
+        color: '#111827',
+        textAlign: 'right',
+    },
+    customMethodConfirm: {
+        backgroundColor: Colors.primary,
+        borderRadius: 10,
+        paddingVertical: 10,
+        alignItems: 'center',
+    },
+    customMethodConfirmText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#FFFFFF',
+    },
+    modalCloseBtn: {
+        marginTop: 12,
+        paddingVertical: 12,
+        alignItems: 'center',
+    },
+    modalCloseBtnText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#9CA3AF',
     },
 
     // Exercises
@@ -479,7 +1043,75 @@ const styles = StyleSheet.create({
         height: 24,
         alignItems: 'center',
         justifyContent: 'center',
-        // marginLeft: -4, 
+    },
+
+    // Autocomplete
+    autocompleteWrapper: {
+        flex: 2,
+        position: 'relative',
+    },
+    suggestionsDropdown: {
+        position: 'absolute',
+        top: 52,
+        left: 0,
+        right: 0,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 8,
+        zIndex: 1000,
+        overflow: 'hidden',
+    },
+    suggestionItem: {
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+    },
+    suggestionName: {
+        fontSize: 16,
+        fontWeight: '900',
+        color: '#111827',
+        textAlign: 'left',
+    },
+    suggestionNameHe: {
+        fontSize: 13,
+        color: '#6B7280',
+        textAlign: 'left',
+        marginTop: 2,
+    },
+    suggestionEquipmentRow: {
+        flexDirection: 'row',
+        gap: 6,
+        marginTop: 4,
+        justifyContent: 'flex-start',
+    },
+    suggestionEquipmentIcon: {
+        width: 21,
+        height: 21,
+        opacity: 0.8,
+    },
+
+    // Equipment Row
+    equipmentRow: {
+        flexDirection: 'row',
+        gap: 10,
+        paddingVertical: 6,
+        paddingHorizontal: 4,
+        marginTop: 4,
+        justifyContent: 'flex-end',
+    },
+    equipmentIconBtn: {
+        padding: 2,
+    },
+    equipmentIconSmall: {
+        width: 30,
+        height: 30,
     },
 
     addExerciseBtn: {
@@ -487,9 +1119,9 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
     },
     addExerciseText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: Colors.primary, // Brand Blue/Gray ? using primary which is usually pink/red in this app, but prompt said "Brand Blue/Gray". I will use primary for now or similar.
+        fontSize: 16,
+        fontWeight: '900',
+        color: Colors.primary,
     },
 
     // Global Buttons
@@ -507,8 +1139,8 @@ const styles = StyleSheet.create({
     },
     addSectionText: {
         fontSize: 16,
-        fontWeight: '600',
-        color: Colors.primary,
+        fontWeight: '900',
+        color: Colors.text,
     },
 
     // Footer
@@ -524,7 +1156,7 @@ const styles = StyleSheet.create({
         borderTopColor: '#E5E7EB',
     },
     saveButton: {
-        backgroundColor: '#EF4444', // Heavy rounded corners, Brand Color (Pink/Red)
+        backgroundColor: Colors.primary,
         borderRadius: 16,
         paddingVertical: 16,
         alignItems: 'center',
@@ -535,6 +1167,6 @@ const styles = StyleSheet.create({
     saveButtonText: {
         fontSize: 17,
         fontWeight: '700',
-        color: '#FFFFFF',
+        color: '#ffffffff',
     },
 });

@@ -23,7 +23,7 @@ import { SymbolView } from 'expo-symbols';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
 import { supabase } from '@/constants/supabase';
-import { useGreenInvoice } from '@/app/hooks/useGreenInvoice';
+import { useGreenInvoice } from '@/hooks/useGreenInvoice';
 import { PaymentType } from '@/types/green-invoice';
 import * as Haptics from 'expo-haptics';
 import { Tag, ChevronDown, Check } from 'lucide-react-native';

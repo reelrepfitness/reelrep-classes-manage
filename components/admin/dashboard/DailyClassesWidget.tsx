@@ -1,7 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import Colors from '@/constants/colors';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Platform } from 'react-native';
 
 type ClassItem = {
     id: string;
@@ -14,159 +12,189 @@ type ClassItem = {
 
 type DailyClassesWidgetProps = {
     classes: ClassItem[];
+    onPressClass?: (id: string) => void;
 };
 
-export default function DailyClassesWidget({ classes }: DailyClassesWidgetProps) {
+export default function DailyClassesWidget({ classes, onPressClass }: DailyClassesWidgetProps) {
+    const todayLabel = new Date().toLocaleDateString('he-IL', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'short',
+    });
+
     const renderCard = ({ item }: { item: ClassItem }) => {
-        const occupancy = item.current / item.max;
-        const barColor = occupancy >= 1 ? '#10B981' : occupancy > 0.5 ? '#F59E0B' : '#3B82F6';
+        const occupancy = item.max > 0 ? item.current / item.max : 0;
+        const fillPercent = Math.min(occupancy * 100, 100);
+        const barColor = fillPercent > 75 ? '#4ADE80' : fillPercent > 50 ? '#FACC15' : fillPercent > 25 ? '#FB923C' : '#F87171';
 
         return (
-            <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                    <Text style={styles.time}>{item.time}</Text>
-                    <View style={styles.badge}>
-                        <Text style={styles.badgeText}>{item.coach}</Text>
-                    </View>
+            <TouchableOpacity
+                style={styles.card}
+                activeOpacity={0.85}
+                onPress={() => onPressClass?.(item.id)}
+            >
+                {/* Vertical time/progress badge - left side */}
+                <View style={styles.timeBadgeStrip}>
+                    {/* Progress fill from bottom */}
+                    <View
+                        style={[
+                            styles.progressFill,
+                            {
+                                height: `${fillPercent}%`,
+                                backgroundColor: barColor,
+                            },
+                        ]}
+                    />
+                    {/* Time text overlay */}
+                    <Text style={styles.timeBadgeText}>{item.time}</Text>
                 </View>
 
-                <Text style={styles.className} numberOfLines={1}>{item.name}</Text>
+                {/* Card content - right side */}
+                <View style={styles.cardContent}>
+                    {/* Class name - top right */}
+                    <Text style={styles.className} numberOfLines={2}>{item.name}</Text>
 
-                <View style={styles.footer}>
-                    <View style={styles.progressContainer}>
-                        <Text style={styles.occupancyText}>{item.current}/{item.max}</Text>
-                        <View style={styles.progressBarBg}>
-                            <View style={[styles.progressBarFill, { width: `${Math.min(occupancy * 100, 100)}%`, backgroundColor: barColor }]} />
-                        </View>
-                    </View>
+                    {/* Spacer */}
+                    <View style={{ flex: 1 }} />
+
+                    {/* Capacity - bottom right */}
+                    <Text style={styles.occupancyText}>
+                        <Text style={{ color: barColor }}>{item.current}</Text>
+                        <Text style={styles.maxText}>/{item.max}</Text>
+                    </Text>
                 </View>
-            </View>
+            </TouchableOpacity>
         );
     };
 
     return (
         <View style={styles.container}>
             <View style={styles.headerRow}>
-                <Text style={styles.sectionTitle}>הסטודיו היום</Text>
-                <Text style={styles.dateText}>יום ג׳, 24 אוק</Text>
+                <Text style={styles.sectionTitle}>השיעורים היום</Text>
+                <Text style={styles.dateText}>{todayLabel}</Text>
             </View>
 
-            <FlatList
-                data={classes}
-                renderItem={renderCard}
-                keyExtractor={item => item.id}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.listContent}
-                inverted={Platform.OS === 'android'} // Handle RTL inversion if needed, usually 'inverted' flips direction. 
-            // Wait, in RTL environment (I18nManager.isRTL=true), horizontal lists start from RIGHT automatically.
-            // We should NOT blindly invert unless we know it's broken.
-            // Assuming standard RTL behavior.
-            />
+            {classes.length === 0 ? (
+                <Text style={styles.emptyText}>אין שיעורים היום</Text>
+            ) : (
+                <FlatList
+                    data={classes}
+                    renderItem={renderCard}
+                    keyExtractor={item => item.id}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.listContent}
+                />
+            )}
         </View>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
-        marginBottom: 24,
+        marginBottom: 8,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        padding: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 1,
     },
     headerRow: {
-        flexDirection: 'row',
+        flexDirection: 'column',
         justifyContent: 'space-between',
-        alignItems: 'baseline',
+        alignItems: 'center',
         marginBottom: 12,
         paddingHorizontal: 4,
     },
     sectionTitle: {
-        fontSize: 18,
-        fontWeight: '700',
+        fontSize: 20,
+        fontWeight: '900',
         color: '#111827',
     },
     dateText: {
         fontSize: 14,
-        color: '#6B7280',
-        fontWeight: '500',
+        color: '#636872ff',
+        fontWeight: '600',
+    },
+    emptyText: {
+        fontSize: 14,
+        color: '#9CA3AF',
+        textAlign: 'center',
+        paddingVertical: 20,
     },
     listContent: {
         paddingHorizontal: 4,
-        paddingBottom: 8, // for shadow
+        paddingBottom: 8,
         gap: 12,
-        // RTL padding fix if needed:
-        // paddingRight: 4, paddingLeft: 20? 
-        // We'll trust React Native's auto RTL.
     },
     card: {
-        width: 160,
-        height: 120,
+        width: 120,
+        minHeight: 110,
         backgroundColor: '#FFFFFF',
-        borderRadius: 20,
-        padding: 16,
-        justifyContent: 'space-between',
-        marginRight: 12, // Gap
+        borderRadius: 16,
+        padding: 10,
+        flexDirection: 'row',
+        alignItems: 'stretch',
+        gap: 0,
         ...Platform.select({
             ios: {
-                shadowColor: '#000',
+                shadowColor: '#010101ff',
                 shadowOffset: { width: 0, height: 4 },
                 shadowOpacity: 0.08,
-                shadowRadius: 8,
+                shadowRadius: 2,
             },
             android: {
-                elevation: 3,
+                elevation: 4,
             },
         }),
     },
-    cardHeader: {
-        flexDirection: 'row-reverse', // Time on Left, Badge on Right (in RTL terms: Start=Right)
-        // Wait. RTL means Start is RIGHT. 
-        // If we want Time Left and Badge Right:
-        // Flex-Row (Right to Left): [Item 1] [Item 2].
-        // Justify-Between.
-        justifyContent: 'space-between',
+    timeBadgeStrip: {
+        backgroundColor: '#f4f4f4ff',
+        borderRadius: 10,
+        width: 28,
         alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 8,
+        overflow: 'hidden',
+        position: 'relative',
     },
-    time: {
-        fontSize: 14,
-        fontWeight: '700',
+    progressFill: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        borderRadius: 10,
+    },
+    timeBadgeText: {
+        fontSize: 13,
+        fontWeight: '900',
         color: '#111827',
+        transform: [{ rotate: '90deg' }],
+        width: 60,
+        textAlign: 'center',
+        zIndex: 1,
     },
-    badge: {
-        backgroundColor: '#F3F4F6',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 6,
-    },
-    badgeText: {
-        fontSize: 10,
-        fontWeight: '600',
-        color: '#4B5563',
+    cardContent: {
+        flex: 1,
+        justifyContent: 'flex-start',
     },
     className: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#1F2937',
-        textAlign: 'right', // Align text right
-    },
-    footer: {
-        // 
-    },
-    progressContainer: {
-        gap: 4,
+        fontSize: 13,
+        fontWeight: '800',
+        color: '#111827',
+        textAlign: 'right',
     },
     occupancyText: {
-        fontSize: 12,
-        color: '#6B7280',
+        fontSize: 20,
+        fontWeight: '900',
         textAlign: 'right',
-        marginBottom: 2,
     },
-    progressBarBg: {
-        height: 6,
-        backgroundColor: '#F3F4F6',
-        borderRadius: 3,
-        overflow: 'hidden',
-    },
-    progressBarFill: {
-        height: '100%',
-        borderRadius: 3,
+    maxText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#B0B5BC',
     },
 });

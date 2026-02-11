@@ -16,6 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAchievements } from '@/contexts/AchievementsContext';
 import { UpcomingWorkoutsWidget } from '@/components/home/UpcomingWorkoutsWidget';
 import { HomeHeader } from '@/components/home/HomeHeader';
+import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
 import { supabase } from '@/constants/supabase';
 import { Icon } from '@/components/ui/icon';
@@ -188,50 +189,57 @@ export default function HomeScreen() {
         {/* Divider after upcoming classes */}
         <View style={styles.divider} />
 
-        {/* 3. Action Cards Row (Achievements, Store, Performance Log) */}
+        {/* 3. Action Cards Row: Performance Log (big) + stacked Achievements & Store */}
         <View style={styles.actionCardsRow}>
           <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => router.push('/achievements' as any)}
-          >
-            <TrophyIcon size={36} />
-            <Text style={styles.actionCardLabel}>הישגים</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => router.push('/shop' as any)}
-          >
-            <ShoppingCartIcon size={36} />
-            <Text style={styles.actionCardLabel}>חנות</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.actionCard}
+            style={styles.actionCardLarge}
             onPress={() => router.push('/performance' as any)}
           >
-            <DumbbellIcon size={36} />
-            <Text style={styles.actionCardLabel}>יומן ביצועים</Text>
+            <DumbbellIcon size={44} />
+            <Text style={styles.actionCardLabelLarge}>יומן ביצועים</Text>
           </TouchableOpacity>
+
+          <View style={styles.actionCardsColumn}>
+            <TouchableOpacity
+              style={styles.actionCardSmall}
+              onPress={() => router.push('/achievements' as any)}
+            >
+              <TrophyIcon size={28} />
+              <Text style={styles.actionCardLabel}>הישגים</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCardSmall}
+              onPress={() => router.push('/shop' as any)}
+            >
+              <ShoppingCartIcon size={28} />
+              <Text style={styles.actionCardLabel}>חנות</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* 4. Split Row: Weekly Goal & Plan Card */}
         <View style={styles.splitRow}>
           {/* Weekly Goal (Left) */}
-          <View style={styles.weeklyCard}>
+          <LinearGradient
+            colors={['#1a1a2e', '#0f0f0f']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.weeklyCard}
+          >
             <View style={styles.weeklyHeader}>
-              <Text style={styles.weeklyLabel}>אימונים השבוע</Text>
-              <Icon name="fire" size={16} color="#F59E0B" />
+              <Text style={[styles.weeklyLabel, { color: '#E5E7EB' }]}>אימונים השבוע</Text>
+              <Icon name="fire" size={20} color="#F59E0B" />
             </View>
             <View style={styles.weeklyContent}>
-              <Text style={styles.weeklyValue}>{workoutsThisWeek}</Text>
-              <Text style={styles.weeklySubtext}>{motivationText}</Text>
+              <Text style={[styles.weeklyValue, { color: '#FFFFFF' }]}>{workoutsThisWeek}</Text>
+              <Text style={[styles.weeklySubtext, { color: '#9CA3AF' }]}>{motivationText}</Text>
             </View>
-            <View style={styles.lastWeekRow}>
-              <Text style={styles.lastWeekLabel}>שבוע שעבר:</Text>
-              <Text style={styles.lastWeekValue}>{workoutsLastWeek}</Text>
+            <View style={[styles.lastWeekRow, { borderTopColor: 'rgba(255,255,255,0.1)' }]}>
+              <Text style={[styles.lastWeekLabel, { color: 'rgba(255,255,255,0.4)' }]}>שבוע שעבר:</Text>
+              <Text style={[styles.lastWeekValue, { color: 'rgba(255,255,255,0.6)' }]}>{workoutsLastWeek}</Text>
             </View>
-          </View>
+          </LinearGradient>
 
           {/* Plan Card (Right) */}
           {(() => {
@@ -240,8 +248,7 @@ export default function HomeScreen() {
             const isTicket = sub?.isTicket;
             const totalSessions = sub?.totalSessions || 0;
             const sessionsRemaining = sub?.sessionsRemaining || 0;
-            const sessionsUsed = totalSessions - sessionsRemaining;
-            const progressPercent = totalSessions > 0 ? (sessionsUsed / totalSessions) * 100 : 0;
+            const progressPercent = totalSessions > 0 ? (sessionsRemaining / totalSessions) * 100 : 0;
 
             const getPlanImage = () => {
               if (!sub?.planName) return null;
@@ -260,42 +267,44 @@ export default function HomeScreen() {
                 style={styles.planCardCompact}
                 onPress={() => router.push(hasActiveSubscription ? '/subscription-management' as any : '/shop' as any)}
               >
-                {/* Plan Header - Centered */}
-                {planImage ? (
-                  <Image source={planImage} style={styles.planImageSmall} resizeMode="contain" />
-                ) : (
-                  <Text style={styles.planNameSmall}>{sub?.planName || 'אין מנוי'}</Text>
-                )}
-
-                {/* Progress Ring or Infinity for Unlimited */}
-                {hasActiveSubscription && isTicket ? (
-                  <ProgressRing
-                    progress={progressPercent}
-                    size={70}
-                    strokeWidth={7}
-                    color={Colors.primary}
-                    backgroundColor="#E5E7EB"
-                  >
-                    <Text style={styles.ringValue}>{sessionsRemaining}</Text>
-                    <Text style={styles.ringLabel}>נותרו</Text>
-                  </ProgressRing>
-                ) : hasActiveSubscription && !isTicket ? (
-                  <View style={styles.unlimitedRing}>
-                    <Icon name="infinity" size={28} color={Colors.primary} />
-                  </View>
-                ) : (
-                  <View style={styles.noSubRing}>
-                    <Icon name="shopping-cart" size={24} color="#9CA3AF" />
+                {/* Plan Image Badge - Left side vertical */}
+                {planImage && (
+                  <View style={styles.planBadgeStrip}>
+                    <Image source={planImage} style={styles.planBadgeImage} resizeMode="contain" />
                   </View>
                 )}
 
-                {/* Expiry */}
-                <Text style={styles.expirySmall}>
-                  {hasActiveSubscription
-                    ? `בתוקף עד ${formatExpiryDate(sub?.endDate)}`
-                    : 'לחנות'
-                  }
-                </Text>
+                {/* Ring + Expiry content */}
+                <View style={styles.planCardContent}>
+                  {/* Progress Ring - Centered */}
+                  {hasActiveSubscription && isTicket ? (
+                    <ProgressRing
+                      progress={progressPercent}
+                      size={100}
+                      strokeWidth={9}
+                      color={Colors.primary}
+                      backgroundColor="#E5E7EB"
+                    >
+                      <Text style={styles.ringValue}>{sessionsRemaining}<Text style={styles.ringTotal}>/{totalSessions}</Text></Text>
+                    </ProgressRing>
+                  ) : hasActiveSubscription && !isTicket ? (
+                    <View style={[styles.unlimitedRing, { width: 100, height: 100, borderRadius: 50 }]}>
+                      <Icon name="infinity" size={36} color={Colors.primary} />
+                    </View>
+                  ) : (
+                    <View style={[styles.noSubRing, { width: 100, height: 100, borderRadius: 50 }]}>
+                      <Icon name="shopping-cart" size={28} color="#9CA3AF" />
+                    </View>
+                  )}
+
+                  {/* Expiry */}
+                  <Text style={styles.expirySmall}>
+                    {hasActiveSubscription
+                      ? `בתוקף עד ${formatExpiryDate(sub?.endDate)}`
+                      : 'לחנות'
+                    }
+                  </Text>
+                </View>
               </TouchableOpacity>
             );
           })()}
@@ -606,15 +615,15 @@ const styles = StyleSheet.create({
   },
   weeklyCard: {
     flex: 1,
-    backgroundColor: '#ffffff',
     borderRadius: 20,
     padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 3,
     justifyContent: 'space-between',
+    overflow: 'hidden',
   },
   weeklyHeader: {
     flexDirection: 'row',
@@ -624,7 +633,7 @@ const styles = StyleSheet.create({
   },
   weeklyLabel: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '800',
     color: '#4B5563',
   },
   weeklyContent: {
@@ -652,30 +661,58 @@ const styles = StyleSheet.create({
     borderTopColor: '#F3F4F6',
   },
   lastWeekLabel: {
-    fontSize: 11,
-    color: '#9CA3AF',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#bdbdbdff',
   },
   lastWeekValue: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6B7280',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#bcbcbcff',
   },
 
   // Action Cards Row
   actionCardsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     paddingHorizontal: 20,
     gap: 12,
     marginBottom: 16,
   },
-  actionCard: {
+  actionCardLarge: {
+    flex: 6,
+    backgroundColor: '#ffffffff',
+    borderRadius: 16,
+    paddingVertical: 20,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    minHeight: 130,
+    shadowColor: '#000000ff',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  actionCardLabelLarge: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#000000ff',
+    textAlign: 'center',
+  },
+  actionCardsColumn: {
+    flex: 4,
+    gap: 12,
+  },
+  actionCardSmall: {
     flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -684,9 +721,9 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   actionCardLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#374151',
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#000000ff',
     textAlign: 'center',
   },
 
@@ -695,36 +732,45 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: 16,
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'stretch',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
     shadowRadius: 12,
     elevation: 3,
+    overflow: 'hidden',
   },
-  planImageSmall: {
-    width: 90,
-    height: 20,
-    marginBottom: 8,
+  planBadgeStrip: {
+    backgroundColor: '#e7e7e8ff',
+    borderRadius: 10,
+    width: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+    overflow: 'hidden',
   },
-  planNameSmall: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
+  planBadgeImage: {
+    width: 80,
+    height: 22,
+    transform: [{ rotate: '90deg' }],
+  },
+  planCardContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
   },
   ringValue: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '800',
     color: '#111827',
   },
-  ringLabel: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#6B7280',
-    marginTop: -2,
+  ringTotal: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#9CA3AF',
   },
   unlimitedRing: {
     width: 70,
@@ -743,8 +789,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   expirySmall: {
-    fontSize: 11,
-    color: '#9CA3AF',
+    fontSize: 13,
+    color: '#76797eff',
+    fontWeight: '600',
     marginTop: 8,
   },
 

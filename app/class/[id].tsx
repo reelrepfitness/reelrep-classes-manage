@@ -879,7 +879,7 @@ export default function ClassDetailsScreen() {
 
         const performCancellation = async () => {
             try {
-                await cancelBooking(booking.id);
+                await cancelBooking(booking.id, isLateCancellation);
                 fetchParticipants();
                 // No success dialog needed - user will see they're no longer in the slot
             } catch (error) {

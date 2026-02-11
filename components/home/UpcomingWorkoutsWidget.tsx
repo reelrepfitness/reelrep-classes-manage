@@ -738,15 +738,15 @@ const styles = StyleSheet.create({
         gap: 16,
     },
     scheduleHeader: {
-        flexDirection: 'row-reverse',
+        flexDirection: 'column-reverse',
         alignItems: 'center',
         gap: 8,
         marginTop: 8,
         marginBottom: 8,
     },
     scheduleTitle: {
-        fontSize: 18,
-        fontWeight: '700',
+        fontSize: 20,
+        fontWeight: '900',
         color: '#111827',
     },
     scheduleScroll: {
@@ -770,18 +770,19 @@ const styles = StyleSheet.create({
         paddingVertical: 6,
         paddingHorizontal: 12,
         borderRadius: 8,
-        alignSelf: 'flex-end',
+        alignSelf: 'center',
     },
     scheduleTime: {
         fontSize: 16,
         fontWeight: '800',
+        textAlign: 'center',
         color: '#FFFFFF',
     },
     scheduleName: {
-        fontSize: 16,
-        fontWeight: '700',
+        fontSize: 18,
+        fontWeight: '900',
         color: '#111827',
-        textAlign: 'right',
+        textAlign: 'center',
         minHeight: 44,
     },
     scheduleTrainer: {
@@ -796,7 +797,7 @@ const styles = StyleSheet.create({
     },
     capacityBarBg: {
         flex: 1,
-        height: 6,
+        height: 10,
         backgroundColor: '#E5E7EB',
         borderRadius: 3,
         overflow: 'hidden',
@@ -806,8 +807,8 @@ const styles = StyleSheet.create({
         borderRadius: 3,
     },
     capacityText: {
-        fontSize: 12,
-        fontWeight: '600',
+        fontSize: 13,
+        fontWeight: '800',
         color: '#6B7280',
     },
     bookButton: {
@@ -821,8 +822,8 @@ const styles = StyleSheet.create({
         backgroundColor: '#E5E7EB',
     },
     bookButtonText: {
-        fontSize: 14,
-        fontWeight: '700',
+        fontSize: 15,
+        fontWeight: '900',
         color: '#FFFFFF',
     },
     bookButtonTextDisabled: {

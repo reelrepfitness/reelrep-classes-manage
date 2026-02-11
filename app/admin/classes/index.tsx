@@ -278,7 +278,7 @@ export default function ClassesListScreen() {
                 </View>
 
                 <View style={styles.cardRight}>
-                    <ChevronRight size={20} color="#CBD5E1" />
+                    <ChevronLeft size={20} color="#CBD5E1" />
                 </View>
             </TouchableOpacity>
         );

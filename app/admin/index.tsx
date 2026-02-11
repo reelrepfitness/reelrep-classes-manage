@@ -4,8 +4,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DashboardStatsCarousel from '@/components/admin/dashboard/DashboardStatsCarousel';
-import LeadFunnelWidget from '@/components/admin/dashboard/LeadFunnelWidget';
-import DailyClassesWidget from '@/components/admin/dashboard/DailyClassesWidget';
 import { useAdminDashboardData } from '@/hooks/admin/useAdminDashboardData';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,7 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 export default function AdminDashboard() {
   const router = useRouter();
   const { signOut } = useAuth();
-  const { funnel, stats, todaysClasses, refresh } = useAdminDashboardData();
+  const { todaysClasses, refresh } = useAdminDashboardData();
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = React.useCallback(async () => {
@@ -42,14 +40,10 @@ export default function AdminDashboard() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
       >
-        {/* 1. New Horizontal Stats Carousel (Revenue, Urgent, Subscriptions) */}
-        <DashboardStatsCarousel />
-
-        {/* 2. Lead Funnel */}
-        <LeadFunnelWidget
-          newLeads={funnel.newLeads}
-          trials={funnel.trials}
-          conversionRate={funnel.conversionRate}
+        {/* Dashboard: Hero + Classes + Stats */}
+        <DashboardStatsCarousel
+          todaysClasses={todaysClasses}
+          onPressClass={(id) => router.push(`/admin/classes/${id}` as any)}
         />
 
         {/* Logout Button */}

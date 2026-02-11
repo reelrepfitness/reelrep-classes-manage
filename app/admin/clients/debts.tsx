@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, DollarSign } from 'lucide-react-native';
+import { ChevronRight, DollarSign } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/constants/supabase';
 import Colors from '@/constants/colors';
@@ -62,7 +62,7 @@ export default function DebtsScreen() {
         <View style={[styles.container, { paddingTop: insets.top }]}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <ChevronLeft size={24} color={Colors.text} />
+                    <ChevronRight size={24} color={Colors.text} />
                 </TouchableOpacity>
                 <View style={styles.headerContent}>
                     <Text style={styles.title}>חייבים</Text>
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
     },
     headerContent: {
         flex: 1,
-        alignItems: 'flex-end',
+        alignItems: 'flex-start',
     },
     title: {
         fontSize: 24,

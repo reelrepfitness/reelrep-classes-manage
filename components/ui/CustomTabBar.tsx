@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, I18nManager, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, I18nManager, Platform, Image } from 'react-native';
 import Animated, {
     useAnimatedStyle,
     withTiming,
@@ -14,7 +14,6 @@ import {
     Home,
     Calendar,
     ClipboardList,
-    Receipt,
     Bell
 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
@@ -31,7 +30,7 @@ const getIcon = (routeName: string, color: string, size: number) => {
         case 'classes':
             return <Calendar color={color} size={size} />;
         case 'register':
-            return <Receipt color={color} size={size} />;
+            return <Image source={require('@/assets/images/cash-register.png')} style={{ width: size, height: size, tintColor: color }} />;
         case 'notifications':
             return <Bell color={color} size={size} />;
         case 'admin':
@@ -169,7 +168,7 @@ export function CustomTabBar() {
     const filteredTabItems = TAB_ITEMS.filter(item => !item.adminOnly || isAdmin);
 
     return (
-        <View style={[styles.wrapper, { paddingBottom: insets.bottom + 10 }]}>
+        <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom - 10, 0) }]}>
             <View style={styles.cardContainer}>
                 {filteredTabItems.map((item) => (
                     <TabBadge
@@ -191,26 +190,22 @@ const styles = StyleSheet.create({
         bottom: 0,
         left: 0,
         right: 0,
-        alignItems: 'center',
-        backgroundColor: 'transparent',
+        backgroundColor: '#FFFFFF',
+        borderTopLeftRadius: 30,
+        borderTopRightRadius: 30,
         zIndex: 100,
-        pointerEvents: 'box-none',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        elevation: 8,
     },
     cardContainer: {
         flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#FFFFFF',
-        borderRadius: 999,
-        padding: 6,
-        gap: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 8,
-        borderWidth: 1,
-        borderColor: '#F3F4F6',
+        justifyContent: 'space-evenly',
+        paddingVertical: 6,
+        paddingHorizontal: 12,
     },
     badgeContainer: {
         flexDirection: 'row',

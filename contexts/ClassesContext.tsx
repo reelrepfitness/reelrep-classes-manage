@@ -347,57 +347,53 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
       attendedAt: null,
     };
 
-    // Decrement ticket sessions if user has an active ticket plan
-    if (!isAdmin) {
-      const { data: activeTicket, error: ticketError } = await supabase
-        .from('user_tickets')
-        .select('id, sessions_remaining')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .gt('sessions_remaining', 0)
-        .gt('expiry_date', new Date().toISOString())
-        .order('purchase_date', { ascending: false })
-        .limit(1)
-        .single();
+    // Decrement ticket sessions if user has an active ticket plan (runs for all users including admins)
+    const { data: activeTicket, error: ticketError } = await supabase
+      .from('user_tickets')
+      .select('id, sessions_remaining')
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .gt('sessions_remaining', 0)
+      .gt('expiry_date', new Date().toISOString())
+      .order('purchase_date', { ascending: false })
+      .limit(1)
+      .single();
 
-      if (ticketError) {
-        console.error('Error finding active ticket for decrement:', ticketError);
-      }
+    if (ticketError) {
+      console.log('No active ticket found to decrement (or user has unlimited plan):', ticketError.message);
+    }
 
-      if (activeTicket) {
-        // Try using RPC first (safer and handles status updates atomically)
-        const { data: rpcSuccess, error: rpcError } = await supabase
-          .rpc('use_ticket_session', { ticket_id: activeTicket.id });
+    if (activeTicket) {
+      // Try using RPC first (safer and handles status updates atomically)
+      const { data: rpcSuccess, error: rpcError } = await supabase
+        .rpc('use_ticket_session', { ticket_id: activeTicket.id });
 
-        if (rpcError || !rpcSuccess) {
-          console.log('RPC use_ticket_session failed or not found, falling back to manual update:', rpcError);
+      if (rpcError || !rpcSuccess) {
+        console.log('RPC use_ticket_session failed or not found, falling back to manual update:', rpcError);
 
-          // Fallback to manual update
-          const newRemaining = activeTicket.sessions_remaining - 1;
-          const newStatus = newRemaining <= 0 ? 'depleted' : 'active';
+        // Fallback to manual update
+        const newRemaining = activeTicket.sessions_remaining - 1;
+        const newStatus = newRemaining <= 0 ? 'depleted' : 'active';
 
-          const { error: updateError } = await supabase
-            .from('user_tickets')
-            .update({
-              sessions_remaining: newRemaining,
-              status: newStatus
-            })
-            .eq('id', activeTicket.id);
+        const { error: updateError } = await supabase
+          .from('user_tickets')
+          .update({
+            sessions_remaining: newRemaining,
+            status: newStatus
+          })
+          .eq('id', activeTicket.id);
 
-          if (updateError) {
-            console.error('Error decrementing ticket sessions manually:', updateError);
-          } else {
-            console.log('Ticket session decremented manually. Remaining:', newRemaining);
-          }
+        if (updateError) {
+          console.error('Error decrementing ticket sessions manually:', updateError);
         } else {
-          console.log('Ticket session decremented via RPC');
+          console.log('Ticket session decremented manually. Remaining:', newRemaining);
         }
-
-        // Refresh user data to update UI (home screen header, profile)
-        await refreshUser();
       } else {
-        console.log('No active ticket found to decrement (or user has unlimited plan)');
+        console.log('Ticket session decremented via RPC');
       }
+
+      // Refresh user data to update UI (home screen header, profile)
+      await refreshUser();
     }
 
     const updated = [...bookings, newBooking];
@@ -513,7 +509,7 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
     allBookingsQuery.refetch();
   }, [allBookingsQuery]);
 
-  const cancelBooking = useCallback(async (bookingId: string) => {
+  const cancelBooking = useCallback(async (bookingId: string, isLateCancellation?: boolean) => {
     // Delete from Supabase
     const { error } = await supabase
       .from('class_bookings')
@@ -525,6 +521,38 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
       throw new Error('Failed to cancel booking');
     }
 
+    // Refund ticket session if NOT a late cancellation (runs for all users including admins)
+    if (user && !isLateCancellation) {
+      try {
+        const { data: activeTicket } = await supabase
+          .from('user_tickets')
+          .select('id')
+          .eq('user_id', user.id)
+          .in('status', ['active', 'depleted'])
+          .gt('expiry_date', new Date().toISOString())
+          .order('purchase_date', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (activeTicket) {
+          const { data: rpcSuccess, error: rpcError } = await supabase
+            .rpc('refund_ticket_session', { ticket_id: activeTicket.id });
+
+          if (rpcError) {
+            console.error('Error refunding ticket session via RPC:', rpcError);
+          } else {
+            console.log('Ticket session refunded:', rpcSuccess);
+          }
+
+          await refreshUser();
+        }
+      } catch (err) {
+        console.error('Error during ticket refund:', err);
+      }
+    } else if (user && isLateCancellation) {
+      console.log('Late cancellation - no session refund');
+    }
+
     // Update local state
     const updated = bookings.filter(b => b.id !== bookingId);
     setBookings(updated);
@@ -533,7 +561,7 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
     // Refetch to update enrolled counts
     allBookingsQuery.refetch();
     bookingsQuery.refetch();
-  }, [bookings, syncBookings, allBookingsQuery, bookingsQuery]);
+  }, [user, isAdmin, bookings, syncBookings, allBookingsQuery, bookingsQuery, refreshUser]);
 
   const getMyClasses = useCallback(() => {
     const confirmedBookings = bookings.filter(b => b.status === 'confirmed');

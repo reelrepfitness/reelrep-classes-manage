@@ -1,11 +1,12 @@
 import createContextHook from '@nkzw/create-context-hook';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { User } from '@/constants/types';
 import { supabase } from '@/constants/supabase';
 import { Session } from '@supabase/supabase-js';
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
+  const queryClient = useQueryClient();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -283,6 +284,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     signOut,
     updateUser,
     refreshUser: async () => {
+      queryClient.invalidateQueries({ queryKey: ['subscription', sessionId] });
       await Promise.all([
         profileQuery.refetch(),
         subscriptionQuery.refetch()

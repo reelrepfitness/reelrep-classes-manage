@@ -6,13 +6,40 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from '@/components/ui/icon';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
-import { useAdminDashboardData } from '@/hooks/admin/useAdminDashboardData';
+import { useAdminDashboardData, DailyClass } from '@/hooks/admin/useAdminDashboardData';
+import DailyClassesWidget from './DailyClassesWidget';
 
-export default function DashboardStatsCarousel() {
+const Sparkline = ({ data, color, width, height }: { data: number[]; color: string; width: number; height: number }) => {
+  if (!data || data.length < 2) return null;
+  const max = Math.max(...data, 1);
+  const min = Math.min(...data, 0);
+  const range = max - min || 1;
+  const stepX = width / (data.length - 1);
+  const d = data
+    .map((v, i) => {
+      const x = i * stepX;
+      const y = height - ((v - min) / range) * height;
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+  return (
+    <Svg width={width} height={height}>
+      <Path d={d} stroke={color} strokeWidth={1.5} fill="none" strokeLinecap="round" strokeLinejoin="round" opacity={0.5} />
+    </Svg>
+  );
+};
+
+type Props = {
+  todaysClasses: DailyClass[];
+  onPressClass?: (id: string) => void;
+};
+
+export default function DashboardStatsCarousel({ todaysClasses, onPressClass }: Props) {
   const router = useRouter();
   const { revenue, stats, loading } = useAdminDashboardData();
 
@@ -25,16 +52,12 @@ export default function DashboardStatsCarousel() {
   }
 
   const revenueTotal = revenue?.total?.replace('₪', '') || '0';
-  const trendText = revenue?.trend || '0% עלייה';
-  const isTrendUp = revenue?.trendUp ?? true;
-
-  // Calculate this month's total and last month's total from revenue data
   const thisMonthTotal = revenue?.total?.replace('₪', '') || '0';
   const lastMonthTotal = revenue?.lastMonthTotal || '0';
 
   return (
     <View style={styles.wrapper}>
-      {/* Hero Card: Today's Income + Quick Stats */}
+      {/* Hero Card: Today + This Month + Last Month */}
       <TouchableOpacity
         activeOpacity={0.9}
         onPress={() => router.push('/admin/financial')}
@@ -47,50 +70,35 @@ export default function DashboardStatsCarousel() {
         >
           <View style={styles.heroRow}>
             <View style={styles.heroSection}>
-              <View style={styles.heroHeader}>
-                <View style={styles.heroIconCircle}>
-                  <Icon name="trending-up" size={20} color="#FFFFFF" strokeWidth={2.5} />
-                </View>
-                <Text style={styles.heroLabel}>הכנסות היום</Text>
-              </View>
+              <Text style={styles.heroLabel}>הכנסות היום</Text>
               <Text style={styles.heroValue}>₪{revenueTotal}</Text>
             </View>
 
             <View style={styles.heroDivider} />
 
             <View style={styles.heroSection}>
-              <View style={styles.heroHeaderLeft}>
-                <Text style={styles.heroLabelLeft}>הכנסות החודש</Text>
-              </View>
+              <Text style={styles.heroLabel}>החודש</Text>
               <Text style={styles.heroValue}>₪{thisMonthTotal}</Text>
+            </View>
+
+            <View style={styles.heroDivider} />
+
+            <View style={styles.heroSection}>
+              <Text style={styles.heroLabel}>חודש קודם</Text>
+              <Text style={styles.heroValueSmall}>₪{lastMonthTotal}</Text>
             </View>
           </View>
           <Text style={styles.heroSubtextCenter}>לחץ לפרטים</Text>
         </LinearGradient>
       </TouchableOpacity>
 
-      {/* Stats Grid: 2 Columns × 2.5 Rows (5 Cards) */}
-      <View style={styles.statsGrid}>
-        {/* Row 1: Monthly Trend + Urgent Tasks */}
-        <View style={styles.statsRow}>
-          {/* Last Month Income (Right in RTL) */}
-          <TouchableOpacity
-            style={styles.statCard}
-            activeOpacity={0.9}
-            onPress={() => router.push('/admin/financial/monthly-comparison')}
-          >
-            <View style={styles.cardHeader}>
-              <View style={[styles.iconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
-                <Icon name="bar-chart" size={20} color="#10B981" strokeWidth={2.5} />
-              </View>
-              <Text style={styles.cardLabel}>חודש שעבר</Text>
-            </View>
-            <Text style={[styles.cardValue, { color: '#10B981' }]}>
-              ₪{lastMonthTotal}
-            </Text>
-          </TouchableOpacity>
+      {/* Today's Classes */}
+      <DailyClassesWidget classes={todaysClasses} onPressClass={onPressClass} />
 
-          {/* Urgent Tasks (Left in RTL) */}
+      {/* Stats Grid: 2×2 */}
+      <View style={styles.statsGrid}>
+        {/* Row 1: Urgent Tasks + Active Subscriptions */}
+        <View style={styles.statsRow}>
           <TouchableOpacity
             style={styles.statCard}
             activeOpacity={0.9}
@@ -107,11 +115,29 @@ export default function DashboardStatsCarousel() {
               {stats?.tasks || 0}
             </Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.statCard}
+            activeOpacity={0.9}
+            onPress={() => router.push('/admin/clients/active')}
+          >
+            <View style={styles.cardHeader}>
+              <View style={[styles.iconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
+                <Icon name="users" size={20} color="#10B981" strokeWidth={2.5} />
+              </View>
+              <Text style={styles.cardLabel}>מנויים פעילים</Text>
+            </View>
+            <View style={styles.cardValueRow}>
+              <Sparkline data={stats?.activeSparkline || []} color="#10B981" width={60} height={28} />
+              <Text style={[styles.cardValue, { color: '#10B981' }]}>
+                {stats?.active || 0}
+              </Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
-        {/* Row 2: Debtors + Active Subscriptions */}
+        {/* Row 2: Debtors + Frozen */}
         <View style={styles.statsRow}>
-          {/* Debtors (Right in RTL) */}
           <TouchableOpacity
             style={styles.statCard}
             activeOpacity={0.9}
@@ -128,40 +154,22 @@ export default function DashboardStatsCarousel() {
             </Text>
           </TouchableOpacity>
 
-          {/* Active Subscriptions (Left in RTL) */}
           <TouchableOpacity
             style={styles.statCard}
             activeOpacity={0.9}
-            onPress={() => router.push('/admin/clients/active')}
+            onPress={() => router.push('/admin/clients/frozen')}
           >
             <View style={styles.cardHeader}>
-              <View style={[styles.iconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
-                <Icon name="user-check" size={20} color="#10B981" strokeWidth={2.5} />
+              <View style={[styles.iconCircle, { backgroundColor: 'rgba(37, 99, 235, 0.1)' }]}>
+                <Icon name="snowflake" size={20} color="#2563EB" strokeWidth={2.5} />
               </View>
-              <Text style={styles.cardLabel}>מנויים פעילים</Text>
+              <Text style={styles.cardLabel}>בהקפאה</Text>
             </View>
-            <Text style={[styles.cardValue, { color: '#10B981' }]}>
-              {stats?.active || 0}
+            <Text style={[styles.cardValue, { color: '#2563EB' }]}>
+              {stats?.frozen || 0}
             </Text>
           </TouchableOpacity>
         </View>
-
-        {/* Row 3: Frozen Subscriptions (Single Card) */}
-        <TouchableOpacity
-          style={[styles.statCard, styles.fullWidthCard]}
-          activeOpacity={0.9}
-          onPress={() => router.push('/admin/clients/frozen')}
-        >
-          <View style={styles.cardHeader}>
-            <View style={[styles.iconCircle, { backgroundColor: 'rgba(37, 99, 235, 0.1)' }]}>
-              <Icon name="snowflake" size={20} color="#2563EB" strokeWidth={2.5} />
-            </View>
-            <Text style={styles.cardLabel}>מנויים בהקפאה</Text>
-          </View>
-          <Text style={[styles.cardValue, { color: '#2563EB' }]}>
-            {stats?.frozen || 0}
-          </Text>
-        </TouchableOpacity>
       </View>
 
       {/* Divider */}
@@ -181,11 +189,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
 
-  // Hero Card (Today's Income - Black Gradient)
+  // Hero Card
   heroCard: {
     borderRadius: 16,
     padding: 18,
-    minHeight: 110,
+    minHeight: 100,
     justifyContent: 'space-between',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
@@ -197,67 +205,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    gap: 16,
+    gap: 10,
     marginBottom: 8,
   },
   heroSection: {
     flex: 1,
-    gap: 8,
+    alignItems: 'center',
+    gap: 4,
   },
   heroDivider: {
     width: 1,
-    height: 60,
+    height: 50,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  heroHeader: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  heroHeaderLeft: {
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    marginBottom: 4,
-    minHeight: 40,
-  },
-  heroIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   heroLabel: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    textAlign: 'right',
-  },
-  heroLabelLeft: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    textAlign: 'left',
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
   },
   heroValue: {
-    fontSize: 32,
+    fontSize: 18,
     fontWeight: '800',
     color: '#FFFFFF',
-    textAlign: 'left',
-    marginVertical: 4,
+    textAlign: 'center',
   },
-  heroSubtext: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.7)',
-    textAlign: 'right',
+  heroValueSmall: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.6)',
+    textAlign: 'center',
   },
   heroSubtextCenter: {
     fontSize: 10,
     fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255, 255, 255, 0.5)',
     textAlign: 'center',
   },
 
@@ -275,7 +257,7 @@ const styles = StyleSheet.create({
     marginVertical: 10,
   },
 
-  // Stat Cards (White, Minimal)
+  // Stat Cards
   statCard: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -288,10 +270,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 1,
-  },
-  fullWidthCard: {
-    flex: undefined,
-    width: '100%',
   },
   cardHeader: {
     flexDirection: 'row-reverse',
@@ -330,20 +308,9 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     marginVertical: 4,
   },
-  cardSubtext: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#EF4444',
-    textAlign: 'right',
-  },
-  trendBadge: {
+  cardValueRow: {
     flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 4,
-    justifyContent: 'flex-end',
-  },
-  trendBadgeText: {
-    fontSize: 9,
-    fontWeight: '600',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
   },
 });

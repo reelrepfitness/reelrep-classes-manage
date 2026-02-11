@@ -19,6 +19,7 @@ export interface FunnelData {
 
 export interface DashboardStats {
     active: number;
+    activeSparkline: number[];
     debts: { count: number; total: number };
     frozen: number;
     tasks: number;
@@ -37,7 +38,7 @@ export function useAdminDashboardData() {
     const [loading, setLoading] = useState(true);
     const [revenue, setRevenue] = useState<RevenueData>({ total: '₪0', trend: '0%', trendUp: true, chartData: [] });
     const [funnel, setFunnel] = useState<FunnelData>({ newLeads: 0, trials: 0, conversionRate: '0%' });
-    const [stats, setStats] = useState<DashboardStats>({ active: 0, debts: { count: 0, total: 0 }, frozen: 0, tasks: 0 });
+    const [stats, setStats] = useState<DashboardStats>({ active: 0, activeSparkline: [], debts: { count: 0, total: 0 }, frozen: 0, tasks: 0 });
     const [todaysClasses, setTodaysClasses] = useState<DailyClass[]>([]);
 
     const loadData = async () => {
@@ -190,55 +191,91 @@ export function useAdminDashboardData() {
             .eq('is_active', true)
             .lte('end_date', threeDays.toISOString());
 
+        // Sparkline: weekly new-subscription counts for last 8 weeks
+        const eightWeeksAgo = new Date();
+        eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 56);
+        const { data: sparkRows } = await supabase
+            .from('user_subscriptions')
+            .select('created_at')
+            .gte('created_at', eightWeeksAgo.toISOString())
+            .eq('is_active', true);
+
+        const buckets = new Array(8).fill(0);
+        const now = Date.now();
+        sparkRows?.forEach((r: any) => {
+            const age = now - new Date(r.created_at).getTime();
+            const week = Math.min(7, Math.floor(age / (7 * 24 * 60 * 60 * 1000)));
+            buckets[7 - week]++;
+        });
+
         setStats({
             active: active || 0,
+            activeSparkline: buckets,
             frozen: frozen || 0,
             debts: { count: debtCount, total: debtTotal },
             tasks: tasks || 0
         });
     };
 
-    // 4. Classes (Using raw supabase query since context might be heavy? Or keep context logic?)
-    // Let's use direct query for cleaner "dashboard only" independence.
+    // 4. Classes – generate from class_schedules (same pattern as ClassesContext)
     const fetchClasses = async () => {
-        const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
-        // Assuming 'classes' table exists and structure matches
-        // Actually, previous code used `useClasses`. 
-        // We'll query `classes` table if possible or rely on simple assumption.
-        // It likely has `date`, `time`, `name`, `instructor`, `participants` (joined or array).
-        // Searching for 'classes' usage earlier didn't yield table schema clearly, but 'useClasses' uses it.
-        // I will trust the user provided schema hints: "classes table (filtered by class_date = Today)"
-        
-        // Wait, looking at logs the user sent earlier: `LOG  [Classes] Opening modal for classId...`
-        // Standard supabase query:
-        const { data } = await supabase
-            .from('classes')
-            .select(`
-                id,
-                time,
-                name,
-                instructor:users!instructor_id(name),
-                max_participants,
-                bookings:class_bookings(count)
-            `)
-            .eq('date', todayStr)
-            .order('time');
+        const now = new Date();
+        // day_of_week in DB is 1-based (1=Sunday..7=Saturday), JS getDay() is 0-based
+        const todayDow = now.getDay() + 1;
 
-        // Note: Relation `users!instructor_id(name)` depends on schema. 
-        // If fails, we fallback or just use what we get.
-        // Also `bookings:class_bookings(count)` gives count.
-        
-        if (data) {
-            const formatted = data.map((c: any) => ({
-                id: c.id,
-                time: c.time.substring(0, 5), // HH:mm
-                name: c.name,
-                coach: c.instructor?.name || 'מאמן',
-                current: c.bookings?.[0]?.count || 0, // supabase count returns array of objects
-                max: c.max_participants || 12
-            }));
-            setTodaysClasses(formatted);
+        const { data: schedules } = await supabase
+            .from('class_schedules')
+            .select('id, name, coach_name, start_time, max_participants')
+            .eq('is_active', true)
+            .eq('day_of_week', todayDow)
+            .order('start_time');
+
+        if (!schedules || schedules.length === 0) {
+            setTodaysClasses([]);
+            return;
         }
+
+        // Get today's actual class records (from classes table) for these schedules
+        const todayStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD
+        const startOfDay = `${todayStr}T00:00:00`;
+        const endOfDay = `${todayStr}T23:59:59`;
+        const scheduleIds = schedules.map(s => s.id);
+
+        const { data: todayClassRecords } = await supabase
+            .from('classes')
+            .select('id, schedule_id')
+            .in('schedule_id', scheduleIds)
+            .gte('class_date', startOfDay)
+            .lte('class_date', endOfDay);
+
+        // Fetch bookings for today's class records
+        const countMap = new Map<string, number>();
+        if (todayClassRecords && todayClassRecords.length > 0) {
+            const classIds = todayClassRecords.map(c => c.id);
+            const { data: bookings } = await supabase
+                .from('class_bookings')
+                .select('class_id')
+                .in('class_id', classIds)
+                .in('status', ['confirmed', 'completed', 'no_show', 'late']);
+
+            // Map class_id back to schedule_id for counting
+            const classToSchedule = new Map(todayClassRecords.map(c => [c.id, c.schedule_id]));
+            bookings?.forEach((b: any) => {
+                const sid = classToSchedule.get(b.class_id);
+                if (sid) countMap.set(sid, (countMap.get(sid) || 0) + 1);
+            });
+        }
+
+        const formatted: DailyClass[] = schedules.map(s => ({
+            id: `virtual_${s.id}`,
+            time: s.start_time?.substring(0, 5) || '',
+            name: s.name,
+            coach: s.coach_name || 'מאמן',
+            current: countMap.get(s.id) || 0,
+            max: s.max_participants || 12,
+        }));
+
+        setTodaysClasses(formatted);
     };
 
     return {

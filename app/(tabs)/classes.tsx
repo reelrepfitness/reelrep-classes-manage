@@ -358,7 +358,7 @@ export default function ClassesScreen() {
 
     const performCancellation = async () => {
       try {
-        await cancelBooking(booking.id);
+        await cancelBooking(booking.id, isLateCancellation);
         // Success - no dialog needed, UI will update automatically
       } catch (error) {
         showDialog({
@@ -749,7 +749,7 @@ export default function ClassesScreen() {
                       end={{ x: 1, y: 1 }}
                       style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
                     >
-                      <Text className="text-white font-bold text-sm">{classItem.time}</Text>
+                      <Text className="text-white font-bold text-[17px]">{classItem.time}</Text>
                     </LinearGradient>
                   </View>
 
@@ -774,8 +774,8 @@ export default function ClassesScreen() {
                 {/* Progress Bar */}
                 <View className="mt-4">
                   <View className="flex-row justify-between mb-1">
-                    <Text className="text-[10px] text-gray-400 font-bold">רשומים</Text>
-                    <Text className="text-[10px] text-gray-400 font-bold">{classItem.enrolled}/{classItem.capacity}</Text>
+                    <Text className="text-[12px] text-gray-400 font-bold">רשומים</Text>
+                    <Text className="text-[12px] text-gray-600 font-bold">{classItem.enrolled}/{classItem.capacity}</Text>
                   </View>
                   <Progress
                     value={percent}

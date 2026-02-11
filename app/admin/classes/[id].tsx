@@ -658,31 +658,45 @@ export default function AdminClassDetailsScreen() {
                 // NOTE: If coming from calendar, ID is usually "virtual_scheduleId". We assume TODAY or nearest occurrence?
                 // Actually, let's just create a basic item. If we want workout data, we'd need exact date.
 
-                // Try to finding a class instance for TODAY or upcoming?
-                // For simplicity in this fix, we'll check if there's a class for TODAY with this schedule.
                 const todayStr = new Date().toISOString().split('T')[0];
-                const classDateTime = new Date(`${todayStr}T${schedule.start_time}`);
+                const startOfDay = `${todayStr}T00:00:00`;
+                const endOfDay = `${todayStr}T23:59:59`;
 
                 const { data: realClass } = await supabase
                     .from('classes')
-                    .select('workout_data')
+                    .select('id, workout_data')
                     .eq('schedule_id', scheduleId)
-                    .eq('class_date', classDateTime.toISOString())
+                    .gte('class_date', startOfDay)
+                    .lte('class_date', endOfDay)
                     .single();
 
+                let bookingsData: any[] = [];
+                if (realClass) {
+                    const { data: bData } = await supabase
+                        .from('class_bookings')
+                        .select('*, profiles:user_id(id, name, email, avatar_url, full_name)')
+                        .eq('class_id', realClass.id)
+                        .in('status', ['confirmed', 'completed', 'no_show', 'late', 'waiting_list']);
+                    bookingsData = bData || [];
+                }
+
+                const confirmedCount = bookingsData.filter(b =>
+                    ['confirmed', 'completed', 'no_show', 'late'].includes(b.status)
+                ).length;
+
                 setClassItem({
-                    id: id,
+                    id: realClass?.id || id,
                     title: schedule.name,
                     instructor: schedule.coach_name || 'מאמן',
                     date: todayStr,
                     time: schedule.start_time,
                     capacity: schedule.max_participants || 15,
-                    enrolled: 0,
+                    enrolled: confirmedCount,
                     description: schedule.description,
                     workoutData: realClass?.workout_data,
                     classDate: new Date(),
                 });
-                setParticipants([]);
+                setParticipants(bookingsData);
             } else {
                 const { data: classInstance, error } = await supabase
                     .from('classes')

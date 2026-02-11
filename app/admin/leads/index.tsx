@@ -397,13 +397,14 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   statNumber: {
-    fontSize: 24,
+    fontSize: 17,
     fontWeight: '700',
     color: '#111827',
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
+    fontWeight: '700',
     color: '#6b7280',
   },
   filtersScroll: {

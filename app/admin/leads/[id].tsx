@@ -1254,7 +1254,7 @@ const styles = StyleSheet.create({
 
     // Quick Actions
     actionsGrid: {
-        flexDirection: 'row-reverse',
+        flexDirection: 'row',
         marginHorizontal: 16,
         marginTop: 12,
         gap: 10,
@@ -1274,8 +1274,8 @@ const styles = StyleSheet.create({
         elevation: 2,
     },
     actionIconCircle: {
-        width: 44,
-        height: 44,
+        width: 40,
+        height: 40,
         borderRadius: 22,
         alignItems: 'center',
         justifyContent: 'center',
@@ -1302,7 +1302,7 @@ const styles = StyleSheet.create({
         elevation: 3,
     },
     trialHeader: {
-        flexDirection: 'row-reverse',
+        flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
         marginBottom: 10,
@@ -1325,12 +1325,12 @@ const styles = StyleSheet.create({
         marginBottom: 14,
     },
     trialActions: {
-        flexDirection: 'row-reverse',
+        flexDirection: 'row',
         gap: 10,
     },
     trialButton: {
         flex: 1,
-        flexDirection: 'row-reverse',
+        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         paddingVertical: 12,
@@ -1354,7 +1354,7 @@ const styles = StyleSheet.create({
         color: '#fff',
     },
     trialBanner: {
-        flexDirection: 'row-reverse',
+        flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
         marginHorizontal: 16,
@@ -1371,7 +1371,7 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: '600',
         color: '#92400E',
-        textAlign: 'right',
+        textAlign: 'left',
     },
 
     // Lead Info
@@ -1408,7 +1408,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#94A3B8',
         width: 70,
-        textAlign: 'right',
+        textAlign: 'left',
     },
     infoValue: {
         flex: 1,

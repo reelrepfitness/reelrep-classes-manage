@@ -16,15 +16,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
+    useAnimatedProps,
     withTiming,
     interpolate,
     Extrapolation,
 } from 'react-native-reanimated';
+import LottieView from 'lottie-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAchievements } from '@/contexts/AchievementsContext';
+import { useClasses } from '@/contexts/ClassesContext';
 import Colors from '@/constants/colors';
 
 const { width } = Dimensions.get('window');
+
+const AnimatedLottieView = Animated.createAnimatedComponent(LottieView);
 
 // Hebrew date formatter
 const getHebrewDate = () => {
@@ -39,14 +44,12 @@ const getHebrewDate = () => {
 
 // Menu items configuration
 const MENU_ITEMS = [
+    { label: 'יומן', icon: 'calendar-outline' as const, route: '/classes' },
+    { label: 'יומן ביצועים', icon: 'barbell-outline' as const, route: '/performance' },
+    { label: 'חנות', icon: 'cart-outline' as const, route: '/shop' },
+    { label: 'הישגים', icon: 'trophy-outline' as const, route: '/achievements' },
     { label: 'עריכת פרופיל', icon: 'person-outline' as const, route: '/edit-profile' },
-    { label: 'ניהול מנוי', icon: 'card-outline' as const, route: '/subscription-management' },
-    { label: 'חשבוניות ותשלומים', icon: 'receipt-outline' as const, route: null },
-    { label: 'הצהרת בריאות', icon: 'heart-outline' as const, route: null },
-    { label: 'הגדרות התראות', icon: 'notifications-outline' as const, route: null },
-    { label: 'פאנל ניהול', icon: 'shield-checkmark-outline' as const, route: '/admin', adminOnly: true },
-    { label: 'שתף לחברים', icon: 'share-social-outline' as const, action: 'share' as const },
-    { label: 'צור קשר', icon: 'chatbubble-ellipses-outline' as const, route: null },
+    { label: 'חשבוניות ותשלומים', icon: 'receipt-outline' as const, route: '/invoices' },
     { label: 'התנתק', icon: 'log-out-outline' as const, action: 'signout' as const, destructive: true },
 ];
 
@@ -57,14 +60,22 @@ interface HomeHeaderProps {
 export function HomeHeader({ onMenuToggle }: HomeHeaderProps) {
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const { user, signOut, isAdmin, isCoach } = useAuth();
+    const { user, signOut } = useAuth();
     const { getHighestCompletedAchievement } = useAchievements();
+    const { bookings } = useClasses();
+
+    const now = new Date();
+    const bookedCount = bookings.filter(b => b.status === 'confirmed' && b.classDate && new Date(b.classDate) >= now).length;
 
     const [isOpen, setIsOpen] = useState(false);
     const progress = useSharedValue(0);
 
     const userBadge = getHighestCompletedAchievement();
-    const showAdminItems = isAdmin || isCoach;
+
+    // Lottie hamburger icon: frame 0 = hamburger, frame 65 of 216 = X fully drawn
+    const lottieAnimatedProps = useAnimatedProps(() => ({
+        progress: interpolate(progress.value, [0, 1], [0, 65 / 216]),
+    }));
 
     const toggleMenu = () => {
         if (isOpen) {
@@ -116,8 +127,7 @@ export function HomeHeader({ onMenuToggle }: HomeHeaderProps) {
 
 
 
-    // Filter menu items based on admin status
-    const filteredMenuItems = MENU_ITEMS.filter(item => !item.adminOnly || showAdminItems);
+    const filteredMenuItems = MENU_ITEMS;
 
     return (
         <>
@@ -138,28 +148,97 @@ export function HomeHeader({ onMenuToggle }: HomeHeaderProps) {
                         colors={['#000000', '#1F2937']}
                         style={styles.dropdown}
                     >
-                        {/* Subscription Quick Info */}
-                        {user?.subscription && (
-                            <TouchableOpacity
-                                style={styles.subscriptionCard}
-                                onPress={() => handleMenuAction({ label: '', icon: 'card-outline', route: '/subscription-management' })}
-                            >
-                                <View style={styles.subscriptionInfo}>
-                                    <Text style={styles.subscriptionPlan}>
-                                        {user.subscription.planName || 'מנוי'}
-                                    </Text>
-                                    <View style={[
-                                        styles.statusBadge,
-                                        { backgroundColor: user.subscription.status === 'active' ? '#10B981' : '#EF4444' }
-                                    ]}>
-                                        <Text style={styles.statusText}>
-                                            {user.subscription.status === 'active' ? 'פעיל' : 'לא פעיל'}
-                                        </Text>
+                        {/* Plan Card */}
+                        {(() => {
+                            const sub = user?.subscription;
+                            const hasActiveSub = sub?.status === 'active';
+                            const isTicket = sub?.isTicket;
+                            const totalSessions = sub?.totalSessions || 0;
+                            const sessionsRemaining = sub?.sessionsRemaining || 0;
+                            const progressPercent = totalSessions > 0 ? ((totalSessions - sessionsRemaining) / totalSessions) * 100 : 0;
+
+                            const formatExpiry = (dateStr?: string) => {
+                                if (!dateStr) return '';
+                                const d = new Date(dateStr);
+                                return `${d.getDate()}/${d.getMonth() + 1}`;
+                            };
+
+                            const renderPlanTitle = () => {
+                                if (!sub?.planName) {
+                                    return <Text style={styles.subscriptionPlan}>ללא מנוי</Text>;
+                                }
+                                const name = sub.planName.toUpperCase();
+                                if (name.includes('ELITE')) {
+                                    return <Image source={require('@/assets/images/reel-elite-white.png')} style={styles.planImage} resizeMode="contain" />;
+                                } else if (name.includes('ONE')) {
+                                    return <Image source={require('@/assets/images/reel-one-white.png')} style={styles.planImage} resizeMode="contain" />;
+                                } else if (name.includes('3') || totalSessions === 3) {
+                                    return <Image source={require('@/assets/images/3sessions-white.png')} style={styles.planImage} resizeMode="contain" />;
+                                } else if (name.includes('10') || totalSessions === 10) {
+                                    return <Image source={require('@/assets/images/10sessions-white.png')} style={styles.planImage} resizeMode="contain" />;
+                                } else if (name.includes('20') || totalSessions === 20) {
+                                    return <Image source={require('@/assets/images/20sessions-white.png')} style={styles.planImage} resizeMode="contain" />;
+                                }
+                                return <Text style={styles.subscriptionPlan}>{sub.planName}</Text>;
+                            };
+
+                            return (
+                                <TouchableOpacity
+                                    style={styles.planCard}
+                                    onPress={() => handleMenuAction({
+                                        label: '',
+                                        icon: 'cart-outline',
+                                        route: hasActiveSub ? '/subscription-management' : '/shop',
+                                    })}
+                                >
+                                    {/* Top row: plan image + status badge + arrow */}
+                                    <View style={styles.planCardTopRow}>
+                                        <View style={styles.subscriptionInfo}>
+                                            {renderPlanTitle()}
+                                            {sub && (
+                                                <View style={[
+                                                    styles.statusBadge,
+                                                    { backgroundColor: hasActiveSub ? '#10B981' : '#EF4444' }
+                                                ]}>
+                                                    <Text style={styles.statusText}>
+                                                        {hasActiveSub ? 'פעיל' : 'לא פעיל'}
+                                                    </Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                        <Ionicons name="chevron-back" size={16} color="#94A3B8" />
                                     </View>
-                                </View>
-                                <Ionicons name="chevron-back" size={16} color="#94A3B8" />
-                            </TouchableOpacity>
-                        )}
+
+                                    {/* Progress bar + details */}
+                                    {hasActiveSub && isTicket ? (
+                                        <View style={styles.planProgressSection}>
+                                            <View style={styles.planProgressTrack}>
+                                                <View style={[styles.planProgressFill, { width: `${progressPercent}%` }]} />
+                                            </View>
+                                            <View style={styles.planProgressLabels}>
+                                                <Text style={styles.planProgressText}>
+                                                    {sessionsRemaining}/{totalSessions} אימונים נותרו
+                                                </Text>
+                                                <Text style={styles.planExpiryText}>
+                                                    עד {formatExpiry(sub?.endDate)}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    ) : hasActiveSub && !isTicket ? (
+                                        <View style={styles.planProgressSection}>
+                                            <View style={styles.planProgressLabels}>
+                                                <Text style={styles.planProgressText}>
+                                                    ∞ אימונים ללא הגבלה
+                                                </Text>
+                                                <Text style={styles.planExpiryText}>
+                                                    עד {formatExpiry(sub?.endDate)}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    ) : null}
+                                </TouchableOpacity>
+                            );
+                        })()}
 
                         {/* Menu Grid */}
                         <View style={styles.menuGrid}>
@@ -175,13 +254,20 @@ export function HomeHeader({ onMenuToggle }: HomeHeaderProps) {
                                         size={20}
                                         color={item.destructive ? '#EF4444' : (item.route || item.action) ? '#FFFFFF' : '#64748B'}
                                     />
-                                    <Text style={[
-                                        styles.menuGridText,
-                                        item.destructive && styles.destructiveText,
-                                        (!item.route && !item.action) && styles.disabledText
-                                    ]}>
-                                        {item.label}
-                                    </Text>
+                                    <View style={styles.menuLabelRow}>
+                                        <Text style={[
+                                            styles.menuGridText,
+                                            item.destructive && styles.destructiveText,
+                                            (!item.route && !item.action) && styles.disabledText
+                                        ]}>
+                                            {item.label}
+                                        </Text>
+                                        {item.label === 'יומן' && bookedCount > 0 && (
+                                            <View style={styles.menuBadge}>
+                                                <Text style={styles.menuBadgeText}>{bookedCount}</Text>
+                                            </View>
+                                        )}
+                                    </View>
                                 </TouchableOpacity>
                             ))}
                         </View>
@@ -226,10 +312,14 @@ export function HomeHeader({ onMenuToggle }: HomeHeaderProps) {
                         <Text style={styles.dateSubtitle}>{getHebrewDate()}</Text>
                     </View>
 
-                    {/* Menu Text Button */}
-                    <View style={styles.menuTextContainer}>
-                        <Text style={styles.menuText}>תפריט</Text>
-                    </View>
+                    {/* Menu Icon */}
+                    <AnimatedLottieView
+                        source={require('@/assets/animations/lottieflow-menu-nav-11-2-ffffff-easey.json')}
+                        autoPlay={false}
+                        loop={false}
+                        animatedProps={lottieAnimatedProps}
+                        style={styles.menuLottie}
+                    />
                 </TouchableOpacity>
             </LinearGradient >
         </>
@@ -298,24 +388,20 @@ const styles = StyleSheet.create({
     },
     greetingTitle: {
         color: '#FFFFFF',
-        fontSize: 22,
+        fontSize: 24,
         fontWeight: '900',
         textAlign: 'left',
     },
     dateSubtitle: {
         color: 'rgba(255,255,255,0.6)',
-        fontSize: 13,
+        fontSize: 15,
         fontWeight: '500',
         marginTop: 2,
         textAlign: 'left',
     },
-    menuTextContainer: {
-        padding: 8,
-    },
-    menuText: {
-        color: '#FFFFFF',
-        fontSize: 14,
-        fontWeight: '600',
+    menuLottie: {
+        width: 28,
+        height: 28,
     },
     backdrop: {
         ...StyleSheet.absoluteFillObject,
@@ -345,14 +431,16 @@ const styles = StyleSheet.create({
         shadowRadius: 20,
         elevation: 10,
     },
-    subscriptionCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
+    planCard: {
         backgroundColor: 'rgba(255,255,255,0.05)',
         borderRadius: 12,
         padding: 14,
         marginBottom: 16,
+    },
+    planCardTopRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
     },
     subscriptionInfo: {
         flexDirection: 'row',
@@ -364,6 +452,10 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '600',
     },
+    planImage: {
+        width: 100,
+        height: 22,
+    },
     statusBadge: {
         paddingHorizontal: 8,
         paddingVertical: 3,
@@ -373,6 +465,38 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 11,
         fontWeight: '700',
+    },
+    planProgressSection: {
+        marginTop: 12,
+        gap: 6,
+    },
+    planProgressTrack: {
+        height: 6,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderRadius: 3,
+        overflow: 'hidden',
+    },
+    planProgressFill: {
+        height: '100%',
+        backgroundColor: Colors.primary,
+        borderRadius: 3,
+    },
+    planProgressLabels: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    planProgressText: {
+        color: 'rgba(255,255,255,0.6)',
+        fontSize: 14,
+        fontWeight: '700',
+        writingDirection: 'rtl',
+    },
+    planExpiryText: {
+        color: 'rgba(255,255,255,0.4)',
+        fontSize: 14,
+        fontWeight: '800',
+        writingDirection: 'rtl',
     },
     menuGrid: {
         flexDirection: 'row',
@@ -391,12 +515,31 @@ const styles = StyleSheet.create({
     menuGridText: {
         fontSize: 14,
         color: '#E2E8F0',
-        fontWeight: '500',
+        fontWeight: '700',
     },
     destructiveText: {
         color: '#EF4444',
     },
     disabledText: {
         color: '#64748B',
+    },
+    menuLabelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    menuBadge: {
+        backgroundColor: Colors.primary,
+        minWidth: 18,
+        height: 18,
+        borderRadius: 9,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 5,
+    },
+    menuBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 11,
+        fontWeight: '700',
     },
 });

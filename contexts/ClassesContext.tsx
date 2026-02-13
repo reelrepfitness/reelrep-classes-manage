@@ -526,7 +526,7 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
       try {
         const { data: activeTicket } = await supabase
           .from('user_tickets')
-          .select('id')
+          .select('id, sessions_remaining, total_sessions')
           .eq('user_id', user.id)
           .in('status', ['active', 'depleted'])
           .gt('expiry_date', new Date().toISOString())
@@ -538,10 +538,27 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
           const { data: rpcSuccess, error: rpcError } = await supabase
             .rpc('refund_ticket_session', { ticket_id: activeTicket.id });
 
-          if (rpcError) {
-            console.error('Error refunding ticket session via RPC:', rpcError);
+          if (rpcError || !rpcSuccess) {
+            console.log('RPC refund_ticket_session failed or not found, falling back to manual update:', rpcError);
+
+            // Fallback to manual update
+            const newRemaining = Math.min(activeTicket.sessions_remaining + 1, activeTicket.total_sessions);
+
+            const { error: updateError } = await supabase
+              .from('user_tickets')
+              .update({
+                sessions_remaining: newRemaining,
+                status: 'active'
+              })
+              .eq('id', activeTicket.id);
+
+            if (updateError) {
+              console.error('Error refunding ticket session manually:', updateError);
+            } else {
+              console.log('Ticket session refunded manually. Remaining:', newRemaining);
+            }
           } else {
-            console.log('Ticket session refunded:', rpcSuccess);
+            console.log('Ticket session refunded via RPC');
           }
 
           await refreshUser();

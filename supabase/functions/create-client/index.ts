@@ -2,6 +2,7 @@
 // CREATE CLIENT EDGE FUNCTION
 // ============================================
 // Creates user in Supabase Auth + Green Invoice
+// + optionally assigns subscription or ticket plan
 // Admin-only access
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
@@ -18,16 +19,17 @@ interface CreateClientRequest {
   city?: string
   taxId?: string
   remarks?: string
-  // NEW FIELDS
   gender: 'male' | 'female'
   role: 'user' | 'coach' | 'admin'
   isAdmin: boolean
   isCoach: boolean
-  subscriptionType: 'basic' | 'premium' | 'vip' | 'unlimited' | 'cancelled'
-  subscriptionStatus: 'active' | 'cancelled'
+  // Plan assignment
+  planType: 'none' | 'subscription' | 'ticket'
+  planId?: string
   subscriptionStart?: string
   subscriptionEnd?: string
-  classesPerMonth: number
+  ticketTotalSessions?: number
+  ticketValidityDays?: number
 }
 
 serve(async (req: Request) => {
@@ -98,21 +100,21 @@ serve(async (req: Request) => {
       city,
       taxId,
       remarks,
-      // NEW FIELDS
       gender,
       role,
       isAdmin,
       isCoach,
-      subscriptionType,
-      subscriptionStatus,
+      planType,
+      planId,
       subscriptionStart,
       subscriptionEnd,
-      classesPerMonth,
+      ticketTotalSessions,
+      ticketValidityDays,
     } = body
 
     console.log("[create-client] Creating user:", email)
 
-    // NEW: Validation
+    // Validation
     if (!gender || !['male', 'female'].includes(gender)) {
       return new Response(
         JSON.stringify({ error: 'Gender is required and must be male or female' }),
@@ -131,7 +133,7 @@ serve(async (req: Request) => {
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
       password,
-      email_confirm: true, // Auto-confirm email
+      email_confirm: true,
       user_metadata: {
         full_name: fullName,
         phone_number: phone,
@@ -143,91 +145,141 @@ serve(async (req: Request) => {
       throw new Error(`Failed to create user: ${authError?.message}`)
     }
 
-    console.log("[create-client] User created:", authData.user.id)
+    const newUserId = authData.user.id
+    console.log("[create-client] User created:", newUserId)
 
     // 4. GET GREEN INVOICE AUTH TOKEN
-    const authResponse = await fetch(
-      `${Deno.env.get("SUPABASE_URL")}/functions/v1/green-invoice-auth`,
-      {
-        method: "POST",
-        headers: { Authorization: authHeader },
+    let greenInvoiceClientId: string | null = null
+    try {
+      const authResponse = await fetch(
+        `${Deno.env.get("SUPABASE_URL")}/functions/v1/green-invoice-auth`,
+        {
+          method: "POST",
+          headers: { Authorization: authHeader },
+        }
+      )
+
+      if (authResponse.ok) {
+        const { token } = await authResponse.json()
+
+        // 5. CREATE CLIENT IN GREEN INVOICE
+        const greenInvoicePayload = {
+          name: fullName,
+          emails: [email],
+          mobile: phone,
+          phone: phone,
+          address: address || undefined,
+          city: city || undefined,
+          taxId: taxId || undefined,
+          remarks: remarks || undefined,
+          active: true,
+          country: "IL",
+        }
+
+        console.log("[create-client] Creating Green Invoice client...")
+
+        const createResponse = await fetch(`${API_BASE_URL}/clients`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(greenInvoicePayload),
+        })
+
+        if (createResponse.ok) {
+          const greenInvoiceData = await createResponse.json()
+          greenInvoiceClientId = greenInvoiceData.id
+          console.log("[create-client] Green Invoice client created:", greenInvoiceClientId)
+        } else {
+          const errorText = await createResponse.text()
+          console.error("[create-client] Green Invoice error (non-fatal):", errorText)
+        }
+      } else {
+        console.error("[create-client] Green Invoice auth failed (non-fatal)")
       }
-    )
-
-    if (!authResponse.ok) {
-      throw new Error("Failed to authenticate with Green Invoice")
+    } catch (giError) {
+      console.error("[create-client] Green Invoice error (non-fatal):", giError)
     }
 
-    const { token } = await authResponse.json()
-
-    // 5. CREATE CLIENT IN GREEN INVOICE
-    const greenInvoicePayload = {
-      name: fullName,
-      emails: [email],
-      mobile: phone,
-      phone: phone,
-      address: address || undefined,
-      city: city || undefined,
-      taxId: taxId || undefined,
-      remarks: remarks || undefined,
-      active: true,
-      country: "IL",
+    // 6. UPDATE PROFILE WITH CORRECT COLUMNS
+    const profileUpdate: Record<string, any> = {
+      full_name: fullName,
+      phone_number: phone,
+      gender: gender,
+      role: role,
+      is_admin: isAdmin || false,
+      is_coach: isCoach || false,
     }
 
-    console.log("[create-client] Creating Green Invoice client...")
-
-    const createResponse = await fetch(`${API_BASE_URL}/clients`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(greenInvoicePayload),
-    })
-
-    if (!createResponse.ok) {
-      const errorText = await createResponse.text()
-      console.error("[create-client] Green Invoice error:", errorText)
-      
-      // Rollback: Delete the Supabase user
-      await supabase.auth.admin.deleteUser(authData.user.id)
-      
-      throw new Error(`Green Invoice API error: ${errorText}`)
-    }
-
-    const greenInvoiceData = await createResponse.json()
-    console.log("[create-client] Green Invoice client created:", greenInvoiceData.id)
-
-    // 6. UPDATE PROFILE WITH ALL FIELDS
     const { error: updateError } = await supabase
       .from("profiles")
-      .update({
-        full_name: fullName,
-        phone: phone,
-        gender: gender,
-        role: role,
-        is_admin: isAdmin || false,
-        is_coach: isCoach || false,
-        subscription_type: subscriptionType || 'cancelled',
-        subscription_status: subscriptionStatus || 'cancelled',
-        subscription_start: subscriptionStart || null,
-        subscription_end: subscriptionEnd || null,
-        classes_per_month: classesPerMonth || 0,
-        classes_used: 0,
-        green_invoice_client_id: greenInvoiceData.id,
-      })
-      .eq("id", authData.user.id)
+      .update(profileUpdate)
+      .eq("id", newUserId)
 
     if (updateError) {
       console.error("[create-client] Profile update error:", updateError)
     }
 
-    // 7. SUCCESS RESPONSE
+    // 7. SAVE GREEN INVOICE CLIENT MAPPING
+    if (greenInvoiceClientId) {
+      await supabase
+        .from("green_invoice_clients")
+        .upsert({
+          user_id: newUserId,
+          gi_client_id: greenInvoiceClientId,
+          synced_at: new Date().toISOString(),
+        })
+    }
+
+    // 8. ASSIGN PLAN IF SELECTED
+    if (planType === 'subscription' && planId && subscriptionStart && subscriptionEnd) {
+      console.log("[create-client] Assigning subscription plan:", planId)
+      const { error: subError } = await supabase
+        .from("user_subscriptions")
+        .insert({
+          user_id: newUserId,
+          subscription_id: planId,
+          start_date: subscriptionStart,
+          end_date: subscriptionEnd,
+          is_active: true,
+          plan_status: 'active',
+        })
+
+      if (subError) {
+        console.error("[create-client] Subscription insert error:", subError)
+      }
+    } else if (planType === 'ticket' && planId) {
+      console.log("[create-client] Assigning ticket plan:", planId)
+      const totalSessions = ticketTotalSessions || 10
+      const validityDays = ticketValidityDays || 30
+      const now = new Date()
+      const expiry = new Date(now)
+      expiry.setDate(expiry.getDate() + validityDays)
+
+      const { error: ticketError } = await supabase
+        .from("user_tickets")
+        .insert({
+          user_id: newUserId,
+          plan_id: planId,
+          status: 'active',
+          total_sessions: totalSessions,
+          sessions_remaining: totalSessions,
+          purchase_date: now.toISOString(),
+          expiry_date: expiry.toISOString(),
+        })
+
+      if (ticketError) {
+        console.error("[create-client] Ticket insert error:", ticketError)
+      }
+    }
+
+    // 9. SUCCESS RESPONSE
     return new Response(
       JSON.stringify({
         success: true,
-        userId: authData.user.id,
-        greenInvoiceClientId: greenInvoiceData.id,
+        userId: newUserId,
+        greenInvoiceClientId,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     )

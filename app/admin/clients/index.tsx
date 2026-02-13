@@ -1,7 +1,7 @@
 // app/admin/clients/index.tsx
-// Client Management Screen - REDESIGNED
+// Client Management Screen - Real Supabase Data
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   TextInput,
   Alert,
-  Dimensions,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,81 +20,75 @@ import {
   Users,
   ChevronRight,
   Ban,
-  Filter,
+  CreditCard,
+  Ticket,
+  Plus,
+  ChevronLeft,
 } from 'lucide-react-native';
-import { supabase } from '@/constants/supabase';
 import Colors from '@/constants/colors';
+import Fonts from '@/constants/typography';
 import { AdminHeader } from '@/components/admin/AdminHeader';
-
-const { width } = Dimensions.get('window');
-
-interface Client {
-  id: string;
-  full_name: string;
-  email: string;
-  subscription_type: string;
-  subscription_status: string;
-  subscription_start: string;
-  subscription_end: string;
-  classes_per_month: number;
-  classes_used: number;
-  block_end_date?: string;
-  late_cancellations: number;
-  total_workouts: number;
-}
+import { useAdminClients, ClientListItem } from '@/hooks/admin/useAdminClients';
 
 export default function ClientManagement() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [clients, setClients] = useState<Client[]>([]);
-  const [filteredClients, setFilteredClients] = useState<Client[]>([]);
+  const { fetchClients } = useAdminClients();
+
+  const [clients, setClients] = useState<ClientListItem[]>([]);
+  const [filteredClients, setFilteredClients] = useState<ClientListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    loadClients();
-  }, []);
-
-  useEffect(() => {
-    applySearch();
-  }, [searchQuery, clients]);
-
-  const loadClients = async () => {
+  const loadClients = useCallback(async () => {
     try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('full_name', { ascending: true });
-
-      if (error) throw error;
-      setClients(data || []);
+      const data = await fetchClients();
+      setClients(data);
     } catch (error) {
       console.error('Error loading clients:', error);
       Alert.alert('שגיאה', 'לא ניתן לטעון את רשימת הלקוחות');
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [fetchClients]);
 
-  const applySearch = () => {
+  useEffect(() => {
+    setLoading(true);
+    loadClients().finally(() => setLoading(false));
+  }, [loadClients]);
+
+  useEffect(() => {
     if (!searchQuery.trim()) {
       setFilteredClients(clients);
       return;
     }
-
     const query = searchQuery.toLowerCase();
-    const filtered = clients.filter(
-      (client) =>
-        client.full_name?.toLowerCase().includes(query) ||
-        client.email?.toLowerCase().includes(query)
+    setFilteredClients(
+      clients.filter(
+        c =>
+          c.full_name?.toLowerCase().includes(query) ||
+          c.email?.toLowerCase().includes(query) ||
+          c.phone_number?.includes(query)
+      )
     );
+  }, [searchQuery, clients]);
 
-    setFilteredClients(filtered);
-  };
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadClients();
+    setRefreshing(false);
+  }, [loadClients]);
 
-  const isClientBlocked = (client: Client) => {
-    return client.block_end_date && new Date(client.block_end_date) > new Date();
+  const isClientBlocked = (client: ClientListItem) =>
+    client.block_end_date && new Date(client.block_end_date) > new Date();
+
+  const getClientStatus = (client: ClientListItem): string => {
+    if (client.subscription) {
+      return client.subscription.plan_status || 'active';
+    }
+    if (client.ticket) {
+      return client.ticket.status === 'active' ? 'active' : 'expired';
+    }
+    return 'inactive';
   };
 
   const getStatusColor = (status: string) => {
@@ -111,15 +105,22 @@ export default function ClientManagement() {
       case 'active': return 'פעיל';
       case 'expired': return 'פג תוקף';
       case 'frozen': return 'קפוא';
+      case 'inactive': return 'לא פעיל';
       default: return 'לא ידוע';
     }
   };
+
+  // Count active members (subscription or ticket)
+  const activeCount = clients.filter(c =>
+    (c.subscription && c.subscription.is_active && c.subscription.plan_status === 'active') ||
+    (c.ticket && c.ticket.status === 'active')
+  ).length;
 
   return (
     <View style={styles.container}>
       <AdminHeader title="ניהול לקוחות" />
 
-      {/* 1. Statistics Summary */}
+      {/* Stats Summary */}
       {!loading && (
         <View style={styles.statsSummary}>
           <View style={styles.summaryItem}>
@@ -128,22 +129,20 @@ export default function ClientManagement() {
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
-            <Text style={[styles.summaryValue, { color: '#22C55E' }]}>
-              {clients.filter(c => c.subscription_status === 'active').length}
-            </Text>
+            <Text style={[styles.summaryValue, { color: '#22C55E' }]}>{activeCount}</Text>
             <Text style={styles.summaryLabel}>מנויים פעילים</Text>
           </View>
         </View>
       )}
 
-      {/* 2. Search & Filter Bar */}
+      {/* Search & New Client */}
       <View style={styles.searchContainer}>
         <TouchableOpacity
           style={styles.newClientButton}
           onPress={() => router.push('/admin/clients/new')}
           activeOpacity={0.7}
         >
-          <Users size={18} color="#fff" />
+          <Plus size={24} color="#fff" />
           <Text style={styles.newClientButtonText}>לקוח חדש</Text>
         </TouchableOpacity>
 
@@ -151,7 +150,7 @@ export default function ClientManagement() {
           <Search size={20} color="#94A3B8" />
           <TextInput
             style={styles.searchInput}
-            placeholder="חיפוש לפי שם או אימייל..."
+            placeholder="חיפוש לפי שם, אימייל או טלפון..."
             placeholderTextColor="#94A3B8"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -159,7 +158,7 @@ export default function ClientManagement() {
         </View>
       </View>
 
-      {/* 3. Clients List */}
+      {/* Client List */}
       {loading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={Colors.primary} />
@@ -174,10 +173,17 @@ export default function ClientManagement() {
           style={styles.scrollView}
           contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
         >
-          {filteredClients.map((client) => {
+          {filteredClients.map(client => {
             const blocked = isClientBlocked(client);
-            const statusColor = getStatusColor(client.subscription_status || 'expired');
+            const status = getClientStatus(client);
+            const statusColor = getStatusColor(status);
+            const planName = client.subscription?.plan_name || client.ticket?.plan_name || null;
+            const sessionsRemaining = client.subscription?.sessions_remaining ?? client.ticket?.sessions_remaining ?? null;
+            const totalSessions = client.ticket?.total_sessions ?? null;
 
             return (
               <TouchableOpacity
@@ -200,18 +206,39 @@ export default function ClientManagement() {
                   <View style={styles.cardRight}>
                     <View style={[styles.statusBadge, { backgroundColor: statusColor + '15' }]}>
                       <Text style={[styles.statusBadgeText, { color: statusColor }]}>
-                        {getStatusName(client.subscription_status || 'expired')}
+                        {getStatusName(status)}
                       </Text>
                     </View>
-                    <ChevronRight size={20} color="#CBD5E1" />
+                    <ChevronLeft size={20} color="#CBD5E1" />
                   </View>
                 </View>
 
                 <View style={styles.cardFooter}>
-                  <View style={styles.footerStat}>
-                    <Text style={styles.footerLabel}>שיעורים החודש</Text>
-                    <Text style={styles.footerValue}>{client.classes_used || 0}/{client.classes_per_month || 0}</Text>
-                  </View>
+                  {planName ? (
+                    <View style={styles.footerPlan}>
+                      {client.ticket ? (
+                        <Ticket size={13} color="#64748B" />
+                      ) : (
+                        <CreditCard size={13} color="#64748B" />
+                      )}
+                      <Text style={styles.footerPlanText}>{planName}</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.footerNoPlan}>ללא מנוי</Text>
+                  )}
+
+                  {sessionsRemaining !== null && (
+                    <>
+                      <View style={styles.footerDivider} />
+                      <View style={styles.footerStat}>
+                        <Text style={styles.footerLabel}>אימונים נותרו</Text>
+                        <Text style={styles.footerValue}>
+                          {sessionsRemaining}{totalSessions !== null ? `/${totalSessions}` : ''}
+                        </Text>
+                      </View>
+                    </>
+                  )}
+
                   {blocked && (
                     <>
                       <View style={styles.footerDivider} />
@@ -234,7 +261,7 @@ export default function ClientManagement() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF', // Clean White
+    backgroundColor: '#FFFFFF',
   },
   centered: {
     flex: 1,
@@ -243,26 +270,28 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   statsSummary: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 16,
     backgroundColor: '#F8FAFC',
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
+    borderBottomLeftRadius:20,
+    borderBottomRightRadius:20,
   },
   summaryItem: {
     flex: 1,
     alignItems: 'center',
   },
   summaryValue: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 25,
+    fontFamily: Fonts.black,
     color: '#0F172A',
   },
   summaryLabel: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 15,
+    fontFamily: Fonts.medium,
     color: '#64748B',
     marginTop: 2,
   },
@@ -276,7 +305,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   newClientButton: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.primary,
@@ -284,11 +313,11 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 20,
     marginBottom: 12,
-    gap: 8,
+    gap: 0,
   },
   newClientButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 20,
+    fontFamily: Fonts.black,
     color: '#fff',
   },
   searchBar: {
@@ -332,7 +361,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
   },
   cardMain: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
@@ -364,12 +393,12 @@ const styles = StyleSheet.create({
   },
   clientInfo: {
     flex: 1,
-    marginRight: 12,
-    alignItems: 'flex-end',
+    marginLeft: 8,
+    alignItems: 'flex-start',
   },
   clientName: {
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 20,
+    fontFamily: Fonts.black,
     color: '#0F172A',
     marginBottom: 2,
   },
@@ -378,7 +407,7 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   cardRight: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
@@ -392,15 +421,33 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   cardFooter: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FBFCFE',
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  footerStat: {
-    flex: 1,
+  footerPlan: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  footerPlanText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  footerNoPlan: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#7b8491ff',
+    flex: 1,
+    textAlign: 'center',
+  },
+  footerStat: {
+    alignItems: 'center',
+    marginHorizontal: 12,
   },
   footerLabel: {
     fontSize: 10,

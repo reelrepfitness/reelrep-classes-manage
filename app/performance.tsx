@@ -1113,6 +1113,8 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#E2E8F0',
         paddingBottom: 16,
+        borderBottomLeftRadius: 30,
+        borderBottomRightRadius: 30,
         paddingHorizontal: 20,
     },
     headerTopRow: {
@@ -1124,14 +1126,12 @@ const styles = StyleSheet.create({
     backButton: {
         width: 40,
         height: 40,
-        borderRadius: 20,
-        backgroundColor: '#F1F5F9',
         alignItems: 'center',
         justifyContent: 'center',
     },
     pageTitle: {
         fontSize: 20,
-        fontWeight: '700',
+        fontWeight: '900',
         color: '#0F172A',
     },
     searchContainer: {
@@ -1208,6 +1208,7 @@ const styles = StyleSheet.create({
     },
     tabTextActive: {
         color: '#FFFFFF',
+        fontWeight: '900',
     },
     scrollContent: {
         paddingBottom: 40,

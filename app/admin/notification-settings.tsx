@@ -158,9 +158,9 @@ export default function AdminNotificationSettings() {
             <View style={[styles.header, { paddingTop: insets.top }]}>
                 <View style={styles.headerContent}>
                     <View style={styles.spacer} />
-                    <Text style={styles.headerTitle}>הגדרות התראות</Text>
+                    <Text style={styles.headerTitle}>ניהול התראות מנהל</Text>
                     <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                        <Ionicons name="chevron-forward" size={24} color="#09090B" />
+                        <Ionicons name="chevron-forward" size={24} color="#ffffffff" />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -212,13 +212,15 @@ const styles = StyleSheet.create({
         backgroundColor: '#F9FAFB',
     },
     header: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#EF4444',
         paddingBottom: 16,
         borderBottomWidth: 1,
+        borderBottomLeftRadius: 30,
+        borderBottomRightRadius: 30,
         borderBottomColor: '#F3F4F6',
     },
     headerContent: {
-        flexDirection: 'row',
+        flexDirection: 'row-reverse',
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 16,
@@ -229,18 +231,16 @@ const styles = StyleSheet.create({
     },
     headerTitle: {
         fontSize: 20,
-        fontWeight: '800',
-        color: '#09090B',
+        fontWeight: '900',
+        color: '#ffffffff',
     },
     backButton: {
         width: 40,
         height: 40,
-        backgroundColor: '#F9FAFB',
         borderRadius: 20,
         alignItems: 'center',
         justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: '#F3F4F6',
+       
     },
     loadingContainer: {
         marginTop: 40,
@@ -249,11 +249,11 @@ const styles = StyleSheet.create({
         marginBottom: 24,
     },
     sectionTitle: {
-        fontSize: 18,
-        fontWeight: '700',
+        fontSize: 20,
+        fontWeight: '900',
         color: '#111827',
         marginBottom: 12,
-        textAlign: 'right',
+        textAlign: 'center',
     },
     card: {
         backgroundColor: '#FFFFFF',
@@ -288,6 +288,6 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: '#374151',
-        textAlign: 'right',
+        textAlign: 'left',
     },
 });

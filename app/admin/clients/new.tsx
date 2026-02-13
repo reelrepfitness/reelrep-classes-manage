@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -13,9 +13,11 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { X, Check } from 'lucide-react-native';
+import { X, Check, CreditCard, Ticket } from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import Fonts from '@/constants/typography';
 import { supabase } from '@/constants/supabase';
+import { useAdminClients, AvailablePlan } from '@/hooks/admin/useAdminClients';
 
 interface CreateClientRequest {
     fullName: string;
@@ -26,22 +28,29 @@ interface CreateClientRequest {
     city?: string;
     taxId?: string;
     remarks?: string;
-    // NEW FIELDS
     gender: 'male' | 'female';
     role: 'user' | 'coach' | 'admin';
     isAdmin: boolean;
     isCoach: boolean;
-    subscriptionType: 'basic' | 'premium' | 'vip' | 'unlimited' | 'cancelled';
-    subscriptionStatus: 'active' | 'cancelled';
+    // Plan assignment
+    planType: 'none' | 'subscription' | 'ticket';
+    planId?: string;
     subscriptionStart?: string;
     subscriptionEnd?: string;
-    classesPerMonth: number;
+    // Ticket plan details (sent for the edge function)
+    ticketTotalSessions?: number;
+    ticketValidityDays?: number;
 }
 
 export default function NewClientScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const { fetchAvailablePlans } = useAdminClients();
     const [loading, setLoading] = useState(false);
+
+    // Available plans from DB
+    const [availablePlans, setAvailablePlans] = useState<AvailablePlan[]>([]);
+    const [plansLoading, setPlansLoading] = useState(true);
 
     // Form state
     const [fullName, setFullName] = useState('');
@@ -52,17 +61,33 @@ export default function NewClientScreen() {
     const [city, setCity] = useState('');
     const [taxId, setTaxId] = useState('');
     const [remarks, setRemarks] = useState('');
-
-    // NEW FIELDS
     const [gender, setGender] = useState<'male' | 'female' | ''>('');
     const [role, setRole] = useState<'user' | 'coach' | 'admin'>('user');
     const [isAdmin, setIsAdmin] = useState(false);
     const [isCoach, setIsCoach] = useState(false);
-    const [subscriptionType, setSubscriptionType] = useState<'basic' | 'premium' | 'vip' | 'unlimited' | 'cancelled'>('cancelled');
-    const [subscriptionStatus, setSubscriptionStatus] = useState<'active' | 'cancelled'>('cancelled');
+
+    // Plan assignment
+    const [planType, setPlanType] = useState<'none' | 'subscription' | 'ticket'>('none');
+    const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
     const [subscriptionStart, setSubscriptionStart] = useState('');
     const [subscriptionEnd, setSubscriptionEnd] = useState('');
-    const [classesPerMonth, setClassesPerMonth] = useState(0);
+
+    // Load real plans from DB
+    useEffect(() => {
+        setPlansLoading(true);
+        fetchAvailablePlans()
+            .then(setAvailablePlans)
+            .catch(err => console.error('Error loading plans:', err))
+            .finally(() => setPlansLoading(false));
+    }, [fetchAvailablePlans]);
+
+    const filteredPlans = availablePlans.filter(p => {
+        if (planType === 'subscription') return p.type === 'subscription';
+        if (planType === 'ticket') return p.type === 'ticket';
+        return false;
+    });
+
+    const selectedPlan = availablePlans.find(p => p.id === selectedPlanId);
 
     const validateForm = (): boolean => {
         if (!fullName.trim()) {
@@ -81,15 +106,13 @@ export default function NewClientScreen() {
             Alert.alert('שגיאה', 'סיסמה חייבת להכיל לפחות 6 תווים');
             return false;
         }
-        // NEW: Gender validation
         if (!gender) {
             Alert.alert('שגיאה', 'נא לבחור מגדר');
             return false;
         }
-        // NEW: Subscription dates validation
-        if (subscriptionType !== 'cancelled' && subscriptionStatus === 'active') {
+        if (planType === 'subscription' && selectedPlanId) {
             if (!subscriptionStart || !subscriptionEnd) {
-                Alert.alert('שגיאה', 'נא למלא תאריכי מנוי עבור מנוי פעיל');
+                Alert.alert('שגיאה', 'נא למלא תאריכי מנוי');
                 return false;
             }
             const startDate = new Date(subscriptionStart);
@@ -98,6 +121,10 @@ export default function NewClientScreen() {
                 Alert.alert('שגיאה', 'תאריך סיום המנוי חייב להיות אחרי תאריך ההתחלה');
                 return false;
             }
+        }
+        if (planType !== 'none' && !selectedPlanId) {
+            Alert.alert('שגיאה', 'נא לבחור תוכנית');
+            return false;
         }
         return true;
     };
@@ -116,19 +143,18 @@ export default function NewClientScreen() {
                 city: city.trim() || undefined,
                 taxId: taxId.trim() || undefined,
                 remarks: remarks.trim() || undefined,
-                // NEW FIELDS
                 gender: gender as 'male' | 'female',
                 role,
                 isAdmin,
                 isCoach,
-                subscriptionType,
-                subscriptionStatus,
+                planType,
+                planId: selectedPlanId || undefined,
                 subscriptionStart: subscriptionStart || undefined,
                 subscriptionEnd: subscriptionEnd || undefined,
-                classesPerMonth,
+                ticketTotalSessions: selectedPlan?.total_sessions,
+                ticketValidityDays: selectedPlan?.validity_days,
             };
 
-            // Get session for auth
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) {
                 throw new Error('No active session');
@@ -152,12 +178,7 @@ export default function NewClientScreen() {
             Alert.alert(
                 'הצלחה!',
                 `הלקוח ${fullName} נוצר בהצלחה`,
-                [
-                    {
-                        text: 'אישור',
-                        onPress: () => router.back(),
-                    },
-                ]
+                [{ text: 'אישור', onPress: () => router.back() }]
             );
         } catch (err: any) {
             console.error('[NewClient] Error:', err);
@@ -237,7 +258,7 @@ export default function NewClientScreen() {
                         />
                     </View>
 
-                    {/* Gender Selector */}
+                    {/* Gender */}
                     <View style={styles.inputGroup}>
                         <Text style={styles.label}>מגדר *</Text>
                         <View style={styles.radioGroup}>
@@ -246,23 +267,19 @@ export default function NewClientScreen() {
                                 onPress={() => setGender('male')}
                                 disabled={loading}
                             >
-                                <Text style={[styles.radioText, gender === 'male' && styles.radioTextSelected]}>
-                                    זכר
-                                </Text>
+                                <Text style={[styles.radioText, gender === 'male' && styles.radioTextSelected]}>זכר</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.radioButton, gender === 'female' && styles.radioButtonSelected]}
                                 onPress={() => setGender('female')}
                                 disabled={loading}
                             >
-                                <Text style={[styles.radioText, gender === 'female' && styles.radioTextSelected]}>
-                                    נקבה
-                                </Text>
+                                <Text style={[styles.radioText, gender === 'female' && styles.radioTextSelected]}>נקבה</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
 
-                    {/* Role Selector */}
+                    {/* Role */}
                     <View style={styles.inputGroup}>
                         <Text style={styles.label}>תפקידים</Text>
                         <View style={styles.checkboxGroup}>
@@ -270,13 +287,9 @@ export default function NewClientScreen() {
                                 style={styles.checkbox}
                                 onPress={() => {
                                     setIsAdmin(!isAdmin);
-                                    if (!isAdmin) {
-                                        setRole('admin');
-                                    } else if (isCoach) {
-                                        setRole('coach');
-                                    } else {
-                                        setRole('user');
-                                    }
+                                    if (!isAdmin) setRole('admin');
+                                    else if (isCoach) setRole('coach');
+                                    else setRole('user');
                                 }}
                                 disabled={loading}
                             >
@@ -290,13 +303,9 @@ export default function NewClientScreen() {
                                 style={styles.checkbox}
                                 onPress={() => {
                                     setIsCoach(!isCoach);
-                                    if (!isCoach && !isAdmin) {
-                                        setRole('coach');
-                                    } else if (isAdmin) {
-                                        setRole('admin');
-                                    } else {
-                                        setRole('user');
-                                    }
+                                    if (!isCoach && !isAdmin) setRole('coach');
+                                    else if (isAdmin) setRole('admin');
+                                    else setRole('user');
                                 }}
                                 disabled={loading}
                             >
@@ -384,115 +393,124 @@ export default function NewClientScreen() {
                     </View>
                 </View>
 
-                {/* Subscription Section */}
+                {/* Plan Assignment */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>פרטי מנוי (אופציונלי)</Text>
+                    <Text style={styles.sectionTitle}>הקצאת תוכנית (אופציונלי)</Text>
 
-                    {/* Subscription Type */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>סוג מנוי</Text>
-                        <View style={styles.subscriptionTypeContainer}>
-                            {['cancelled', 'basic', 'premium', 'vip', 'unlimited'].map((type) => (
-                                <TouchableOpacity
-                                    key={type}
-                                    style={[
-                                        styles.subscriptionTypeButton,
-                                        subscriptionType === type && styles.subscriptionTypeButtonSelected,
-                                    ]}
-                                    onPress={() => {
-                                        setSubscriptionType(type as any);
-                                        if (type === 'cancelled') {
-                                            setSubscriptionStatus('cancelled');
-                                        }
-                                    }}
-                                    disabled={loading}
-                                >
-                                    <Text
-                                        style={[
-                                            styles.subscriptionTypeText,
-                                            subscriptionType === type && styles.subscriptionTypeTextSelected,
-                                        ]}
-                                    >
-                                        {type === 'cancelled' ? 'ללא מנוי' :
-                                         type === 'basic' ? 'בסיסי' :
-                                         type === 'premium' ? 'פרימיום' :
-                                         type === 'vip' ? 'VIP' : 'ללא הגבלה'}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
+                    {/* Plan Type Toggle */}
+                    <View style={styles.planTypeToggle}>
+                        <TouchableOpacity
+                            style={[styles.planTypeBtn, planType === 'none' && styles.planTypeBtnSelected]}
+                            onPress={() => { setPlanType('none'); setSelectedPlanId(null); }}
+                            disabled={loading}
+                        >
+                            <Text style={[styles.planTypeBtnText, planType === 'none' && styles.planTypeBtnTextSelected]}>
+                                ללא
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.planTypeBtn, planType === 'subscription' && styles.planTypeBtnSelected]}
+                            onPress={() => { setPlanType('subscription'); setSelectedPlanId(null); }}
+                            disabled={loading}
+                        >
+                            <CreditCard size={16} color={planType === 'subscription' ? '#fff' : '#64748B'} />
+                            <Text style={[styles.planTypeBtnText, planType === 'subscription' && styles.planTypeBtnTextSelected]}>
+                                מנוי
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.planTypeBtn, planType === 'ticket' && styles.planTypeBtnSelected]}
+                            onPress={() => { setPlanType('ticket'); setSelectedPlanId(null); }}
+                            disabled={loading}
+                        >
+                            <Ticket size={16} color={planType === 'ticket' ? '#fff' : '#64748B'} />
+                            <Text style={[styles.planTypeBtnText, planType === 'ticket' && styles.planTypeBtnTextSelected]}>
+                                כרטיסייה
+                            </Text>
+                        </TouchableOpacity>
                     </View>
 
-                    {/* Conditional: Show subscription details only if not cancelled */}
-                    {subscriptionType !== 'cancelled' && (
+                    {/* Plan Selection */}
+                    {planType !== 'none' && (
                         <>
-                            {/* Subscription Status */}
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.label}>סטטוס מנוי</Text>
-                                <View style={styles.radioGroup}>
+                            {plansLoading ? (
+                                <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 16 }} />
+                            ) : filteredPlans.length === 0 ? (
+                                <Text style={styles.noPlanText}>אין תוכניות זמינות</Text>
+                            ) : (
+                                filteredPlans.map(plan => (
                                     <TouchableOpacity
-                                        style={[styles.radioButton, subscriptionStatus === 'active' && styles.radioButtonSelected]}
-                                        onPress={() => setSubscriptionStatus('active')}
+                                        key={plan.id}
+                                        style={[
+                                            styles.planOption,
+                                            selectedPlanId === plan.id && styles.planOptionSelected,
+                                        ]}
+                                        onPress={() => setSelectedPlanId(plan.id)}
                                         disabled={loading}
                                     >
-                                        <Text style={[styles.radioText, subscriptionStatus === 'active' && styles.radioTextSelected]}>
-                                            פעיל
+                                        <View style={styles.planOptionMain}>
+                                            <Text style={[
+                                                styles.planOptionName,
+                                                selectedPlanId === plan.id && { color: Colors.primary },
+                                            ]}>
+                                                {plan.name}
+                                            </Text>
+                                            <Text style={styles.planOptionDetails}>
+                                                {plan.type === 'ticket'
+                                                    ? `${plan.total_sessions} אימונים • ${plan.validity_days} ימים`
+                                                    : plan.sessions_per_week
+                                                        ? `${plan.sessions_per_week} אימונים בשבוע`
+                                                        : 'ללא הגבלה'}
+                                            </Text>
+                                        </View>
+                                        <Text style={[
+                                            styles.planOptionPrice,
+                                            selectedPlanId === plan.id && { color: Colors.primary },
+                                        ]}>
+                                            ₪{plan.price}
                                         </Text>
                                     </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={[styles.radioButton, subscriptionStatus === 'cancelled' && styles.radioButtonSelected]}
-                                        onPress={() => setSubscriptionStatus('cancelled')}
-                                        disabled={loading}
-                                    >
-                                        <Text style={[styles.radioText, subscriptionStatus === 'cancelled' && styles.radioTextSelected]}>
-                                            בוטל
-                                        </Text>
-                                    </TouchableOpacity>
+                                ))
+                            )}
+
+                            {/* Subscription dates */}
+                            {planType === 'subscription' && selectedPlanId && (
+                                <View style={styles.dateInputs}>
+                                    <View style={styles.dateInputGroup}>
+                                        <Text style={styles.label}>תאריך התחלה</Text>
+                                        <TextInput
+                                            style={styles.input}
+                                            value={subscriptionStart}
+                                            onChangeText={setSubscriptionStart}
+                                            placeholder="YYYY-MM-DD"
+                                            placeholderTextColor="#94A3B8"
+                                            editable={!loading}
+                                            textAlign="right"
+                                        />
+                                    </View>
+                                    <View style={styles.dateInputGroup}>
+                                        <Text style={styles.label}>תאריך סיום</Text>
+                                        <TextInput
+                                            style={styles.input}
+                                            value={subscriptionEnd}
+                                            onChangeText={setSubscriptionEnd}
+                                            placeholder="YYYY-MM-DD"
+                                            placeholderTextColor="#94A3B8"
+                                            editable={!loading}
+                                            textAlign="right"
+                                        />
+                                    </View>
                                 </View>
-                            </View>
+                            )}
 
-                            {/* Subscription Start Date */}
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.label}>תאריך התחלה</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    value={subscriptionStart}
-                                    onChangeText={setSubscriptionStart}
-                                    placeholder="YYYY-MM-DD (לדוגמא: 2025-01-15)"
-                                    placeholderTextColor="#94A3B8"
-                                    editable={!loading}
-                                    textAlign="right"
-                                />
-                            </View>
-
-                            {/* Subscription End Date */}
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.label}>תאריך סיום</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    value={subscriptionEnd}
-                                    onChangeText={setSubscriptionEnd}
-                                    placeholder="YYYY-MM-DD (לדוגמא: 2025-07-15)"
-                                    placeholderTextColor="#94A3B8"
-                                    editable={!loading}
-                                    textAlign="right"
-                                />
-                            </View>
-
-                            {/* Classes Per Month */}
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.label}>מספר אימונים בחודש</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    value={classesPerMonth > 0 ? classesPerMonth.toString() : ''}
-                                    onChangeText={(text) => setClassesPerMonth(Number(text) || 0)}
-                                    keyboardType="number-pad"
-                                    placeholder="8"
-                                    placeholderTextColor="#94A3B8"
-                                    editable={!loading}
-                                    textAlign="right"
-                                />
-                            </View>
+                            {/* Ticket info */}
+                            {planType === 'ticket' && selectedPlan && (
+                                <View style={styles.ticketInfo}>
+                                    <Text style={styles.ticketInfoText}>
+                                        {selectedPlan.total_sessions} אימונים • תוקף {selectedPlan.validity_days} ימים מרגע ההקצאה
+                                    </Text>
+                                </View>
+                            )}
                         </>
                     )}
                 </View>
@@ -521,179 +539,86 @@ export default function NewClientScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#F9FAFB',
-    },
+    container: { flex: 1, backgroundColor: '#F9FAFB' },
     header: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        paddingBottom: 16,
-        backgroundColor: '#fff',
-        borderBottomWidth: 1,
-        borderBottomColor: '#F1F5F9',
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        paddingHorizontal: 20, paddingBottom: 16, backgroundColor: '#fff',
+        borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
     },
-    closeButton: {
-        width: 40,
-        height: 40,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    headerTitle: {
-        fontSize: 20,
-        fontWeight: '800',
-        color: '#0F172A',
-    },
-    scrollView: {
-        flex: 1,
-    },
-    scrollContent: {
-        padding: 20,
-    },
-    section: {
-        marginBottom: 24,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#0F172A',
-        marginBottom: 16,
-        textAlign: 'right',
-    },
-    inputGroup: {
-        marginBottom: 16,
-    },
-    label: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#475569',
-        marginBottom: 8,
-        textAlign: 'right',
-    },
+    closeButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    headerTitle: { fontSize: 20, fontFamily: Fonts.black, color: '#0F172A' },
+    scrollView: { flex: 1 },
+    scrollContent: { padding: 20 },
+    section: { marginBottom: 24 },
+    sectionTitle: { fontSize: 20, fontFamily: Fonts.black, color: '#0F172A', marginBottom: 16, textAlign: 'center' },
+    inputGroup: { marginBottom: 16 },
+    label: { fontSize: 18, fontFamily: Fonts.bold, color: '#475569', marginBottom: 8, textAlign: 'left' },
     input: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#E2E8F0',
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        fontSize: 16,
-        color: '#0F172A',
+        backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0',
+        paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, color: '#0F172A',
     },
-    textArea: {
-        height: 100,
-        textAlignVertical: 'top',
-        paddingTop: 14,
-    },
-    hint: {
-        fontSize: 12,
-        color: '#94A3B8',
-        marginTop: 6,
-        textAlign: 'right',
-    },
+    textArea: { height: 100, textAlignVertical: 'top', paddingTop: 14 },
+    hint: { fontSize: 12, color: '#94A3B8', marginTop: 6, textAlign: 'right' },
     footer: {
-        backgroundColor: '#fff',
-        borderTopWidth: 1,
-        borderTopColor: '#F1F5F9',
-        paddingHorizontal: 20,
-        paddingTop: 16,
+        backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#F1F5F9',
+        paddingHorizontal: 20, paddingTop: 16,borderTopLeftRadius: 30,borderTopRightRadius: 30,
     },
     submitButton: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: Colors.primary,
-        borderRadius: 16,
-        paddingVertical: 16,
-        gap: 8,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+        backgroundColor: Colors.primary, borderRadius: 16, paddingVertical: 16, gap: 4,
     },
-    submitButtonDisabled: {
-        opacity: 0.6,
-    },
-    submitButtonText: {
-        fontSize: 17,
-        fontWeight: '700',
-        color: '#fff',
-    },
-    // NEW STYLES
-    radioGroup: {
-        flexDirection: 'row-reverse',
-        gap: 12,
-    },
+    submitButtonDisabled: { opacity: 0.6 },
+    submitButtonText: { fontSize: 20, fontFamily: Fonts.bold, color: '#fff' },
+
+    // Radio & Checkbox
+    radioGroup: { flexDirection: 'row', gap: 12 },
     radioButton: {
-        flex: 1,
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderWidth: 2,
-        borderColor: '#E2E8F0',
-        borderRadius: 12,
-        alignItems: 'center',
+        flex: 1, paddingVertical: 12, paddingHorizontal: 16,
+        borderWidth: 2, borderColor: '#E2E8F0', borderRadius: 12, alignItems: 'center',
     },
-    radioButtonSelected: {
-        borderColor: Colors.primary,
-        backgroundColor: '#FCE4EC',
-    },
-    radioText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#64748B',
-    },
-    radioTextSelected: {
-        color: Colors.primary,
-    },
-    checkboxGroup: {
-        flexDirection: 'row-reverse',
-        gap: 16,
-    },
-    checkbox: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        gap: 8,
-    },
+    radioButtonSelected: { borderColor: Colors.primary },
+    radioText: { fontSize: 15, fontFamily: Fonts.medium, color: '#64748B' },
+    radioTextSelected: { color: Colors.primary },
+    checkboxGroup: { flexDirection: 'row', gap: 16 },
+    checkbox: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     checkboxBox: {
-        width: 24,
-        height: 24,
-        borderWidth: 2,
-        borderColor: '#E2E8F0',
-        borderRadius: 6,
-        alignItems: 'center',
-        justifyContent: 'center',
+        width: 24, height: 24, borderWidth: 2, borderColor: '#E2E8F0',
+        borderRadius: 6, alignItems: 'center', justifyContent: 'center',
     },
-    checkboxBoxChecked: {
-        backgroundColor: Colors.primary,
-        borderColor: Colors.primary,
+    checkboxBoxChecked: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+    checkboxLabel: { fontSize: 17, fontFamily: Fonts.medium, color: '#475569' },
+
+    // Plan Type Toggle
+    planTypeToggle: { flexDirection: 'row-reverse', gap: 10, marginBottom: 16 },
+    planTypeBtn: {
+        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+        paddingVertical: 12, borderWidth: 2, borderColor: '#E2E8F0', borderRadius: 12, backgroundColor: '#fff',
     },
-    checkboxLabel: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#475569',
+    planTypeBtnSelected: { borderColor: Colors.primary, backgroundColor: Colors.primary },
+    planTypeBtnText: { fontSize: 14, fontFamily: Fonts.bold, color: '#64748B' },
+    planTypeBtnTextSelected: { color: '#fff' },
+
+    // Plan Options
+    planOption: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 10,
+        borderWidth: 2, borderColor: '#F1F5F9',
     },
-    subscriptionTypeContainer: {
-        flexDirection: 'column',
-        gap: 8,
+    planOptionSelected: { borderColor: Colors.primary, backgroundColor: '#FCE4EC' },
+    planOptionMain: { flex: 1 },
+    planOptionName: { fontSize: 16, fontFamily: Fonts.bold, color: '#0F172A', textAlign: 'right' },
+    planOptionDetails: { fontSize: 13, color: '#64748B', marginTop: 2, textAlign: 'right' },
+    planOptionPrice: { fontSize: 16, fontFamily: Fonts.black, color: '#0F172A', marginLeft: 12 },
+    noPlanText: { fontSize: 14, color: '#94A3B8', textAlign: 'center', paddingVertical: 16 },
+
+    // Date inputs
+    dateInputs: { flexDirection: 'row', gap: 12, marginTop: 8 },
+    dateInputGroup: { flex: 1 },
+
+    // Ticket info
+    ticketInfo: {
+        backgroundColor: '#FFFBEB', borderRadius: 12, padding: 12, marginTop: 8,
+        borderWidth: 1, borderColor: '#FEF3C7',
     },
-    subscriptionTypeButton: {
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderWidth: 2,
-        borderColor: '#E2E8F0',
-        borderRadius: 12,
-        backgroundColor: '#fff',
-        alignItems: 'center',
-    },
-    subscriptionTypeButtonSelected: {
-        borderColor: Colors.primary,
-        backgroundColor: '#FCE4EC',
-    },
-    subscriptionTypeText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#64748B',
-        textAlign: 'center',
-    },
-    subscriptionTypeTextSelected: {
-        color: Colors.primary,
-    },
+    ticketInfoText: { fontSize: 13, fontFamily: Fonts.medium, color: '#92400E', textAlign: 'right' },
 });

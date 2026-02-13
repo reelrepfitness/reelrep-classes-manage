@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { I18nManager, Platform } from "react-native";
 import { TamaguiProvider } from 'tamagui';
+import { useFonts } from 'expo-font';
 import tamaguiConfig from '../tamagui.config';
 import { AuthProvider } from "@/contexts/AuthContext";
 import { WorkoutProvider } from "@/contexts/WorkoutContext";
@@ -105,11 +106,25 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    'Ploni-Regular': require('../assets/fonts/PloniRegular.otf'),
+    'Ploni-Bold': require('../assets/fonts/PloniBold.otf'),
+    'Ploni-Medium': require('../assets/fonts/PloniMedium.otf'),
+    'Ploni-Light': require('../assets/fonts/PloniLight.otf'),
+    'Ploni-Black': require('../assets/fonts/PloniBlack.otf'),
+  });
+
   useEffect(() => {
-    SplashScreen.hideAsync().catch(() => {
-      // Ignore - splash screen may not be registered in Expo Go
-    });
-  }, []);
+    if (fontsLoaded) {
+      SplashScreen.hideAsync().catch(() => {
+        // Ignore - splash screen may not be registered in Expo Go
+      });
+    }
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded) {
+    return null; // Keep splash screen visible while fonts load
+  }
 
   return (
     <TamaguiProvider config={tamaguiConfig}>

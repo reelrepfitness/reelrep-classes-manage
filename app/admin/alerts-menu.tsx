@@ -16,8 +16,8 @@ export default function AlertsMenuScreen() {
                     style={styles.card}
                     onPress={() => router.push('/admin/notification-settings')}
                 >
-                    <View style={[styles.iconContainer, { backgroundColor: '#FEE2E2' }]}>
-                        <Bell size={32} color="#EF4444" />
+                    <View style={[styles.iconContainer,]}>
+                        <Bell size={40} color="#EF4444" />
                     </View>
                     <View style={styles.cardText}>
                         <Text style={styles.cardTitle}>התראות מנהל</Text>
@@ -29,8 +29,8 @@ export default function AlertsMenuScreen() {
                     style={styles.card}
                     onPress={() => router.push('/admin/push-automation')}
                 >
-                    <View style={[styles.iconContainer, { backgroundColor: '#DBEAFE' }]}>
-                        <Zap size={32} color="#3B82F6" />
+                    <View style={[styles.iconContainer,]}>
+                        <Zap size={40} color="#3B82F6" />
                     </View>
                     <View style={styles.cardText}>
                         <Text style={styles.cardTitle}>התראות למתאמן</Text>
@@ -42,8 +42,8 @@ export default function AlertsMenuScreen() {
                     style={styles.card}
                     onPress={() => router.push('/admin-alerts')}
                 >
-                    <View style={[styles.iconContainer, { backgroundColor: '#F3E8FF' }]}>
-                        <Settings size={32} color="#9333EA" />
+                    <View style={[styles.iconContainer,]}>
+                        <Settings size={40} color="#9333EA" />
                     </View>
                     <View style={styles.cardText}>
                         <Text style={styles.cardTitle}>הגדרות התראות</Text>
@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
         gap: 16,
     },
     card: {
-        flexDirection: 'row-reverse',
+        flexDirection: 'row',
         backgroundColor: '#FFFFFF',
         borderRadius: 20,
         padding: 24,
@@ -82,15 +82,15 @@ const styles = StyleSheet.create({
         borderRadius: 32,
         alignItems: 'center',
         justifyContent: 'center',
-        marginLeft: 16,
+        marginLeft: 10,
     },
     cardText: {
         flex: 1,
-        alignItems: 'flex-end',
+        alignItems: 'flex-start',
     },
     cardTitle: {
         fontSize: 18,
-        fontWeight: '700',
+        fontWeight: '900',
         color: '#111827',
         marginBottom: 4,
     },

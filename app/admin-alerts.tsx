@@ -314,6 +314,8 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: 20,
         paddingVertical: 16,
+        borderBottomLeftRadius: 24,
+        borderBottomRightRadius: 24,
         backgroundColor: '#F7F8FA',
     },
     headerLeft: {

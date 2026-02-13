@@ -20,6 +20,7 @@ export default function ClientsLayout() {
             <Stack.Screen name="active" />
             <Stack.Screen name="debts" />
             <Stack.Screen name="needs-attention" />
+            <Stack.Screen name="frozen" />
         </Stack>
     );
 }

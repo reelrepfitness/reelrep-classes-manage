@@ -197,7 +197,7 @@ export function AdminHeader({ title, disabled = false }: AdminHeaderProps) {
 
 const styles = StyleSheet.create({
     header: {
-        paddingBottom: 16,
+        paddingBottom: 10,
         paddingHorizontal: 20,
         borderBottomLeftRadius: 20,
         borderBottomRightRadius: 20,
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
     menuItemText: {
         fontSize: 16,
         color: '#9CA3AF',
-        fontWeight: '500',
+        fontWeight: '600',
     },
     menuGrid: {
         flexDirection: 'row',

@@ -7,13 +7,14 @@ import {
     TouchableOpacity,
     Image,
     Alert,
-    Platform,
     ActivityIndicator,
     TextInput,
-    RefreshControl
+    RefreshControl,
+    Linking,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
     ChevronRight,
     Plus,
@@ -22,313 +23,350 @@ import {
     Snowflake,
     Trash2,
     MessageCircle,
-    Phone,
-    Save,
+    Ban,
+    ShieldOff,
     Clock,
-    CheckCircle2,
-    AlertCircle,
-    XCircle
+    Award,
+    TrendingUp,
+    AlertTriangle,
+    DollarSign,
+    Ticket,
+    CreditCard,
 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import Fonts from '@/constants/typography';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { supabase } from '@/constants/supabase';
-
-// --- Types ---
-interface ClientData {
-    id: string;
-    full_name: string;
-    phone: string;
-    avatar_url: string;
-    status: 'active' | 'frozen' | 'inactive';
-    highestAchievement?: {
-        id: string;
-        name: string;
-        icon: string;
-        task_requirement: number;
-    } | null;
-    attendedCount: number;
-}
-
-interface SubscriptionData {
-    id: string;
-    classes_remaining: number;
-    expiry_date: Date;
-    is_frozen: boolean;
-    plan_name: string;
-}
-
-interface TicketData {
-    id: string;
-    punches_remaining: number;
-    expiry_date: Date;
-    is_frozen: boolean;
-    plan_name: string;
-}
+import {
+    useAdminClients,
+    ClientDetail,
+    AvailablePlan,
+} from '@/hooks/admin/useAdminClients';
 
 export default function ClientManagerScreen() {
-    const { id } = useLocalSearchParams();
+    const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const {
+        fetchClientDetail,
+        fetchAvailablePlans,
+        updateSubscription,
+        updateTicketSessions,
+        freezeSubscription,
+        unfreezeSubscription,
+        cancelSubscription,
+        cancelTicket,
+        assignSubscription,
+        assignTicket,
+        blockClient,
+        unblockClient,
+    } = useAdminClients();
 
-    // UI State
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [saving, setSaving] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
 
-    // Data State
-    const [client, setClient] = useState<ClientData | null>(null);
-    const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
-    const [ticket, setTicket] = useState<TicketData | null>(null);
+    const [client, setClient] = useState<ClientDetail | null>(null);
+    const [availablePlans, setAvailablePlans] = useState<AvailablePlan[]>([]);
+    const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+    const [assignStartDate, setAssignStartDate] = useState('');
+    const [assignEndDate, setAssignEndDate] = useState('');
+    const [freezeReasonInput, setFreezeReasonInput] = useState('');
+    const [showFreezeInput, setShowFreezeInput] = useState(false);
 
-    // --- Fetch Real Data from Supabase ---
-    const fetchClientData = useCallback(async () => {
+    // ─── Data Loading ───
+
+    const loadData = useCallback(async () => {
         if (!id) return;
-
         try {
-            // 1. Fetch profile
-            const { data: profile, error: profileError } = await supabase
-                .from('profiles')
-                .select('id, full_name, phone_number, avatar_url, email')
-                .eq('id', id)
-                .single();
-
-            if (profileError) {
-                console.error('Error fetching profile:', profileError);
-                return;
-            }
-
-            // 2. Fetch active subscription
-            const { data: subscriptionData } = await supabase
-                .from('user_subscriptions')
-                .select('*, subscription_plans(*)')
-                .eq('user_id', id)
-                .eq('is_active', true)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-
-            // 3. Fetch active ticket
-            const { data: ticketData } = await supabase
-                .from('user_tickets')
-                .select('*, ticket_plans(*)')
-                .eq('user_id', id)
-                .eq('status', 'active')
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-
-            // 4. Fetch completed achievements to get highest badge
-            const { data: userAchievements } = await supabase
-                .from('user_achievements')
-                .select(`
-                    achievement_id,
-                    achievements:achievement_id (
-                        id,
-                        name,
-                        icon,
-                        task_requirement
-                    )
-                `)
-                .eq('user_id', id)
-                .eq('completed', true);
-
-            // 5. Count total attended classes
-            const { count: attendedCount } = await supabase
-                .from('class_bookings')
-                .select('*', { count: 'exact', head: true })
-                .eq('user_id', id)
-                .or('status.eq.completed,attended_at.not.is.null');
-
-            // Find highest achievement (by task_requirement)
-            const sortedAchievements = (userAchievements || [])
-                .filter((ua: any) => ua.achievements)
-                .map((ua: any) => ua.achievements)
-                .sort((a: any, b: any) => (b.task_requirement || 0) - (a.task_requirement || 0));
-
-            const highestAchievement = sortedAchievements[0] || null;
-
-            // Determine client status
-            let status: 'active' | 'frozen' | 'inactive' = 'inactive';
-            if (subscriptionData?.is_frozen || ticketData?.is_frozen) {
-                status = 'frozen';
-            } else if (subscriptionData?.is_active || ticketData?.status === 'active') {
-                status = 'active';
-            }
-
-            setClient({
-                id: profile.id,
-                full_name: profile.full_name || profile.email || 'לקוח',
-                phone: profile.phone_number || '',
-                avatar_url: profile.avatar_url || '',
-                status,
-                highestAchievement,
-                attendedCount: attendedCount || 0,
-            });
-
-            // Set subscription if exists
-            if (subscriptionData) {
-                setSubscription({
-                    id: subscriptionData.id,
-                    classes_remaining: subscriptionData.classes_remaining || 0,
-                    expiry_date: new Date(subscriptionData.end_date || subscriptionData.expiry_date),
-                    is_frozen: subscriptionData.is_frozen || false,
-                    plan_name: subscriptionData.subscription_plans?.name || 'מנוי',
-                });
-            } else {
-                setSubscription(null);
-            }
-
-            // Set ticket if exists
-            if (ticketData) {
-                setTicket({
-                    id: ticketData.id,
-                    punches_remaining: ticketData.punches_remaining || 0,
-                    expiry_date: new Date(ticketData.expiry_date),
-                    is_frozen: ticketData.is_frozen || false,
-                    plan_name: ticketData.ticket_plans?.name || 'כרטיסייה',
-                });
-            } else {
-                setTicket(null);
-            }
-
+            const [detail, plans] = await Promise.all([
+                fetchClientDetail(id),
+                fetchAvailablePlans(),
+            ]);
+            setClient(detail);
+            setAvailablePlans(plans);
         } catch (error) {
             console.error('Error fetching client data:', error);
         }
-    }, [id]);
+    }, [id, fetchClientDetail, fetchAvailablePlans]);
 
     useEffect(() => {
         setLoading(true);
-        fetchClientData().finally(() => setLoading(false));
-    }, [fetchClientData]);
+        loadData().finally(() => setLoading(false));
+    }, [loadData]);
 
-    // Pull-to-refresh handler
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
-        await fetchClientData();
+        await loadData();
         setRefreshing(false);
-    }, [fetchClientData]);
+    }, [loadData]);
 
-    const handleUpdateSubscription = async (updates: Partial<SubscriptionData>) => {
-        if (!subscription) return;
-        // Optimistic Update
-        setSubscription(prev => prev ? { ...prev, ...updates } : null);
+    // ─── Subscription Actions ───
 
-        // Sync with Supabase
+    const handleAdjustSessions = async (amount: number) => {
+        if (!client?.subscription) return;
+        const current = client.subscription.sessions_remaining ?? 0;
+        const newValue = Math.max(0, current + amount);
+
+        // Optimistic
+        setClient(prev => prev && prev.subscription ? {
+            ...prev,
+            subscription: { ...prev.subscription, sessions_remaining: newValue },
+        } : prev);
+
         try {
-            const dbUpdates: any = {};
-            if (updates.classes_remaining !== undefined) dbUpdates.classes_remaining = updates.classes_remaining;
-            if (updates.is_frozen !== undefined) dbUpdates.is_frozen = updates.is_frozen;
-            if (updates.expiry_date !== undefined) dbUpdates.end_date = updates.expiry_date.toISOString();
-
-            const { error } = await supabase
-                .from('user_subscriptions')
-                .update(dbUpdates)
-                .eq('id', subscription.id);
-
-            if (error) {
-                console.error('Error updating subscription:', error);
-                Alert.alert('שגיאה', 'לא ניתן לעדכן את המנוי');
-            }
-        } catch (error) {
-            console.error('Error updating subscription:', error);
+            await updateSubscription(client.subscription.id, { sessions_remaining: newValue });
+        } catch {
+            Alert.alert('שגיאה', 'לא ניתן לעדכן');
+            await loadData();
         }
     };
 
-    // --- Actions ---
+    const handleExtendDate = async (type: 'week' | 'month') => {
+        if (!client?.subscription) return;
+        const current = new Date(client.subscription.end_date);
+        const newDate = new Date(current);
+        if (type === 'week') newDate.setDate(newDate.getDate() + 7);
+        else newDate.setMonth(newDate.getMonth() + 1);
 
-    const handleWhatsApp = () => {
-        if (!client) return;
-        // Linking.openURL(`whatsapp://send?phone=${client.phone}`);
-        Alert.alert('WhatsApp', `Opening chat with ${client.phone}`);
+        setClient(prev => prev && prev.subscription ? {
+            ...prev,
+            subscription: { ...prev.subscription, end_date: newDate.toISOString() },
+        } : prev);
+
+        try {
+            await updateSubscription(client.subscription.id, { end_date: newDate.toISOString() });
+        } catch {
+            Alert.alert('שגיאה', 'לא ניתן לעדכן');
+            await loadData();
+        }
     };
 
-    const toggleFreeze = () => {
-        if (!subscription || !client) return;
-        const newStatus = !subscription.is_frozen;
+    const onDateChange = async (_: any, selectedDate?: Date) => {
+        setShowDatePicker(false);
+        if (!selectedDate || !client?.subscription) return;
 
-        if (newStatus) {
-            Alert.alert(
-                'הקפאת מנוי',
-                'האם אתה בטוח שברצונך להקפיא את המנוי? הלקוח לא יוכל להירשם לשיעורים.',
-                [
-                    { text: 'ביטול', style: 'cancel' },
-                    {
-                        text: 'הקפא',
-                        style: 'default',
-                        onPress: () => {
-                            handleUpdateSubscription({ is_frozen: true });
-                            setClient(prev => prev ? { ...prev, status: 'frozen' } : null);
+        setClient(prev => prev && prev.subscription ? {
+            ...prev,
+            subscription: { ...prev.subscription, end_date: selectedDate.toISOString() },
+        } : prev);
+
+        try {
+            await updateSubscription(client.subscription.id, { end_date: selectedDate.toISOString() });
+        } catch {
+            Alert.alert('שגיאה', 'לא ניתן לעדכן');
+            await loadData();
+        }
+    };
+
+    const handleFreeze = () => {
+        if (!client?.subscription) return;
+        const isFrozen = client.subscription.plan_status === 'frozen';
+
+        if (isFrozen) {
+            // Unfreeze
+            Alert.alert('הפשרת מנוי', 'להחזיר את המנוי לפעילות?', [
+                { text: 'ביטול', style: 'cancel' },
+                {
+                    text: 'הפשר',
+                    onPress: async () => {
+                        try {
+                            await unfreezeSubscription(client.subscription!.id);
+                            await loadData();
+                        } catch {
+                            Alert.alert('שגיאה', 'לא ניתן להפשיר');
                         }
-                    }
-                ]
-            );
+                    },
+                },
+            ]);
         } else {
-            handleUpdateSubscription({ is_frozen: false });
-            setClient(prev => prev ? { ...prev, status: 'active' } : null);
+            setShowFreezeInput(true);
+        }
+    };
+
+    const confirmFreeze = async () => {
+        if (!client?.subscription) return;
+        try {
+            await freezeSubscription(client.subscription.id, freezeReasonInput);
+            setShowFreezeInput(false);
+            setFreezeReasonInput('');
+            await loadData();
+        } catch {
+            Alert.alert('שגיאה', 'לא ניתן להקפיא');
         }
     };
 
     const handleCancelSubscription = () => {
-        if (!client) return;
-        Alert.alert(
-            'ביטול מנוי',
-            'פעולה זו תבטל את המנוי לצמיתות. האם להמשיך?',
-            [
-                { text: 'לא', style: 'cancel' },
-                {
-                    text: 'כן, בטל מנוי',
-                    style: 'destructive',
-                    onPress: () => {
-                        setClient(prev => prev ? { ...prev, status: 'inactive' } : null);
-                        // Logic to cancel in DB
-                        router.back();
+        if (!client?.subscription) return;
+        Alert.alert('ביטול מנוי', 'פעולה זו תבטל את המנוי. האם להמשיך?', [
+            { text: 'לא', style: 'cancel' },
+            {
+                text: 'כן, בטל מנוי',
+                style: 'destructive',
+                onPress: async () => {
+                    try {
+                        await cancelSubscription(client.subscription!.id);
+                        await loadData();
+                    } catch {
+                        Alert.alert('שגיאה', 'לא ניתן לבטל');
                     }
+                },
+            },
+        ]);
+    };
+
+    // ─── Ticket Actions ───
+
+    const handleAdjustTicketSessions = async (amount: number) => {
+        if (!client?.ticket) return;
+        const newValue = Math.max(0, client.ticket.sessions_remaining + amount);
+
+        setClient(prev => prev && prev.ticket ? {
+            ...prev,
+            ticket: { ...prev.ticket, sessions_remaining: newValue },
+        } : prev);
+
+        try {
+            await updateTicketSessions(client.ticket.id, newValue);
+        } catch {
+            Alert.alert('שגיאה', 'לא ניתן לעדכן');
+            await loadData();
+        }
+    };
+
+    const handleCancelTicket = () => {
+        if (!client?.ticket) return;
+        Alert.alert('ביטול כרטיסייה', 'האם לבטל את הכרטיסייה?', [
+            { text: 'לא', style: 'cancel' },
+            {
+                text: 'כן, בטל',
+                style: 'destructive',
+                onPress: async () => {
+                    try {
+                        await cancelTicket(client.ticket!.id);
+                        await loadData();
+                    } catch {
+                        Alert.alert('שגיאה', 'לא ניתן לבטל');
+                    }
+                },
+            },
+        ]);
+    };
+
+    // ─── Plan Assignment ───
+
+    const handleAssignPlan = async () => {
+        if (!client || !selectedPlanId) return;
+        const plan = availablePlans.find(p => p.id === selectedPlanId);
+        if (!plan) return;
+
+        try {
+            if (plan.type === 'subscription') {
+                if (!assignStartDate || !assignEndDate) {
+                    Alert.alert('שגיאה', 'נא למלא תאריכי התחלה וסיום');
+                    return;
                 }
-            ]
-        );
+                await assignSubscription(client.id, plan.id, assignStartDate, assignEndDate);
+            } else {
+                await assignTicket(client.id, plan.id, plan.total_sessions!, plan.validity_days!);
+            }
+            setSelectedPlanId(null);
+            setAssignStartDate('');
+            setAssignEndDate('');
+            await loadData();
+            Alert.alert('הצלחה', 'התוכנית הוקצתה בהצלחה');
+        } catch (error: any) {
+            Alert.alert('שגיאה', error.message || 'לא ניתן להקצות תוכנית');
+        }
     };
 
-    const adjustEntries = (amount: number) => {
-        if (!subscription) return;
-        const newValue = Math.max(0, subscription.classes_remaining + amount);
-        handleUpdateSubscription({ classes_remaining: newValue });
-    };
+    // ─── Block/Unblock ───
 
-    const extendDate = (type: 'week' | 'month') => {
-        if (!subscription) return;
-        const current = new Date(subscription.expiry_date);
-        const newDate = new Date(current);
+    const handleToggleBlock = () => {
+        if (!client) return;
+        const isBlocked = client.block_end_date && new Date(client.block_end_date) > new Date();
 
-        if (type === 'week') {
-            newDate.setDate(newDate.getDate() + 7);
+        if (isBlocked) {
+            Alert.alert('הסרת חסימה', 'להסיר את החסימה מלקוח זה?', [
+                { text: 'ביטול', style: 'cancel' },
+                {
+                    text: 'הסר חסימה',
+                    onPress: async () => {
+                        try {
+                            await unblockClient(client.id);
+                            await loadData();
+                        } catch {
+                            Alert.alert('שגיאה', 'לא ניתן להסיר חסימה');
+                        }
+                    },
+                },
+            ]);
         } else {
-            newDate.setMonth(newDate.getMonth() + 1);
+            // Block for 30 days by default
+            const blockEnd = new Date();
+            blockEnd.setDate(blockEnd.getDate() + 30);
+            Alert.alert('חסימת לקוח', 'לחסום את הלקוח ל-30 יום?', [
+                { text: 'ביטול', style: 'cancel' },
+                {
+                    text: 'חסום',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await blockClient(client.id, blockEnd.toISOString());
+                            await loadData();
+                        } catch {
+                            Alert.alert('שגיאה', 'לא ניתן לחסום');
+                        }
+                    },
+                },
+            ]);
         }
-
-        handleUpdateSubscription({ expiry_date: newDate });
     };
 
-    const onDateChange = (event: any, selectedDate?: Date) => {
-        setShowDatePicker(false);
-        if (selectedDate) {
-            handleUpdateSubscription({ expiry_date: selectedDate });
-        }
+    // ─── WhatsApp ───
+
+    const handleWhatsApp = () => {
+        if (!client?.phone_number) return;
+        const phone = client.phone_number.replace(/[^0-9]/g, '');
+        const intlPhone = phone.startsWith('0') ? '972' + phone.slice(1) : phone;
+        Linking.openURL(`https://wa.me/${intlPhone}`);
     };
 
-    // --- Render Helpers ---
+    // ─── Helpers ───
 
     const getStatusColor = () => {
-        if (subscription?.is_frozen) return '#3B82F6'; // Blue
-        if (client?.status === 'inactive') return '#EF4444'; // Red
-        return '#34C759'; // Green
+        if (client?.subscription?.plan_status === 'frozen') return '#3B82F6';
+        if (!client?.subscription && !client?.ticket) return '#EF4444';
+        if (client?.subscription?.plan_status === 'active' || client?.ticket?.status === 'active') return '#34C759';
+        return '#EF4444';
     };
 
     const getStatusText = () => {
-        if (subscription?.is_frozen) return 'מוקפא';
-        if (client?.status === 'inactive') return 'לא פעיל';
-        return 'פעיל';
+        if (client?.subscription?.plan_status === 'frozen') return 'מוקפא';
+        if (!client?.subscription && !client?.ticket) return 'לא פעיל';
+        if (client?.subscription?.plan_status === 'active' || client?.ticket?.status === 'active') return 'פעיל';
+        return 'לא פעיל';
     };
+
+    const formatDate = (dateStr: string) => {
+        try { return new Date(dateStr).toLocaleDateString('he-IL'); } catch { return dateStr; }
+    };
+
+    const getMemberDuration = () => {
+        if (!client?.created_at) return '';
+        const start = new Date(client.created_at);
+        const now = new Date();
+        const months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+        if (months < 1) return 'פחות מחודש';
+        if (months < 12) return `${months} חודשים`;
+        const years = Math.floor(months / 12);
+        const rem = months % 12;
+        return rem > 0 ? `${years} שנים ו-${rem} חודשים` : `${years} שנים`;
+    };
+
+    const isBlocked = client?.block_end_date && new Date(client.block_end_date) > new Date();
+    const hasNoPlan = !client?.subscription && !client?.ticket;
+
+    // ─── Render ───
 
     if (loading) {
         return (
@@ -349,26 +387,29 @@ export default function ClientManagerScreen() {
     return (
         <View style={styles.container}>
             {/* Header */}
-            <View style={[styles.header, { paddingTop: insets.top }]}>
+            <LinearGradient
+                colors={[Colors.gradient1, Colors.gradient2]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.header, { paddingTop: insets.top }]}
+            >
                 <TouchableOpacity
                     onPress={() => router.back()}
                     style={styles.backButton}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                    <ChevronRight size={28} color="#000" />
+                    <ChevronRight size={28} color="#fff" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>ניהול לקוח</Text>
                 <View style={{ width: 28 }} />
-            </View>
+            </LinearGradient>
 
             <ScrollView
                 contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
                 showsVerticalScrollIndicator={false}
-                refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                }
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             >
-                {/* 1. Profile Section */}
+                {/* ── Profile Section ── */}
                 <View style={styles.profileSection}>
                     <View style={styles.avatarContainer}>
                         {client.avatar_url ? (
@@ -381,21 +422,18 @@ export default function ClientManagerScreen() {
                             </View>
                         )}
                         <View style={[styles.statusIndicator, { backgroundColor: getStatusColor() }]} />
-                        {/* Achievement Badge */}
                         {client.highestAchievement?.icon && (
-                            <Image
-                                source={{ uri: client.highestAchievement.icon }}
-                                style={styles.achievementBadge}
-                            />
+                            <Image source={{ uri: client.highestAchievement.icon }} style={styles.achievementBadge} />
                         )}
                     </View>
 
                     <Text style={styles.clientName}>{client.full_name}</Text>
+                    <Text style={styles.clientEmail}>{client.email}</Text>
 
-                    {client.phone ? (
+                    {client.phone_number ? (
                         <TouchableOpacity style={styles.phoneButton} onPress={handleWhatsApp}>
                             <MessageCircle size={16} color="#25D366" fill="#25D366" />
-                            <Text style={styles.phoneText}>{client.phone}</Text>
+                            <Text style={styles.phoneText}>{client.phone_number}</Text>
                         </TouchableOpacity>
                     ) : null}
 
@@ -404,132 +442,362 @@ export default function ClientManagerScreen() {
                             {getStatusText()}
                         </Text>
                     </View>
+
+                    {isBlocked && (
+                        <View style={styles.blockedBanner}>
+                            <Ban size={14} color="#EF4444" />
+                            <Text style={styles.blockedBannerText}>
+                                חסום עד {formatDate(client.block_end_date!)}
+                            </Text>
+                        </View>
+                    )}
                 </View>
 
-                {/* 2. Subscription Hero Card */}
-                {subscription && (
-                <View style={[
-                    styles.heroCard,
-                    subscription.is_frozen && styles.heroCardFrozen
-                ]}>
-                    <View style={styles.cardHeader}>
-                        <Text style={styles.cardTitle}>יתרה בכרטיסייה</Text>
-                        <Text style={styles.planName}>{subscription.plan_name}</Text>
+                {/* ── Stats Card ── */}
+                <View style={styles.statsCard}>
+                    <View style={styles.statsRow}>
+                        <View style={styles.statItem}>
+                            <TrendingUp size={18} color={Colors.primary} />
+                            <Text style={styles.statValue}>{client.attendedCount}</Text>
+                            <Text style={styles.statLabel}>שיעורים</Text>
+                        </View>
+                        <View style={styles.statDivider} />
+                        <View style={styles.statItem}>
+                            <Clock size={18} color={Colors.primary} />
+                            <Text style={styles.statValue}>{getMemberDuration()}</Text>
+                            <Text style={styles.statLabel}>חברות</Text>
+                        </View>
+                        <View style={styles.statDivider} />
+                        <View style={styles.statItem}>
+                            <AlertTriangle size={18} color={client.late_cancellations > 0 ? '#f59e0b' : '#94A3B8'} />
+                            <Text style={styles.statValue}>{client.late_cancellations}</Text>
+                            <Text style={styles.statLabel}>ביטולים מאוחרים</Text>
+                        </View>
                     </View>
-
-                    <View style={styles.counterContainer}>
-                        <TouchableOpacity 
-                            style={styles.counterBtn} 
-                            onPress={() => adjustEntries(-1)}
-                            activeOpacity={0.7}
-                        >
-                            <Minus size={24} color={subscription.is_frozen ? '#94A3B8' : '#000'} />
-                        </TouchableOpacity>
-                        
-                        <Text style={[
-                            styles.counterValue,
-                            subscription.is_frozen && { color: '#94A3B8' }
-                        ]}>
-                            {subscription.classes_remaining}
+                    {client.lastClassDate && (
+                        <Text style={styles.lastClassText}>
+                            שיעור אחרון: {formatDate(client.lastClassDate)}
                         </Text>
-                        
-                        <TouchableOpacity 
-                            style={[styles.counterBtn, { backgroundColor: '#000' }]} 
-                            onPress={() => adjustEntries(1)}
-                            activeOpacity={0.7}
-                        >
-                            <Plus size={24} color="#fff" />
-                        </TouchableOpacity>
+                    )}
+                </View>
+
+                {/* ── Subscription Card ── */}
+                {client.subscription && (
+                    <View style={[
+                        styles.heroCard,
+                        client.subscription.plan_status === 'frozen' && styles.heroCardFrozen,
+                    ]}>
+                        <View style={styles.cardHeader}>
+                            <View style={styles.cardHeaderLeft}>
+                                <CreditCard size={18} color="#64748B" />
+                                <Text style={styles.cardTitle}>מנוי</Text>
+                            </View>
+                            <Text style={styles.planName}>{client.subscription.plan_name}</Text>
+                        </View>
+
+                        {/* Sessions Counter */}
+                        {client.subscription.sessions_remaining !== null && (
+                            <>
+                                <Text style={styles.counterLabel}>אימונים נותרים</Text>
+                                <View style={styles.counterContainer}>
+                                    <TouchableOpacity
+                                        style={styles.counterBtn}
+                                        onPress={() => handleAdjustSessions(-1)}
+                                    >
+                                        <Minus size={24} color={client.subscription.plan_status === 'frozen' ? '#94A3B8' : '#000'} />
+                                    </TouchableOpacity>
+                                    <Text style={[
+                                        styles.counterValue,
+                                        client.subscription.plan_status === 'frozen' && { color: '#94A3B8' },
+                                    ]}>
+                                        {client.subscription.sessions_remaining}
+                                    </Text>
+                                    <TouchableOpacity
+                                        style={[styles.counterBtn, { backgroundColor: '#000' }]}
+                                        onPress={() => handleAdjustSessions(1)}
+                                    >
+                                        <Plus size={24} color="#fff" />
+                                    </TouchableOpacity>
+                                </View>
+                            </>
+                        )}
+
+                        <View style={styles.divider} />
+
+                        {/* Expiry */}
+                        <View style={styles.dateSection}>
+                            <View style={styles.dateRow}>
+                                <Calendar size={18} color="#64748B" />
+                                <Text style={styles.dateLabel}>בתוקף עד:</Text>
+                                <TouchableOpacity onPress={() => setShowDatePicker(true)}>
+                                    <Text style={styles.dateValue}>
+                                        {formatDate(client.subscription.end_date)}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                            <View style={styles.quickActions}>
+                                <TouchableOpacity style={styles.chip} onPress={() => handleExtendDate('week')}>
+                                    <Text style={styles.chipText}>+ שבוע</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.chip} onPress={() => handleExtendDate('month')}>
+                                    <Text style={styles.chipText}>+ חודש</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        {/* Outstanding Balance */}
+                        {(client.subscription.outstanding_balance > 0 || client.subscription.has_debt) && (
+                            <View style={styles.debtBanner}>
+                                <DollarSign size={16} color="#EF4444" />
+                                <Text style={styles.debtText}>
+                                    חוב: ₪{client.subscription.outstanding_balance || client.subscription.debt_amount || 0}
+                                </Text>
+                            </View>
+                        )}
+
+                        {/* Freeze Info */}
+                        {client.subscription.plan_status === 'frozen' && client.subscription.freeze_start_date && (
+                            <View style={styles.freezeInfo}>
+                                <Snowflake size={14} color="#3B82F6" />
+                                <Text style={styles.freezeInfoText}>
+                                    מוקפא מ-{formatDate(client.subscription.freeze_start_date)}
+                                    {client.subscription.freeze_reason ? ` • ${client.subscription.freeze_reason}` : ''}
+                                </Text>
+                            </View>
+                        )}
                     </View>
+                )}
 
-                    <View style={styles.divider} />
+                {/* ── Ticket Card ── */}
+                {client.ticket && (
+                    <View style={styles.heroCard}>
+                        <View style={styles.cardHeader}>
+                            <View style={styles.cardHeaderLeft}>
+                                <Ticket size={18} color="#f59e0b" />
+                                <Text style={styles.cardTitle}>כרטיסייה</Text>
+                            </View>
+                            <Text style={styles.planName}>{client.ticket.plan_name}</Text>
+                        </View>
 
-                    <View style={styles.dateSection}>
+                        <Text style={styles.counterLabel}>אימונים נותרים</Text>
+                        <View style={styles.counterContainer}>
+                            <TouchableOpacity
+                                style={styles.counterBtn}
+                                onPress={() => handleAdjustTicketSessions(-1)}
+                            >
+                                <Minus size={24} color="#000" />
+                            </TouchableOpacity>
+                            <Text style={styles.counterValue}>
+                                {client.ticket.sessions_remaining}
+                                <Text style={styles.counterTotal}>/{client.ticket.total_sessions}</Text>
+                            </Text>
+                            <TouchableOpacity
+                                style={[styles.counterBtn, { backgroundColor: '#000' }]}
+                                onPress={() => handleAdjustTicketSessions(1)}
+                            >
+                                <Plus size={24} color="#fff" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.divider} />
+
                         <View style={styles.dateRow}>
                             <Calendar size={18} color="#64748B" />
                             <Text style={styles.dateLabel}>בתוקף עד:</Text>
-                            <TouchableOpacity onPress={() => setShowDatePicker(true)}>
-                                <Text style={styles.dateValue}>
-                                    {subscription.expiry_date.toLocaleDateString('he-IL')}
-                                </Text>
-                            </TouchableOpacity>
+                            <Text style={styles.dateValue}>{formatDate(client.ticket.expiry_date)}</Text>
                         </View>
 
-                        <View style={styles.quickActions}>
-                            <TouchableOpacity 
-                                style={styles.chip} 
-                                onPress={() => extendDate('week')}
+                        {client.ticket.has_debt && (
+                            <View style={styles.debtBanner}>
+                                <DollarSign size={16} color="#EF4444" />
+                                <Text style={styles.debtText}>חוב: ₪{client.ticket.debt_amount || 0}</Text>
+                            </View>
+                        )}
+
+                        <TouchableOpacity
+                            style={styles.cancelTicketBtn}
+                            onPress={handleCancelTicket}
+                        >
+                            <Trash2 size={16} color="#EF4444" />
+                            <Text style={styles.cancelTicketText}>בטל כרטיסייה</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {/* ── Assign Plan (if no active plan) ── */}
+                {hasNoPlan && (
+                    <View style={styles.assignSection}>
+                        <Text style={styles.sectionTitle}>הקצאת תוכנית</Text>
+
+                        {availablePlans.map(plan => (
+                            <TouchableOpacity
+                                key={plan.id}
+                                style={[
+                                    styles.planOption,
+                                    selectedPlanId === plan.id && styles.planOptionSelected,
+                                ]}
+                                onPress={() => setSelectedPlanId(plan.id)}
                             >
-                                <Text style={styles.chipText}>+ שבוע</Text>
+                                <View style={styles.planOptionLeft}>
+                                    {plan.type === 'ticket' ? (
+                                        <Ticket size={18} color={selectedPlanId === plan.id ? Colors.primary : '#64748B'} />
+                                    ) : (
+                                        <CreditCard size={18} color={selectedPlanId === plan.id ? Colors.primary : '#64748B'} />
+                                    )}
+                                    <View>
+                                        <Text style={[
+                                            styles.planOptionName,
+                                            selectedPlanId === plan.id && { color: Colors.primary },
+                                        ]}>
+                                            {plan.name}
+                                        </Text>
+                                        <Text style={styles.planOptionPrice}>₪{plan.price}</Text>
+                                    </View>
+                                </View>
+                                <Text style={styles.planOptionType}>
+                                    {plan.type === 'ticket'
+                                        ? `${plan.total_sessions} אימונים`
+                                        : 'מנוי'}
+                                </Text>
                             </TouchableOpacity>
-                            <TouchableOpacity 
-                                style={styles.chip} 
-                                onPress={() => extendDate('month')}
+                        ))}
+
+                        {/* Date inputs for subscription plans */}
+                        {selectedPlanId && availablePlans.find(p => p.id === selectedPlanId)?.type === 'subscription' && (
+                            <View style={styles.dateInputs}>
+                                <View style={styles.dateInputGroup}>
+                                    <Text style={styles.dateInputLabel}>תאריך התחלה</Text>
+                                    <TextInput
+                                        style={styles.dateInput}
+                                        value={assignStartDate}
+                                        onChangeText={setAssignStartDate}
+                                        placeholder="YYYY-MM-DD"
+                                        placeholderTextColor="#94A3B8"
+                                        textAlign="right"
+                                    />
+                                </View>
+                                <View style={styles.dateInputGroup}>
+                                    <Text style={styles.dateInputLabel}>תאריך סיום</Text>
+                                    <TextInput
+                                        style={styles.dateInput}
+                                        value={assignEndDate}
+                                        onChangeText={setAssignEndDate}
+                                        placeholder="YYYY-MM-DD"
+                                        placeholderTextColor="#94A3B8"
+                                        textAlign="right"
+                                    />
+                                </View>
+                            </View>
+                        )}
+
+                        {selectedPlanId && (
+                            <TouchableOpacity style={styles.assignButton} onPress={handleAssignPlan}>
+                                <Plus size={18} color="#fff" />
+                                <Text style={styles.assignButtonText}>הקצה תוכנית</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                )}
+
+                {/* ── Freeze Reason Input ── */}
+                {showFreezeInput && (
+                    <View style={styles.freezeInputCard}>
+                        <Text style={styles.freezeInputTitle}>סיבת הקפאה (אופציונלי)</Text>
+                        <TextInput
+                            style={styles.freezeTextInput}
+                            value={freezeReasonInput}
+                            onChangeText={setFreezeReasonInput}
+                            placeholder="לדוגמא: חופשה, פציעה..."
+                            placeholderTextColor="#94A3B8"
+                            textAlign="right"
+                        />
+                        <View style={styles.freezeInputActions}>
+                            <TouchableOpacity
+                                style={styles.freezeInputCancel}
+                                onPress={() => { setShowFreezeInput(false); setFreezeReasonInput(''); }}
                             >
-                                <Text style={styles.chipText}>+ חודש</Text>
+                                <Text style={styles.freezeInputCancelText}>ביטול</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.freezeInputConfirm} onPress={confirmFreeze}>
+                                <Snowflake size={16} color="#fff" />
+                                <Text style={styles.freezeInputConfirmText}>הקפא</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
-                </View>
                 )}
 
-                {/* 3. Admin Actions Grid */}
-                {subscription && (
-                <>
+                {/* ── Admin Actions Grid ── */}
                 <Text style={styles.sectionTitle}>פעולות מנהל</Text>
-
                 <View style={styles.actionsGrid}>
-                    <TouchableOpacity
-                        style={[
-                            styles.actionCard,
-                            subscription.is_frozen && styles.actionCardActive
-                        ]}
-                        onPress={toggleFreeze}
-                        activeOpacity={0.8}
-                    >
-                        <View style={[
-                            styles.iconCircle,
-                            { backgroundColor: subscription.is_frozen ? '#fff' : '#EFF6FF' }
-                        ]}>
-                            <Snowflake
-                                size={24}
-                                color={subscription.is_frozen ? '#3B82F6' : '#3B82F6'}
-                            />
-                        </View>
-                        <Text style={[
-                            styles.actionTitle,
-                            subscription.is_frozen && { color: '#fff' }
-                        ]}>
-                            {subscription.is_frozen ? 'הפשר מנוי' : 'הקפא מנוי'}
-                        </Text>
-                        <Text style={[
-                            styles.actionSubtitle,
-                            subscription.is_frozen && { color: 'rgba(255,255,255,0.8)' }
-                        ]}>
-                            {subscription.is_frozen ? 'החזר לפעילות' : 'עצור זמנית'}
-                        </Text>
-                    </TouchableOpacity>
+                    {/* Freeze/Unfreeze (only if subscription) */}
+                    {client.subscription && (
+                        <TouchableOpacity
+                            style={[
+                                styles.actionCard,
+                                client.subscription.plan_status === 'frozen' && styles.actionCardActive,
+                            ]}
+                            onPress={handleFreeze}
+                        >
+                            <View style={[
+                                styles.iconCircle,
+                                { backgroundColor: client.subscription.plan_status === 'frozen' ? '#fff' : '#EFF6FF' },
+                            ]}>
+                                <Snowflake size={24} color="#3B82F6" />
+                            </View>
+                            <Text style={[
+                                styles.actionTitle,
+                                client.subscription.plan_status === 'frozen' && { color: '#fff' },
+                            ]}>
+                                {client.subscription.plan_status === 'frozen' ? 'הפשר מנוי' : 'הקפא מנוי'}
+                            </Text>
+                            <Text style={[
+                                styles.actionSubtitle,
+                                client.subscription.plan_status === 'frozen' && { color: 'rgba(255,255,255,0.8)' },
+                            ]}>
+                                {client.subscription.plan_status === 'frozen' ? 'החזר לפעילות' : 'עצור זמנית'}
+                            </Text>
+                        </TouchableOpacity>
+                    )}
 
+                    {/* Cancel Subscription */}
+                    {client.subscription && (
+                        <TouchableOpacity
+                            style={[styles.actionCard, styles.actionCardDanger]}
+                            onPress={handleCancelSubscription}
+                        >
+                            <View style={[styles.iconCircle, { backgroundColor: '#FEF2F2' }]}>
+                                <Trash2 size={24} color="#EF4444" />
+                            </View>
+                            <Text style={[styles.actionTitle, { color: '#EF4444' }]}>ביטול מנוי</Text>
+                            <Text style={styles.actionSubtitle}>סיום התקשרות</Text>
+                        </TouchableOpacity>
+                    )}
+
+                    {/* Block/Unblock */}
                     <TouchableOpacity
-                        style={[styles.actionCard, styles.actionCardDanger]}
-                        onPress={handleCancelSubscription}
-                        activeOpacity={0.8}
+                        style={[styles.actionCard, isBlocked && styles.actionCardBlocked]}
+                        onPress={handleToggleBlock}
                     >
-                        <View style={[styles.iconCircle, { backgroundColor: '#FEF2F2' }]}>
-                            <Trash2 size={24} color="#EF4444" />
+                        <View style={[styles.iconCircle, { backgroundColor: isBlocked ? '#FEF2F2' : '#F1F5F9' }]}>
+                            {isBlocked ? (
+                                <ShieldOff size={24} color="#EF4444" />
+                            ) : (
+                                <Ban size={24} color="#64748B" />
+                            )}
                         </View>
-                        <Text style={[styles.actionTitle, { color: '#EF4444' }]}>ביטול מנוי</Text>
-                        <Text style={styles.actionSubtitle}>סיום התקשרות</Text>
+                        <Text style={[styles.actionTitle, isBlocked && { color: '#EF4444' }]}>
+                            {isBlocked ? 'הסר חסימה' : 'חסום לקוח'}
+                        </Text>
+                        <Text style={styles.actionSubtitle}>
+                            {isBlocked ? 'אפשר הרשמה מחדש' : 'מנע הרשמה לשיעורים'}
+                        </Text>
                     </TouchableOpacity>
                 </View>
-                </>
-                )}
-
             </ScrollView>
 
-            {showDatePicker && subscription && (
+            {showDatePicker && client.subscription && (
                 <DateTimePicker
-                    value={subscription.expiry_date}
+                    value={new Date(client.subscription.end_date)}
                     mode="date"
                     display="default"
                     onChange={onDateChange}
@@ -540,269 +808,183 @@ export default function ClientManagerScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#F2F2F7', // Apple standard background gray
-    },
-    centered: {
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
+    container: { flex: 1, backgroundColor: '#F2F2F7' },
+    centered: { justifyContent: 'center', alignItems: 'center' },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 20,
         paddingBottom: 16,
-        backgroundColor: '#F2F2F7',
+        borderBottomLeftRadius: 25,
+        borderBottomRightRadius: 25,
+        overflow: 'hidden',
     },
-    backButton: {
-        width: 40,
-        height: 40,
-        justifyContent: 'center',
-        alignItems: 'flex-start',
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: '#000',
-    },
-    scrollContent: {
-        paddingHorizontal: 20,
-        paddingTop: 10,
-    },
-    
-    // Profile Section
-    profileSection: {
-        alignItems: 'center',
-        marginBottom: 32,
-    },
+    backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-end' },
+    headerTitle: { fontSize: 24, fontFamily: Fonts.black, color: '#fff' },
+    scrollContent: { paddingHorizontal: 20, paddingTop: 10 },
+
+    // Profile
+    profileSection: { alignItems: 'center', marginBottom: 24 },
     avatarContainer: {
         position: 'relative',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
         shadowRadius: 12,
-        marginBottom: 16,
+        marginBottom: 25,
     },
-    avatar: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        borderWidth: 4,
-        borderColor: '#fff',
-    },
+    avatar: { width: 100, height: 100, borderRadius: 50, borderWidth: 4, borderColor: '#fff' },
     statusIndicator: {
-        position: 'absolute',
-        bottom: 2,
-        right: 2,
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        borderWidth: 3,
-        borderColor: '#fff',
+        position: 'absolute', bottom: 2, right: 2, width: 24, height: 24,
+        borderRadius: 12, borderWidth: 3, borderColor: '#fff',
     },
     achievementBadge: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        borderWidth: 3,
-        borderColor: '#fff',
-        backgroundColor: '#fff',
+        position: 'absolute', bottom: 0, left: 0, width: 32, height: 32,
+        borderRadius: 16, borderWidth: 3, borderColor: '#fff', backgroundColor: '#fff',
     },
-    avatarPlaceholder: {
-        backgroundColor: '#E5E7EB',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    avatarInitials: {
-        fontSize: 36,
-        fontWeight: '700',
-        color: '#6B7280',
-    },
-    clientName: {
-        fontSize: 24,
-        fontWeight: '700',
-        color: '#000',
-        marginBottom: 8,
-    },
+    avatarPlaceholder: { backgroundColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center' },
+    avatarInitials: { fontSize: 36, fontFamily: Fonts.bold, color: '#6B7280' },
+    clientName: { fontSize: 24, fontFamily: Fonts.bold, color: '#000', marginBottom: 4 },
+    clientEmail: { fontSize: 14, color: '#64748B', marginBottom: 8 },
     phoneButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#fff',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
-        gap: 6,
-        marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
+        flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff',
+        paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 6,
+        marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05, shadowRadius: 4,
     },
-    phoneText: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: '#000',
+    phoneText: { fontSize: 14, fontWeight: '500', color: '#000' },
+    statusChip: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
+    statusText: { fontSize: 12, fontFamily: Fonts.bold },
+    blockedBanner: {
+        flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8,
+        backgroundColor: '#FEF2F2', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
     },
-    statusChip: {
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    statusText: {
-        fontSize: 12,
-        fontWeight: '700',
-    },
+    blockedBannerText: { fontSize: 12, fontWeight: '600', color: '#EF4444' },
 
-    // Hero Card
+    // Stats Card
+    statsCard: {
+        backgroundColor: '#fff', borderRadius: 20, padding: 20, marginBottom: 24,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10,
+    },
+    statsRow: { flexDirection: 'row', alignItems: 'center' },
+    statItem: { flex: 1, alignItems: 'center', gap: 4 },
+    statDivider: { width: 1, height: 40, backgroundColor: '#E5E7EB' },
+    statValue: { fontSize: 20, fontFamily: Fonts.black, color: '#0F172A', textAlign: 'center' },
+    statLabel: { fontSize: 13, fontFamily: Fonts.medium, color: '#94A3B8' },
+    lastClassText: { fontSize: 12, color: '#94A3B8', textAlign: 'center', marginTop: 12 },
+
+    // Hero Card (Subscription/Ticket)
     heroCard: {
-        backgroundColor: '#fff',
-        borderRadius: 24,
-        padding: 24,
-        marginBottom: 32,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.08,
-        shadowRadius: 24,
-        elevation: 10,
+        backgroundColor: '#fff', borderRadius: 24, padding: 24, marginBottom: 24,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 24,
     },
-    heroCardFrozen: {
-        backgroundColor: '#F8FAFF', // Very light blue
-        borderWidth: 1,
-        borderColor: '#DBEAFE',
-    },
+    heroCardFrozen: { backgroundColor: '#F8FAFF', borderWidth: 1, borderColor: '#DBEAFE' },
     cardHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: 24,
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20,
     },
-    cardTitle: {
-        fontSize: 16,
-        color: '#64748B',
-        fontWeight: '600',
-    },
+    cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    cardTitle: { fontSize: 16, color: '#64748B', fontWeight: '600' },
     planName: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#000',
-        backgroundColor: '#F3F4F6',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 8,
-        overflow: 'hidden',
+        fontSize: 14, fontWeight: '700', color: '#000', backgroundColor: '#F3F4F6',
+        paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, overflow: 'hidden',
     },
+    counterLabel: { fontSize: 13, color: '#94A3B8', fontWeight: '600', textAlign: 'center', marginBottom: 8 },
     counterContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 24,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24,
     },
     counterBtn: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        backgroundColor: '#F3F4F6',
-        alignItems: 'center',
-        justifyContent: 'center',
+        width: 50, height: 50, borderRadius: 25, backgroundColor: '#F3F4F6',
+        alignItems: 'center', justifyContent: 'center',
     },
-    counterValue: {
-        fontSize: 48,
-        fontWeight: '800',
-        color: '#000',
-        fontVariant: ['tabular-nums'],
+    counterValue: { fontSize: 48, fontWeight: '800', color: '#000', fontVariant: ['tabular-nums'] },
+    counterTotal: { fontSize: 24, fontWeight: '600', color: '#94A3B8' },
+    divider: { height: 1, backgroundColor: '#E5E7EB', marginBottom: 20 },
+    dateSection: { gap: 16 },
+    dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    dateLabel: { fontSize: 15, color: '#64748B', marginLeft: 8, flex: 1 },
+    dateValue: { fontSize: 16, fontWeight: '700', color: '#000' },
+    quickActions: { flexDirection: 'row', gap: 12 },
+    chip: { backgroundColor: '#F3F4F6', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 },
+    chipText: { fontSize: 13, fontWeight: '600', color: '#000' },
+    debtBanner: {
+        flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 16,
+        backgroundColor: '#FEF2F2', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12,
     },
-    divider: {
-        height: 1,
-        backgroundColor: '#E5E7EB',
-        marginBottom: 20,
+    debtText: { fontSize: 14, fontWeight: '700', color: '#EF4444' },
+    freezeInfo: {
+        flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12,
+        backgroundColor: '#EFF6FF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12,
     },
-    dateSection: {
-        gap: 16,
+    freezeInfoText: { fontSize: 12, fontWeight: '600', color: '#3B82F6', flex: 1 },
+    cancelTicketBtn: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+        marginTop: 16, paddingVertical: 10, borderRadius: 12,
+        borderWidth: 1, borderColor: '#FECACA',
     },
-    dateRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
+    cancelTicketText: { fontSize: 14, fontWeight: '600', color: '#EF4444' },
+
+    // Assign Plan
+    assignSection: { marginBottom: 24 },
+    planOption: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 10,
+        borderWidth: 2, borderColor: '#F1F5F9',
     },
-    dateLabel: {
-        fontSize: 15,
-        color: '#64748B',
-        marginLeft: 8,
+    planOptionSelected: { borderColor: Colors.primary },
+    planOptionLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    planOptionName: { fontSize: 16, fontWeight: 'bold', color: '#0F172A' },
+    planOptionPrice: { fontSize: 13, color: '#64748B', marginTop: 2 },
+    planOptionType: { fontSize: 12, fontWeight: '600', color: '#94A3B8' },
+    dateInputs: { flexDirection: 'row', gap: 12, marginBottom: 12 },
+    dateInputGroup: { flex: 1 },
+    dateInputLabel: { fontSize: 13, fontWeight: '600', color: '#475569', marginBottom: 6, textAlign: 'right' },
+    dateInput: {
+        backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0',
+        paddingHorizontal: 12, paddingVertical: 12, fontSize: 15, color: '#0F172A',
     },
-    dateValue: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#000',
+    assignButton: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+        backgroundColor: Colors.primary, borderRadius: 16, paddingVertical: 14,
     },
-    quickActions: {
-        flexDirection: 'row',
-        gap: 12,
+    assignButtonText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+
+    // Freeze Input
+    freezeInputCard: {
+        backgroundColor: '#fff', borderRadius: 20, padding: 20, marginBottom: 24,
+        borderWidth: 1, borderColor: '#DBEAFE',
     },
-    chip: {
-        backgroundColor: '#F3F4F6',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 16,
+    freezeInputTitle: { fontSize: 15, fontWeight: '700', color: '#0F172A', marginBottom: 12, textAlign: 'right' },
+    freezeTextInput: {
+        backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0',
+        paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#0F172A', marginBottom: 16,
     },
-    chipText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: '#000',
+    freezeInputActions: { flexDirection: 'row', gap: 12 },
+    freezeInputCancel: {
+        flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 12,
+        borderWidth: 1, borderColor: '#E2E8F0',
     },
+    freezeInputCancelText: { fontSize: 15, fontWeight: '600', color: '#64748B' },
+    freezeInputConfirm: {
+        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+        backgroundColor: '#3B82F6', paddingVertical: 12, borderRadius: 12,
+    },
+    freezeInputConfirmText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 
     // Actions Grid
-    sectionTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: '#000',
-        marginBottom: 16,
-        textAlign: 'left', // Hebrew RTL
-    },
-    actionsGrid: {
-        flexDirection: 'row',
-        gap: 16,
-    },
+    sectionTitle: { fontSize: 20, fontFamily: Fonts.bold, color: '#000', marginBottom: 16, textAlign: 'left' },
+    actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
     actionCard: {
-        flex: 1,
-        backgroundColor: '#fff',
-        borderRadius: 20,
-        padding: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
-        elevation: 4,
-        alignItems: 'flex-start',
+        width: '47%', backgroundColor: '#fff', borderRadius: 20, padding: 16,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05,
+        shadowRadius: 10, alignItems: 'flex-start',
     },
-    actionCardActive: {
-        backgroundColor: '#3B82F6',
-    },
-    actionCardDanger: {
-        backgroundColor: '#fff',
-    },
+    actionCardActive: { backgroundColor: '#3B82F6' },
+    actionCardDanger: { backgroundColor: '#fff' },
+    actionCardBlocked: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#FECACA' },
     iconCircle: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 12,
+        width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginBottom: 12,
     },
-    actionTitle: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#000',
-        marginBottom: 4,
-    },
-    actionSubtitle: {
-        fontSize: 12,
-        color: '#64748B',
-        fontWeight: '500',
-    },
+    actionTitle: { fontSize: 16, fontWeight: '700', color: '#000', marginBottom: 4 },
+    actionSubtitle: { fontSize: 12, color: '#64748B', fontWeight: '500' },
 });
-

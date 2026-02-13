@@ -16,23 +16,16 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAchievements } from '@/contexts/AchievementsContext';
 import { UpcomingWorkoutsWidget } from '@/components/home/UpcomingWorkoutsWidget';
 import { HomeHeader } from '@/components/home/HomeHeader';
-import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
 import { supabase } from '@/constants/supabase';
 import { Icon } from '@/components/ui/icon';
 import { DumbbellIcon, TrophyIcon, ShoppingCartIcon } from '@/components/QuickToolsIcons';
 import { Lock } from 'lucide-react-native';
-import { ProgressRing } from '@/components/ProgressRing';
+import TopClientsPodium from '@/components/home/TopClientsPodium';
+import { useTopClients } from '@/hooks/useTopClients';
 
 const { width } = Dimensions.get('window');
 const cardWidth = (width - 52) / 2; // splitRow padding (20*2) + gap (12)
-
-// Format expiry date as DD/M
-const formatExpiryDate = (dateStr?: string) => {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  return `${date.getDate()}/${date.getMonth() + 1}`;
-};
 
 // --- Components ---
 
@@ -46,7 +39,7 @@ export default function HomeScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await refreshUser();
+    await Promise.all([refreshUser(), refreshPodium()]);
     setRefreshing(false);
   };
   const {
@@ -59,6 +52,15 @@ export default function HomeScreen() {
   /*
    * Dynamic Weekly Goal Logic
    */
+  // TODO: restore real data — const { topClients, currentUserRank, loading: podiumLoading, refresh: refreshPodium } = useTopClients(user?.id);
+  const refreshPodium = async () => {};
+  const podiumLoading = false;
+  const currentUserRank = 14;
+  const topClients = [
+    { userId: '1', name: 'שרה מילר', count: 12, avatarUrl: undefined },
+    { userId: '2', name: 'ירדן דוד', count: 10, avatarUrl: undefined },
+    { userId: '3', name: 'אלכס כהן', count: 8, avatarUrl: undefined },
+  ];
   const [workoutsThisWeek, setWorkoutsThisWeek] = useState(0);
   const [workoutsLastWeek, setWorkoutsLastWeek] = useState(0);
   const [motivationText, setMotivationText] = useState('');
@@ -189,7 +191,49 @@ export default function HomeScreen() {
         {/* Divider after upcoming classes */}
         <View style={styles.divider} />
 
-        {/* 3. Action Cards Row: Performance Log (big) + stacked Achievements & Store */}
+        {/* 3. Full-width Weekly Card: Podium + User's Weekly Data */}
+        <View style={styles.weeklyCardFull}>
+          {/* Top 3 Podium */}
+          <TopClientsPodium topClients={topClients} loading={podiumLoading} />
+
+          {/* Divider */}
+          <View style={styles.weeklyCardDivider} />
+
+          {/* Current user's weekly data — 2 columns */}
+          <View style={styles.weeklyUserSection}>
+            <View style={styles.weeklyColumns}>
+              {/* Column 1: User's rank last week */}
+              <View style={[styles.weeklyColNarrow, { alignItems: 'center', justifyContent: 'center' }]}>
+                <Text style={styles.rankLabel}>המיקום שלך</Text>
+                <Text style={styles.rankValue}>
+                  {currentUserRank != null ? `#${currentUserRank}` : '—'}
+                </Text>
+                <Text style={styles.rankSublabel}>שבוע שעבר</Text>
+              </View>
+
+              {/* Vertical divider */}
+              <View style={styles.weeklyColDivider} />
+
+              {/* Column 2: Workouts this week */}
+              <View style={styles.weeklyCol}>
+                <View style={styles.weeklyHeader}>
+                  <Text style={styles.weeklyLabel}>אימונים השבוע</Text>
+                  <Icon name="fire" size={18} color="#F59E0B" />
+                </View>
+                <View style={styles.weeklyContent}>
+                  <Text style={styles.weeklyValue}>{workoutsThisWeek}</Text>
+                  <Text style={styles.weeklySubtext}>{motivationText}</Text>
+                </View>
+                <View style={styles.lastWeekRow}>
+                  <Text style={styles.lastWeekLabel}>שבוע שעבר:</Text>
+                  <Text style={styles.lastWeekValue}>{workoutsLastWeek}</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* 4. Action Cards Row: Performance Log (big) + stacked Achievements & Store */}
         <View style={styles.actionCardsRow}>
           <TouchableOpacity
             style={styles.actionCardLarge}
@@ -216,98 +260,6 @@ export default function HomeScreen() {
               <Text style={styles.actionCardLabel}>חנות</Text>
             </TouchableOpacity>
           </View>
-        </View>
-
-        {/* 4. Split Row: Weekly Goal & Plan Card */}
-        <View style={styles.splitRow}>
-          {/* Weekly Goal (Left) */}
-          <LinearGradient
-            colors={['#1a1a2e', '#0f0f0f']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.weeklyCard}
-          >
-            <View style={styles.weeklyHeader}>
-              <Text style={[styles.weeklyLabel, { color: '#E5E7EB' }]}>אימונים השבוע</Text>
-              <Icon name="fire" size={20} color="#F59E0B" />
-            </View>
-            <View style={styles.weeklyContent}>
-              <Text style={[styles.weeklyValue, { color: '#FFFFFF' }]}>{workoutsThisWeek}</Text>
-              <Text style={[styles.weeklySubtext, { color: '#9CA3AF' }]}>{motivationText}</Text>
-            </View>
-            <View style={[styles.lastWeekRow, { borderTopColor: 'rgba(255,255,255,0.1)' }]}>
-              <Text style={[styles.lastWeekLabel, { color: 'rgba(255,255,255,0.4)' }]}>שבוע שעבר:</Text>
-              <Text style={[styles.lastWeekValue, { color: 'rgba(255,255,255,0.6)' }]}>{workoutsLastWeek}</Text>
-            </View>
-          </LinearGradient>
-
-          {/* Plan Card (Right) */}
-          {(() => {
-            const sub = user?.subscription;
-            const hasActiveSubscription = sub?.status === 'active';
-            const isTicket = sub?.isTicket;
-            const totalSessions = sub?.totalSessions || 0;
-            const sessionsRemaining = sub?.sessionsRemaining || 0;
-            const progressPercent = totalSessions > 0 ? (sessionsRemaining / totalSessions) * 100 : 0;
-
-            const getPlanImage = () => {
-              if (!sub?.planName) return null;
-              const name = sub.planName.toUpperCase();
-              if (name.includes('ELITE')) return require('@/assets/images/reel-elite.png');
-              if (name.includes('ONE')) return require('@/assets/images/reel-one.png');
-              if (name.includes('10') || totalSessions === 10) return require('@/assets/images/10sessions.png');
-              if (name.includes('20') || totalSessions === 20) return require('@/assets/images/20sessions.png');
-              return null;
-            };
-
-            const planImage = getPlanImage();
-
-            return (
-              <TouchableOpacity
-                style={styles.planCardCompact}
-                onPress={() => router.push(hasActiveSubscription ? '/subscription-management' as any : '/shop' as any)}
-              >
-                {/* Plan Image Badge - Left side vertical */}
-                {planImage && (
-                  <View style={styles.planBadgeStrip}>
-                    <Image source={planImage} style={styles.planBadgeImage} resizeMode="contain" />
-                  </View>
-                )}
-
-                {/* Ring + Expiry content */}
-                <View style={styles.planCardContent}>
-                  {/* Progress Ring - Centered */}
-                  {hasActiveSubscription && isTicket ? (
-                    <ProgressRing
-                      progress={progressPercent}
-                      size={100}
-                      strokeWidth={9}
-                      color={Colors.primary}
-                      backgroundColor="#E5E7EB"
-                    >
-                      <Text style={styles.ringValue}>{sessionsRemaining}<Text style={styles.ringTotal}>/{totalSessions}</Text></Text>
-                    </ProgressRing>
-                  ) : hasActiveSubscription && !isTicket ? (
-                    <View style={[styles.unlimitedRing, { width: 100, height: 100, borderRadius: 50 }]}>
-                      <Icon name="infinity" size={36} color={Colors.primary} />
-                    </View>
-                  ) : (
-                    <View style={[styles.noSubRing, { width: 100, height: 100, borderRadius: 50 }]}>
-                      <Icon name="shopping-cart" size={28} color="#9CA3AF" />
-                    </View>
-                  )}
-
-                  {/* Expiry */}
-                  <Text style={styles.expirySmall}>
-                    {hasActiveSubscription
-                      ? `בתוקף עד ${formatExpiryDate(sub?.endDate)}`
-                      : 'לחנות'
-                    }
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })()}
         </View>
 
         <View style={{ height: 120 }} />
@@ -395,13 +347,13 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   dateSubtitle: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#6B7280',
     marginTop: 2,
     textAlign: 'left',
   },
   dateSubtitleLight: {
-    fontSize: 14,
+    fontSize: 16,
     color: 'rgba(255,255,255,0.6)',
     marginTop: 2,
     textAlign: 'left',
@@ -607,23 +559,65 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
 
-  // Split Row
-  splitRow: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 20,
-  },
-  weeklyCard: {
-    flex: 1,
+  // Full-width Weekly Card
+  weeklyCardFull: {
+    marginHorizontal: 20,
     borderRadius: 20,
     padding: 16,
+    marginBottom: 16,
+    backgroundColor: '#FFFFFF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 3,
-    justifyContent: 'space-between',
     overflow: 'hidden',
+  },
+  weeklyCardDivider: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginVertical: 12,
+  },
+  weeklyUserSection: {
+    paddingTop: 4,
+  },
+  weeklyColumns: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  weeklyCol: {
+    flex: 7,
+  },
+  weeklyColNarrow: {
+    flex: 3,
+  },
+  weeklyColDivider: {
+    width: 1,
+    backgroundColor: '#F3F4F6',
+    marginHorizontal: 14,
+  },
+  rankLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    marginBottom: 6,
+    writingDirection: 'rtl',
+  },
+  rankValue: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: '#FFD700',
+  },
+  rankSublabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#D1D5DB',
+    marginTop: 4,
+    writingDirection: 'rtl',
+  },
+  // Plan Card Row (standalone)
+  planCardRow: {
+    paddingHorizontal: 20,
   },
   weeklyHeader: {
     flexDirection: 'row',

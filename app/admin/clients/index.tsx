@@ -8,11 +8,11 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   TextInput,
   Alert,
   RefreshControl,
 } from 'react-native';
+import { Spinner } from '@/components/ui/spinner';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -161,7 +161,7 @@ export default function ClientManagement() {
       {/* Client List */}
       {loading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <Spinner size="lg" />
         </View>
       ) : filteredClients.length === 0 ? (
         <View style={styles.centered}>

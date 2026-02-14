@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { Spinner } from '@/components/ui/spinner';
 import { Card, CardContent } from '@/components/ui/card';
 import { useClasses } from '@/contexts/ClassesContext';
 import Colors from '@/constants/colors';
@@ -34,7 +35,7 @@ export function ClassesSlide() {
         return (
             <Card className="h-[340px] border-none rounded-[40px]" style={{ backgroundColor: 'white', borderWidth: 0 }}>
                 <CardContent className="h-full flex-1 items-center justify-center">
-                    <ActivityIndicator color={Colors.primary} size="large" />
+                    <Spinner size="lg" />
                 </CardContent>
             </Card>
         );

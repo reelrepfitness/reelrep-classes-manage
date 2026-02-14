@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert, TextInput, Image, ActivityIndicator } from 'react-native';
+import { Spinner } from '@/components/ui/spinner';
+import { View, Text, ScrollView, TouchableOpacity, Alert, TextInput, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, ShoppingCart, Minus, Plus, ArrowRight } from 'lucide-react-native';
 import { useShop } from '@/contexts/ShopContext';
@@ -112,7 +113,7 @@ export default function AdminStoreScreen() {
             >
                 {isLoading ? (
                     <View className="bg-white rounded-2xl p-6 items-center border border-gray-100">
-                        <ActivityIndicator size="large" color="#D81B60" />
+                        <Spinner size="lg" />
                         <Text className="text-base font-bold text-[#09090B] text-center mt-2">
                             {selectedCategory === 'subscriptions' ? 'טוען מנויים...' : 'טוען כרטיסיות...'}
                         </Text>
@@ -231,7 +232,7 @@ export default function AdminStoreScreen() {
                             )}
                         >
                             {isProcessing ? (
-                                <ActivityIndicator color="white" />
+                                <Spinner size="sm" />
                             ) : (
                                 <Text className="text-lg font-bold text-white">בצע רכישה (Simulated Cash)</Text>
                             )}

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "reel rep training.",
+    "name": "Training",
     "slug": "reel-rep-training-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -18,7 +18,8 @@
       "bundleIdentifier": "app.rork.reel-rep-training-app",
       "infoPlist": {
         "NSHealthShareUsageDescription": "We need access to your health data to track your workouts and award you plates for your activity.",
-        "NSHealthUpdateUsageDescription": "We need access to update your health data with workout information from the app."
+        "NSHealthUpdateUsageDescription": "We need access to update your health data with workout information from the app.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {

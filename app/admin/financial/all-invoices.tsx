@@ -2,13 +2,13 @@
 // All Invoices with Filters
 
 import React, { useState, useEffect } from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -275,7 +275,7 @@ export default function AllInvoices() {
       {/* Invoices List */}
       {loading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <Spinner size="lg" />
         </View>
       ) : filteredInvoices.length === 0 ? (
         <View style={styles.centered}>

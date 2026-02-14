@@ -5,7 +5,6 @@ import {
     ScrollView,
     TouchableOpacity,
     StyleSheet,
-    ActivityIndicator,
     Alert,
     TextInput,
     Platform,
@@ -18,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/constants/supabase';
+import { Spinner } from '@/components/ui/spinner';
 import Colors from '@/constants/colors';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
@@ -270,7 +270,7 @@ export default function SubscriptionManagementScreen() {
                                 onPress={submitRequest}
                                 disabled={submitting}
                             >
-                                {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>שלח בקשה</Text>}
+                                {submitting ? <Spinner size="sm" /> : <Text style={styles.submitBtnText}>שלח בקשה</Text>}
                             </TouchableOpacity>
                         </View>
                     )}
@@ -308,7 +308,7 @@ export default function SubscriptionManagementScreen() {
                                 onPress={submitRequest}
                                 disabled={submitting}
                             >
-                                {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>שלח בקשה</Text>}
+                                {submitting ? <Spinner size="sm" /> : <Text style={styles.submitBtnText}>שלח בקשה</Text>}
                             </TouchableOpacity>
                         </View>
                     )}

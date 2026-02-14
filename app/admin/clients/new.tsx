@@ -6,11 +6,11 @@ import {
     ScrollView,
     TextInput,
     TouchableOpacity,
-    ActivityIndicator,
     Alert,
     KeyboardAvoidingView,
     Platform,
 } from 'react-native';
+import { Spinner } from '@/components/ui/spinner';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, Check, CreditCard, Ticket } from 'lucide-react-native';
@@ -434,7 +434,7 @@ export default function NewClientScreen() {
                     {planType !== 'none' && (
                         <>
                             {plansLoading ? (
-                                <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 16 }} />
+                                <Spinner size="sm" />
                             ) : filteredPlans.length === 0 ? (
                                 <Text style={styles.noPlanText}>אין תוכניות זמינות</Text>
                             ) : (
@@ -525,7 +525,7 @@ export default function NewClientScreen() {
                     activeOpacity={0.7}
                 >
                     {loading ? (
-                        <ActivityIndicator color="#fff" />
+                        <Spinner size="sm" />
                     ) : (
                         <>
                             <Check size={20} color="#fff" />

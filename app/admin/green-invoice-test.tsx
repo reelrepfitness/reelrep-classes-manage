@@ -2,13 +2,13 @@
 // Green Invoice Testing & Admin Screen
 
 import React, { useState, useEffect } from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import {
   View,
   Text,
   TouchableOpacity,
   ScrollView,
   Alert,
-  ActivityIndicator,
   StyleSheet,
 } from 'react-native';
 import { useGreenInvoice } from '@/hooks/useGreenInvoice';
@@ -114,7 +114,7 @@ export default function GreenInvoiceTestScreen() {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <Spinner size="sm" />
           ) : (
             <Text style={styles.buttonText}>1. בדוק Auth Token</Text>
           )}
@@ -136,7 +136,7 @@ export default function GreenInvoiceTestScreen() {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#da4477" />
+            <Spinner size="sm" />
           ) : (
             <Text style={[styles.buttonText, styles.secondaryButtonText]}>
               2. סנכרן נתונים פיננסיים
@@ -158,7 +158,7 @@ export default function GreenInvoiceTestScreen() {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#da4477" />
+            <Spinner size="sm" />
           ) : (
             <Text style={[styles.buttonText, styles.secondaryButtonText]}>
               3. בדוק Dashboard Stats

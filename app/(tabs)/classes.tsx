@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, Text, ScrollView, TouchableOpacity, Alert, Image, Dimensions, PanResponder, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -197,11 +197,14 @@ export default function ClassesScreen() {
     title?: string;
     message?: string;
     buttons?: DialogButton[];
+    lottieSource?: any;
+    customContent?: ReactNode;
     showSuccessGif?: boolean;
     showWarningGif?: boolean;
     showCancelGif?: boolean;
     autoCloseAfterGif?: boolean;
   }>({});
+
 
   const showDialog = (config: typeof dialogConfig) => {
     setDialogConfig(config);
@@ -371,14 +374,13 @@ export default function ClassesScreen() {
     };
 
     if (isLateCancellation) {
-      // Late Cancel Logic
       showDialog({
         type: 'warning',
         title: 'ביטול מאוחר',
         message: user?.ticket
           ? 'אתה מבטל פחות מ-6 שעות לפני תחילת השיעור.\n\nביטול מאוחר עלול לגרור לחיוב אימון מהכרטיסייה.'
           : `לא ניתן לבטל פחות מ-6 שעות לפני.\n\nביטול יגרור חיוב. (ביטולים מאוחרים: ${lateCancellations}/3)`,
-        showWarningGif: true,
+        lottieSource: require('@/assets/animations/Warning Status.json'),
         buttons: [
           { text: 'חזרה', onPress: hideDialog, style: 'cancel' },
           {
@@ -386,7 +388,6 @@ export default function ClassesScreen() {
             onPress: () => {
               hideDialog();
               performCancellation();
-              // Handle late cancellation consequences
               if (!user?.ticket) {
                 const newLate = lateCancellations + 1;
                 if (newLate >= 3) {
@@ -401,12 +402,11 @@ export default function ClassesScreen() {
         ],
       });
     } else {
-      // Normal Cancel
       showDialog({
         type: 'confirm',
         title: 'ביטול שיעור',
         message: 'האם לבטל את ההרשמה?',
-        showCancelGif: true,
+        lottieSource: require('@/assets/animations/Cross, Close, Cancel Icon Animation.json'),
         buttons: [
           { text: 'לא', onPress: hideDialog, style: 'cancel' },
           {
@@ -418,6 +418,29 @@ export default function ClassesScreen() {
             style: 'destructive',
           },
         ],
+      });
+    }
+  };
+
+  const performSwitch = async (fromClassItem: any, toClassId: string) => {
+    const booking = getClassBooking(fromClassItem.id);
+    if (!booking) return;
+    try {
+      hideDialog();
+      await cancelBooking(booking.id, false);
+      await bookClass(toClassId);
+      showDialog({
+        type: 'success',
+        title: 'השיעור הוחלף בהצלחה!',
+        showSuccessGif: true,
+        autoCloseAfterGif: true,
+      });
+    } catch (error) {
+      showDialog({
+        type: 'error',
+        title: 'שגיאה',
+        message: error instanceof Error ? error.message : 'לא ניתן להחליף את השיעור',
+        buttons: [{ text: 'אישור', onPress: hideDialog, style: 'default' }],
       });
     }
   };
@@ -437,15 +460,89 @@ export default function ClassesScreen() {
         type: 'warning',
         title: 'זמן החלפה עבר',
         message: 'לא ניתן להחליף שיעור פחות משעה לפני תחילתו.',
-        buttons: [{ text: 'אישור', onPress: hideDialog, style: 'default' }],
+        lottieSource: require('@/assets/animations/Warning Status.json'),
+        buttons: [{ text: 'הבנתי', onPress: hideDialog, style: 'default' }],
       });
       return;
     }
+
+    // Get same-day classes that haven't started yet (excluding current class)
+    const now = new Date();
+    const sameDayClasses = classes.filter(c => {
+      if (c.id === classItem.id) return false;
+      if (c.date !== classItem.date) return false;
+      const classTime = new Date(c.date + ' ' + c.time);
+      return classTime > now;
+    });
+
+    if (sameDayClasses.length === 0) {
+      showDialog({
+        type: 'warning',
+        title: 'אין שיעורים זמינים',
+        message: 'אין שיעורים נוספים באותו יום להחלפה.',
+        lottieSource: require('@/assets/animations/Warning Status.json'),
+        buttons: [{ text: 'הבנתי', onPress: hideDialog, style: 'default' }],
+      });
+      return;
+    }
+
+    const classOptions = (
+      <View style={{ gap: 8 }}>
+        {sameDayClasses.map(c => {
+          const isFull = c.enrolled >= c.capacity;
+          const isBooked = isClassBooked(c.id);
+          const disabled = isFull || isBooked;
+          return (
+            <TouchableOpacity
+              key={c.id}
+              disabled={disabled}
+              onPress={() => performSwitch(classItem, c.id)}
+              activeOpacity={0.7}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: disabled ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.15)',
+                borderRadius: 12,
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                borderWidth: 1,
+                borderColor: disabled ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)',
+                opacity: disabled ? 0.5 : 1,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {isFull && (
+                  <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                    <Text style={{ color: '#DC2626', fontSize: 11, fontWeight: '700' }}>מלא</Text>
+                  </View>
+                )}
+                {isBooked && (
+                  <View style={{ backgroundColor: '#D1FAE5', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                    <Text style={{ color: '#059669', fontSize: 11, fontWeight: '700' }}>רשום</Text>
+                  </View>
+                )}
+                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '600' }}>
+                  {c.enrolled}/{c.capacity}
+                </Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '700' }}>{c.time}</Text>
+                <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '500' }}>{c.title}</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    );
+
     showDialog({
       type: 'confirm',
       title: 'החלף שיעור',
-      message: 'אנא בטל את השיעור הנוכחי והירשם לשיעור אחר.',
-      buttons: [{ text: 'הבנתי', onPress: hideDialog, style: 'default' }],
+      message: 'בחר שיעור להחלפה:',
+      lottieSource: require('@/assets/animations/Refresh-A-001.json'),
+      customContent: classOptions,
+      buttons: [{ text: 'ביטול', onPress: hideDialog, style: 'cancel' }],
     });
   };
 
@@ -629,10 +726,10 @@ export default function ClassesScreen() {
                         isToday && !isSelected ? "border border-white/30 bg-white/10" : ""
                       )}
                     >
-                      <Text className={cn("text-[10px] font-bold mb-0.5", isSelected && !isWeekLocked ? "text-gray-500" : "text-gray-400")}>
+                      <Text className={cn("text-[14px] font-bold mb-0.5", isSelected && !isWeekLocked ? "text-gray-500" : "text-gray-400")}>
                         {DAYS_OF_WEEK[day.dayOfWeek]}
                       </Text>
-                      <Text className={cn("text-base font-extrabold", isSelected && !isWeekLocked ? "text-[#09090B]" : "text-white")}>
+                      <Text className={cn("text-xl font-extrabold", isSelected && !isWeekLocked ? "text-[#09090B]" : "text-white")}>
                         {day.dayNumber}
                       </Text>
                     </TouchableOpacity>
@@ -729,7 +826,7 @@ export default function ClassesScreen() {
                   {/* Row 1: Class Name + Time Badge */}
                   <View className="flex-row items-center justify-between mb-2">
                     <View className="flex-row items-center gap-2 flex-1">
-                      <Text className="text-lg font-extrabold text-[#09090B] text-left">{classItem.title}</Text>
+                      <Text className="text-2xl font-extrabold text-[#09090B] text-left">{classItem.title}</Text>
                       {isFull && !booked && (
                         <View className="bg-red-100 px-2 py-0.5 rounded">
                           <Text className="text-red-600 text-[10px] font-bold">מלא</Text>
@@ -744,12 +841,12 @@ export default function ClassesScreen() {
 
                     {/* Time Badge with Black Gradient */}
                     <LinearGradient
-                      colors={['#18181B', '#09090B']}
+                      colors={['#18181B', '#1b1b1bff']}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
                     >
-                      <Text className="text-white font-bold text-[17px]">{classItem.time}</Text>
+                      <Text className="text-white font-bold text-[20px]">{classItem.time}</Text>
                     </LinearGradient>
                   </View>
 
@@ -758,7 +855,7 @@ export default function ClassesScreen() {
                     {classItem.instructorAvatar ? (
                       <Image
                         source={{ uri: classItem.instructorAvatar }}
-                        style={{ width: 24, height: 24, borderRadius: 12 }}
+                        style={{ width: 30, height: 30, borderRadius: 12 }}
                       />
                     ) : (
                       <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center' }}>
@@ -774,8 +871,8 @@ export default function ClassesScreen() {
                 {/* Progress Bar */}
                 <View className="mt-4">
                   <View className="flex-row justify-between mb-1">
-                    <Text className="text-[12px] text-gray-400 font-bold">רשומים</Text>
-                    <Text className="text-[12px] text-gray-600 font-bold">{classItem.enrolled}/{classItem.capacity}</Text>
+                    <Text className="text-[15px] text-gray-400 font-bold">רשומים</Text>
+                    <Text className="text-[15px] text-gray-600 font-bold">{classItem.enrolled}/{classItem.capacity}</Text>
                   </View>
                   <Progress
                     value={percent}
@@ -878,6 +975,8 @@ export default function ClassesScreen() {
         showSuccessGif={dialogConfig.showSuccessGif}
         showWarningGif={dialogConfig.showWarningGif}
         showCancelGif={dialogConfig.showCancelGif}
+        lottieSource={dialogConfig.lottieSource}
+        customContent={dialogConfig.customContent}
         autoCloseAfterGif={dialogConfig.autoCloseAfterGif}
       />
     </View>

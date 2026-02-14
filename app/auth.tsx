@@ -1,15 +1,30 @@
-import { View, Text, StyleSheet, TouchableOpacity, I18nManager, ActivityIndicator, Alert, Image, SafeAreaView, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, I18nManager, Alert, SafeAreaView, ScrollView, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Mail, Lock, ArrowRight } from 'lucide-react-native';
+import { Mail, Lock } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Colors from '@/constants/colors';
 import { hebrew } from '@/constants/hebrew';
 import { Input } from '@/components/ui/input';
+import { Spinner } from '@/components/ui/spinner';
+import { Image as ExpoImage } from 'expo-image';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withDelay,
+} from 'react-native-reanimated';
 
 I18nManager.allowRTL(true);
 I18nManager.forceRTL(true);
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const LOGO_SIZE = 280;
+const LOGO_SIZE_SMALL = 160;
+const LOGO_SCALE_TARGET = LOGO_SIZE_SMALL / LOGO_SIZE;
+const LOGO_CENTER_Y = (SCREEN_HEIGHT - LOGO_SIZE) / 2 - 60;
+const LOGO_FORM_Y = 10;
 
 type AuthMode = 'signin' | 'forgot' | 'otp' | 'verify';
 
@@ -21,6 +36,16 @@ export default function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
+  const [showForm, setShowForm] = useState(false);
+
+  // Animation shared values
+  const logoOpacity = useSharedValue(0);
+  const logoScale = useSharedValue(1);
+  const logoTop = useSharedValue(LOGO_CENTER_Y);
+  const buttonOpacity = useSharedValue(0);
+  const formOpacity = useSharedValue(0);
+  const formTranslateY = useSharedValue(30);
+
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -28,13 +53,49 @@ export default function AuthScreen() {
     }
   }, [isAuthenticated, router]);
 
+  // Entrance animation on mount
+  useEffect(() => {
+    // Icon fades in
+    logoOpacity.value = withDelay(200, withTiming(1, { duration: 500 }));
+    // Button fades in after logo
+    buttonOpacity.value = withDelay(700, withTiming(1, { duration: 400 }));
+  }, []);
+
+  const handleEnterLogin = useCallback(() => {
+    // Fade out button, scale & move logo
+    buttonOpacity.value = withTiming(0, { duration: 200 });
+    logoScale.value = withTiming(LOGO_SCALE_TARGET, { duration: 500 });
+    logoTop.value = withTiming(LOGO_FORM_Y, { duration: 500 });
+    // Show form after logo starts moving
+    setTimeout(() => {
+      setShowForm(true);
+      formOpacity.value = withDelay(100, withTiming(1, { duration: 400 }));
+      formTranslateY.value = withDelay(100, withTiming(0, { duration: 400 }));
+    }, 300);
+  }, []);
+
+  // Animated styles
+  const logoContainerStyle = useAnimatedStyle(() => ({
+    opacity: logoOpacity.value,
+    top: logoTop.value,
+    transform: [{ scale: logoScale.value }],
+  }));
+
+  const enterButtonStyle = useAnimatedStyle(() => ({
+    opacity: buttonOpacity.value,
+  }));
+
+  const formStyle = useAnimatedStyle(() => ({
+    opacity: formOpacity.value,
+    transform: [{ translateY: formTranslateY.value }],
+  }));
+
   const emailError = email && !email.includes('@') ? 'נא להזין כתובת אימייל תקינה' : undefined;
   const passwordError = password && password.length < 6 ? 'הסיסמה חייבת להכיל לפחות 6 תווים' : undefined;
   const otpError = otp && otp.length !== 6 ? 'הקוד חייב להכיל 6 ספרות' : undefined;
 
   const handleSignIn = async () => {
     if (emailError || passwordError) return;
-
     try {
       await signInWithPassword.mutateAsync({ email, password });
     } catch (error: unknown) {
@@ -45,7 +106,6 @@ export default function AuthScreen() {
 
   const handleSendOTP = async () => {
     if (emailError) return;
-
     try {
       await signInWithOTP.mutateAsync(email);
       setMode('verify');
@@ -58,7 +118,6 @@ export default function AuthScreen() {
 
   const handleVerifyOTP = async () => {
     if (otpError) return;
-
     try {
       await verifyOTP.mutateAsync({ email, token: otp });
     } catch (error: unknown) {
@@ -69,7 +128,6 @@ export default function AuthScreen() {
 
   const handleResetPassword = async () => {
     if (emailError) return;
-
     try {
       await resetPassword.mutateAsync(email);
       Alert.alert(hebrew.common.success, hebrew.auth.emailSent);
@@ -84,206 +142,228 @@ export default function AuthScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.logoContainer}>
-          <Image
-            source={require('../assets/images/icon.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-        </View>
+      {/* Logo - absolutely positioned, animated from center to top */}
+      <Animated.View style={[styles.logoAbsolute, logoContainerStyle]}>
+        <ExpoImage
+          source={require('@/assets/images/login-screen-logo.png')}
+          style={styles.logoImage}
+          contentFit="contain"
+        />
+      </Animated.View>
 
-        <View style={styles.formContainer}>
-          {mode === 'signin' && (
-            <>
-              <Input
-                label={hebrew.auth.email}
-                placeholder={hebrew.auth.enterEmail}
-                icon={Mail}
-                value={email}
-                onChangeText={setEmail}
-                error={emailError}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={styles.input}
-              />
-              <Input
-                label={hebrew.auth.password}
-                placeholder={hebrew.auth.enterPassword}
-                icon={Lock}
-                value={password}
-                onChangeText={setPassword}
-                error={passwordError}
-                secureTextEntry
-                style={styles.input}
-              />
-
+      {!showForm ? (
+        <>
+          <View style={{ flex: 1 }} />
+          <Animated.View style={[styles.bottomContainer, enterButtonStyle]}>
+            <View style={styles.enterButtonWrapper}>
               <TouchableOpacity
-                onPress={() => setMode('forgot')}
-                style={styles.forgotButton}
+                onPress={handleEnterLogin}
+                activeOpacity={0.8}
+                style={styles.enterButton}
               >
-                <Text style={styles.forgotText}>{hebrew.auth.forgotPassword}</Text>
+                <LinearGradient
+                  colors={['#1F2937', '#111827']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.enterButtonGradient}
+                >
+                  <Text style={styles.enterButtonText}>כניסה</Text>
+                </LinearGradient>
               </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </>
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Animated.View style={[styles.formContainer, formStyle]}>
+            {mode === 'signin' && (
+              <>
+                <Input
+                  label={hebrew.auth.email}
+                  placeholder={hebrew.auth.enterEmail}
+                  icon={Mail}
+                  iconColor="#FFFFFF"
+                  iconBgColor={Colors.primary}
+                  value={email}
+                  onChangeText={setEmail}
+                  error={emailError}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.input}
+                />
+                <Input
+                  label={hebrew.auth.password}
+                  placeholder={hebrew.auth.enterPassword}
+                  icon={Lock}
+                  iconColor="#FFFFFF"
+                  iconBgColor={Colors.primary}
+                  value={password}
+                  onChangeText={setPassword}
+                  error={passwordError}
+                  secureTextEntry
+                  style={styles.input}
+                />
 
-              <LinearGradient
-                colors={['#1F2937', '#111827']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.primaryButton}
-              >
+                <LinearGradient
+                  colors={['#1F2937', '#111827']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.primaryButton}
+                >
+                  <TouchableOpacity
+                    onPress={handleSignIn}
+                    disabled={isLoading || !!emailError || !!passwordError}
+                    activeOpacity={0.8}
+                    style={styles.primaryButtonInner}
+                  >
+                    {isLoading ? (
+                      <Spinner size="sm" />
+                    ) : (
+                      <Text style={styles.primaryButtonText}>{hebrew.auth.signIn}</Text>
+                    )}
+                  </TouchableOpacity>
+                </LinearGradient>
+
                 <TouchableOpacity
-                  onPress={handleSignIn}
-                  disabled={isLoading || !!emailError || !!passwordError}
+                  onPress={() => setMode('forgot')}
+                  style={styles.forgotButton}
+                >
+                  <Text style={styles.forgotText}>{hebrew.auth.forgotPassword}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {mode === 'forgot' && (
+              <>
+                <Text style={styles.modeTitle}>{hebrew.auth.resetPassword}</Text>
+                <Text style={styles.modeDescription}>נשלח לך קישור לאיפוס סיסמה לאימייל</Text>
+
+                <Input
+                  label={hebrew.auth.email}
+                  placeholder={hebrew.auth.enterEmail}
+                  icon={Mail}
+                  value={email}
+                  onChangeText={setEmail}
+                  error={emailError}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+
+                <TouchableOpacity
+                  style={styles.primaryButton}
+                  onPress={handleResetPassword}
+                  disabled={isLoading || !!emailError}
                   activeOpacity={0.8}
-                  style={styles.primaryButtonInner}
                 >
                   {isLoading ? (
-                    <ActivityIndicator color={Colors.background} />
+                    <Spinner size="sm" />
                   ) : (
-                    <Text style={styles.primaryButtonText}>{hebrew.auth.signIn}</Text>
+                    <Text style={styles.primaryButtonText}>{hebrew.auth.sendResetLink}</Text>
                   )}
                 </TouchableOpacity>
-              </LinearGradient>
 
-              <View style={styles.divider}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>או</Text>
-                <View style={styles.dividerLine} />
-              </View>
+                <TouchableOpacity
+                  onPress={() => setMode('signin')}
+                  style={styles.backButton}
+                >
+                  <Text style={styles.backText}>{hebrew.auth.backToLogin}</Text>
+                </TouchableOpacity>
+              </>
+            )}
 
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={() => setMode('otp')}
-                disabled={isLoading}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.secondaryButtonText}>{hebrew.auth.signInWithOTP}</Text>
-                <ArrowRight size={20} color="#000000" />
-              </TouchableOpacity>
-            </>
-          )}
+            {mode === 'otp' && (
+              <>
+                <Text style={styles.modeTitle}>{hebrew.auth.signInWithOTP}</Text>
+                <Text style={styles.modeDescription}>נשלח לך קוד חד פעמי לאימייל</Text>
 
-          {mode === 'forgot' && (
-            <>
-              <Text style={styles.modeTitle}>{hebrew.auth.resetPassword}</Text>
-              <Text style={styles.modeDescription}>נשלח לך קישור לאיפוס סיסמה לאימייל</Text>
+                <Input
+                  label={hebrew.auth.email}
+                  placeholder={hebrew.auth.enterEmail}
+                  icon={Mail}
+                  value={email}
+                  onChangeText={setEmail}
+                  error={emailError}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
 
-              <Input
-                label={hebrew.auth.email}
-                placeholder={hebrew.auth.enterEmail}
-                icon={Mail}
-                value={email}
-                onChangeText={setEmail}
-                error={emailError}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
+                <TouchableOpacity
+                  style={styles.primaryButton}
+                  onPress={handleSendOTP}
+                  disabled={isLoading || !!emailError}
+                  activeOpacity={0.8}
+                >
+                  {isLoading ? (
+                    <Spinner size="sm" />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>{hebrew.auth.sendOTP}</Text>
+                  )}
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={handleResetPassword}
-                disabled={isLoading || !!emailError}
-                activeOpacity={0.8}
-              >
-                {isLoading ? (
-                  <ActivityIndicator color={Colors.background} />
-                ) : (
-                  <Text style={styles.primaryButtonText}>{hebrew.auth.sendResetLink}</Text>
-                )}
-              </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setMode('signin')}
+                  style={styles.backButton}
+                >
+                  <Text style={styles.backText}>{hebrew.auth.backToLogin}</Text>
+                </TouchableOpacity>
+              </>
+            )}
 
-              <TouchableOpacity
-                onPress={() => setMode('signin')}
-                style={styles.backButton}
-              >
-                <Text style={styles.backText}>{hebrew.auth.backToLogin}</Text>
-              </TouchableOpacity>
-            </>
-          )}
+            {mode === 'verify' && (
+              <>
+                <Text style={styles.modeTitle}>{hebrew.auth.verify}</Text>
+                <Text style={styles.modeDescription}>הזן את הקוד שנשלח ל-{email}</Text>
 
-          {mode === 'otp' && (
-            <>
-              <Text style={styles.modeTitle}>{hebrew.auth.signInWithOTP}</Text>
-              <Text style={styles.modeDescription}>נשלח לך קוד חד פעמי לאימייל</Text>
+                <Input
+                  label={hebrew.auth.enterOTP}
+                  placeholder="000000"
+                  value={otp}
+                  onChangeText={setOtp}
+                  error={otpError}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                />
 
-              <Input
-                label={hebrew.auth.email}
-                placeholder={hebrew.auth.enterEmail}
-                icon={Mail}
-                value={email}
-                onChangeText={setEmail}
-                error={emailError}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
+                <TouchableOpacity
+                  style={styles.primaryButton}
+                  onPress={handleVerifyOTP}
+                  disabled={isLoading || !!otpError}
+                  activeOpacity={0.8}
+                >
+                  {isLoading ? (
+                    <Spinner size="sm" />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>{hebrew.auth.verify}</Text>
+                  )}
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={handleSendOTP}
-                disabled={isLoading || !!emailError}
-                activeOpacity={0.8}
-              >
-                {isLoading ? (
-                  <ActivityIndicator color={Colors.background} />
-                ) : (
-                  <Text style={styles.primaryButtonText}>{hebrew.auth.sendOTP}</Text>
-                )}
-              </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setMode('otp')}
+                  style={styles.backButton}
+                >
+                  <Text style={styles.backText}>חזור</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </Animated.View>
+        </ScrollView>
+      )}
 
-              <TouchableOpacity
-                onPress={() => setMode('signin')}
-                style={styles.backButton}
-              >
-                <Text style={styles.backText}>{hebrew.auth.backToLogin}</Text>
-              </TouchableOpacity>
-            </>
-          )}
-
-          {mode === 'verify' && (
-            <>
-              <Text style={styles.modeTitle}>{hebrew.auth.verify}</Text>
-              <Text style={styles.modeDescription}>הזן את הקוד שנשלח ל-{email}</Text>
-
-              <Input
-                label={hebrew.auth.enterOTP}
-                placeholder="000000"
-                value={otp}
-                onChangeText={setOtp}
-                error={otpError}
-                keyboardType="number-pad"
-                maxLength={6}
-              />
-
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={handleVerifyOTP}
-                disabled={isLoading || !!otpError}
-                activeOpacity={0.8}
-              >
-                {isLoading ? (
-                  <ActivityIndicator color={Colors.background} />
-                ) : (
-                  <Text style={styles.primaryButtonText}>{hebrew.auth.verify}</Text>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => setMode('otp')}
-                style={styles.backButton}
-              >
-                <Text style={styles.backText}>חזור</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </ScrollView>
+      {/* Always visible at the bottom */}
+      <View style={styles.badgeContainer}>
+        <ExpoImage
+          source={require('@/assets/images/byreelrep-black.png')}
+          style={styles.byReelRepImage}
+          contentFit="contain"
+        />
+      </View>
     </SafeAreaView>
   );
 }
@@ -296,18 +376,56 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 24,
-    paddingVertical: 40,
+    paddingTop: 220,
+    paddingBottom: 40,
   },
-  logoContainer: {
-    width: 140,
-    height: 140,
-    alignSelf: 'center',
-    marginBottom: 24,
+  logoAbsolute: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
   },
-  logo: {
+  bottomContainer: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    gap: 16,
+  },
+  logoImage: {
+    width: LOGO_SIZE,
+    height: LOGO_SIZE,
+  },
+  badgeContainer: {
+    alignItems: 'center',
+    paddingBottom: 16,
+    paddingTop: 8,
+  },
+  byReelRepImage: {
+    width: 300,
+    height: 60,
+  },
+  enterButtonWrapper: {
     width: '100%',
-    height: '100%',
+    maxWidth: 340,
   },
+  enterButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  enterButtonGradient: {
+    paddingVertical: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+  },
+  enterButtonText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    writingDirection: 'rtl',
+  },
+  // Form
   formContainer: {
     width: '100%',
     maxWidth: 400,
@@ -333,11 +451,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
   },
   forgotButton: {
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
+    marginTop: 4,
   },
   forgotText: {
     fontSize: 14,
-    color: '#000000',
+    color: Colors.textSecondary,
     fontWeight: '600',
     writingDirection: 'rtl',
   },
@@ -356,40 +475,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.background,
     writingDirection: 'rtl',
-  },
-  secondaryButton: {
-    backgroundColor: Colors.background,
-    borderRadius: 16,
-    paddingVertical: 18,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row-reverse',
-    gap: 8,
-    borderWidth: 2,
-    borderColor: '#000000',
-  },
-  secondaryButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000000',
-    writingDirection: 'rtl',
-  },
-  divider: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    marginVertical: 8,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: Colors.border,
-  },
-  dividerText: {
-    paddingHorizontal: 16,
-    fontSize: 14,
-    color: Colors.textSecondary,
-    fontWeight: '600',
   },
   backButton: {
     alignSelf: 'center',

@@ -76,7 +76,7 @@ export const SimpleTabBar: React.FC<TabBarProps> = ({ state, descriptors, naviga
     return (
         <View style={styles.containerWrapper}>
             <ExpoLinearGradient
-                colors={['transparent', 'rgba(255,255,255,0.8)', '#FFFFFF']}
+                colors={['transparent', 'rgba(169, 36, 169, 0.8)', '#952594ff']}
                 locations={[0, 0.4, 1]}
                 style={{
                     position: 'absolute',
@@ -172,7 +172,7 @@ export const SimpleTabBar: React.FC<TabBarProps> = ({ state, descriptors, naviga
                                 />
                             ) : (
                                 <IconComponent
-                                    size={28}
+                                    size={30}
                                     color={isFocused ? activeColor : inactiveColor}
                                     strokeWidth={isFocused ? 2.5 : 2}
                                 />

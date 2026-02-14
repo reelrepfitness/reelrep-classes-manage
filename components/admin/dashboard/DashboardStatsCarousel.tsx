@@ -4,8 +4,8 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
 } from 'react-native';
+import { Spinner } from '@/components/ui/spinner';
 import Svg, { Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from '@/components/ui/icon';
@@ -46,7 +46,7 @@ export default function DashboardStatsCarousel({ todaysClasses, onPressClass }: 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <Spinner size="lg" />
       </View>
     );
   }
@@ -105,13 +105,13 @@ export default function DashboardStatsCarousel({ todaysClasses, onPressClass }: 
             onPress={() => router.push('/admin/clients/needs-attention')}
           >
             <View style={styles.cardHeader}>
-              <View style={[styles.iconCircle, { backgroundColor: 'rgba(220, 38, 38, 0.1)' }]}>
-                <Icon name="alert-circle" size={20} color="#DC2626" strokeWidth={2.5} />
+              <View style={[styles.iconCircle,]}>
+                <Icon name="alert-circle" size={30} color="#ff6f00ff" strokeWidth={2.5} />
                 {(stats?.tasks || 0) > 0 && <View style={styles.notificationDot} />}
               </View>
               <Text style={styles.cardLabel}>לטיפול דחוף</Text>
             </View>
-            <Text style={[styles.cardValue, { color: '#DC2626' }]}>
+            <Text style={[styles.cardValue, { color: '#ff6f00ff' }]}>
               {stats?.tasks || 0}
             </Text>
           </TouchableOpacity>
@@ -122,8 +122,8 @@ export default function DashboardStatsCarousel({ todaysClasses, onPressClass }: 
             onPress={() => router.push('/admin/clients/active')}
           >
             <View style={styles.cardHeader}>
-              <View style={[styles.iconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
-                <Icon name="users" size={20} color="#10B981" strokeWidth={2.5} />
+              <View style={[styles.iconCircle,]}>
+                <Icon name="users" size={30} color="#10B981" strokeWidth={2.5} />
               </View>
               <Text style={styles.cardLabel}>מנויים פעילים</Text>
             </View>
@@ -144,8 +144,8 @@ export default function DashboardStatsCarousel({ todaysClasses, onPressClass }: 
             onPress={() => router.push('/admin/clients/debts')}
           >
             <View style={styles.cardHeader}>
-              <View style={[styles.iconCircle, { backgroundColor: 'rgba(220, 38, 38, 0.1)' }]}>
-                <Icon name="credit-card" size={20} color="#DC2626" strokeWidth={2.5} />
+              <View style={[styles.iconCircle,]}>
+                <Icon name="credit-card" size={30} color="#DC2626" strokeWidth={2.5} />
               </View>
               <Text style={styles.cardLabel}>חייבים</Text>
             </View>
@@ -160,8 +160,8 @@ export default function DashboardStatsCarousel({ todaysClasses, onPressClass }: 
             onPress={() => router.push('/admin/clients/frozen')}
           >
             <View style={styles.cardHeader}>
-              <View style={[styles.iconCircle, { backgroundColor: 'rgba(37, 99, 235, 0.1)' }]}>
-                <Icon name="snowflake" size={20} color="#2563EB" strokeWidth={2.5} />
+              <View style={[styles.iconCircle,]}>
+                <Icon name="snowflake" size={30} color="#2563EB" strokeWidth={2.5} />
               </View>
               <Text style={styles.cardLabel}>בהקפאה</Text>
             </View>
@@ -219,13 +219,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
   heroLabel: {
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: '800',
     color: 'rgba(255, 255, 255, 0.7)',
     textAlign: 'center',
   },
   heroValue: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
     color: '#FFFFFF',
     textAlign: 'center',
@@ -297,14 +297,14 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
   },
   cardLabel: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '600',
     color: '#6B7280',
     textAlign: 'right',
   },
   cardValue: {
     fontSize: 28,
-    fontWeight: '800',
+    fontWeight: '600',
     textAlign: 'left',
     marginVertical: 4,
   },

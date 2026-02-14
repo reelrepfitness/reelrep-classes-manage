@@ -2,8 +2,9 @@ import { Text } from '@/components/ui/text';
 import { useColor } from '@/hooks/useColor';
 import { BORDER_RADIUS, CORNERS, FONT_SIZE } from '@/theme/globals';
 import { Loader2 } from 'lucide-react-native';
+import LottieView from 'lottie-react-native';
 import React, { useEffect, useMemo } from 'react';
-import { ActivityIndicator, StyleSheet, View, ViewStyle } from 'react-native';
+import { StyleSheet, View, ViewStyle } from 'react-native';
 import Animated, {
   Easing,
   SharedValue,
@@ -234,10 +235,11 @@ export function Spinner({
     switch (variant) {
       case 'default':
         return (
-          <ActivityIndicator
-            size={config.size}
-            color={spinnerColor}
-            style={styles.spinner}
+          <LottieView
+            source={require('@/assets/animations/Loading animation blue.json')}
+            autoPlay
+            loop
+            style={{ width: config.size * 2, height: config.size * 2 }}
           />
         );
 

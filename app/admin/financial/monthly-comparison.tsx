@@ -2,13 +2,13 @@
 // Monthly Comparison with Charts
 
 import React, { useState, useEffect } from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -147,7 +147,7 @@ export default function MonthlyComparison() {
   if (loading) {
     return (
       <View style={[styles.container, styles.centered, { paddingTop: insets.top }]}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <Spinner size="lg" />
         <Text style={styles.loadingText}>טוען נתונים...</Text>
       </View>
     );

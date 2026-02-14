@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Image, Modal } from 'react-native';
+import { Spinner } from '@/components/ui/spinner';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Image, Modal } from 'react-native';
 import { Image as OptimizedImage } from '@/components/ui/image';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
@@ -334,7 +335,7 @@ export default function ExercisesScreen() {
       >
         {isLoading ? (
           <View style={{ alignItems: 'center', marginTop: 20 }}>
-            <ActivityIndicator size="large" color={Colors.primary} />
+            <Spinner size="lg" />
             <Text style={{ textAlign: 'center', color: '#94A3B8', marginTop: 12 }}>טוען תרגילים...</Text>
           </View>
         ) : filteredExercises.length === 0 ? (

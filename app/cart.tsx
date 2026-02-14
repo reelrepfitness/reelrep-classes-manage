@@ -1,10 +1,9 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
     View,
     Text,
     TouchableOpacity,
     Alert,
-    ActivityIndicator,
     TextInput,
     Platform,
     UIManager,
@@ -13,7 +12,10 @@ import {
     Modal,
     Pressable,
     Image,
+    Dimensions,
 } from 'react-native';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 import { useRouter } from 'expo-router';
 import {
     Trash2,
@@ -29,6 +31,7 @@ import {
 } from 'lucide-react-native';
 import { useShop } from '@/contexts/ShopContext';
 import Colors from '@/constants/colors';
+import { Spinner } from '@/components/ui/spinner';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/constants/supabase';
@@ -36,6 +39,7 @@ import { useGreenInvoice } from '@/hooks/useGreenInvoice';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
+import LottieView from 'lottie-react-native';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -88,8 +92,15 @@ export default function CartScreen() {
     const [couponCode, setCouponCode] = useState('');
     const [couponApplied, setCouponApplied] = useState(false);
     const [discount, setDiscount] = useState(0);
+    const [couponId, setCouponId] = useState<string | null>(null);
     const [showCouponInput, setShowCouponInput] = useState(false);
+    const [validatingCoupon, setValidatingCoupon] = useState(false);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [showPaymentConfirm, setShowPaymentConfirm] = useState(false);
+    const [paymentConfirmPhase, setPaymentConfirmPhase] = useState<'entering' | 'flying' | 'approved'>('entering');
+    const [paymentConfirmTitle, setPaymentConfirmTitle] = useState('');
+    const [paymentConfirmMessage, setPaymentConfirmMessage] = useState('');
+    const paymentLottieRef = useRef<LottieView>(null);
 
     const subtotal = getTotal();
     const total = subtotal - discount;
@@ -128,21 +139,44 @@ export default function CartScreen() {
         setShowCouponInput(!showCouponInput);
     }, [showCouponInput]);
 
-    const handleApplyCoupon = useCallback(() => {
-        if (!couponCode.trim()) return;
+    const [couponLabel, setCouponLabel] = useState('');
 
-        if (Platform.OS !== 'web') {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        }
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-
-        if (couponCode.toUpperCase() === 'SAVE10') {
-            setDiscount(subtotal * 0.1);
+    const handleApplyCoupon = useCallback(async () => {
+        if (!couponCode.trim() || !user) return;
+        setValidatingCoupon(true);
+        try {
+            const planIds = cart.map(item => item.package.planId);
+            const { data, error } = await supabase.rpc('validate_coupon', {
+                p_code: couponCode,
+                p_user_id: user.id,
+                p_plan_ids: planIds,
+            });
+            if (error) throw error;
+            if (!data?.valid) {
+                Alert.alert('קוד לא תקין', data?.reason || 'הקוד שהזנת אינו קיים או פג תוקפו');
+                return;
+            }
+            const discountAmt = data.discount_type === 'percentage'
+                ? subtotal * (data.discount_value / 100)
+                : Math.min(data.discount_value, subtotal);
+            if (Platform.OS !== 'web') {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setDiscount(discountAmt);
             setCouponApplied(true);
-        } else {
-            Alert.alert('קוד לא תקין', 'הקוד שהזנת אינו קיים או פג תוקפו');
+            setCouponId(data.coupon_id);
+            setCouponLabel(
+                data.discount_type === 'percentage'
+                    ? `-${data.discount_value}%`
+                    : `-₪${data.discount_value}`
+            );
+        } catch (err: any) {
+            Alert.alert('שגיאה', err.message || 'אירעה שגיאה בבדיקת הקופון');
+        } finally {
+            setValidatingCoupon(false);
         }
-    }, [couponCode, subtotal]);
+    }, [couponCode, subtotal, user, cart]);
 
     const openPaymentModal = useCallback(() => {
         if (!user) {
@@ -158,6 +192,22 @@ export default function CartScreen() {
         }
         setShowPaymentModal(true);
     }, [user, cart.length]);
+
+    const handlePaymentConfirmDismiss = useCallback(() => {
+        setPaymentConfirmPhase('approved');
+    }, []);
+
+    useEffect(() => {
+        if (showPaymentConfirm && paymentLottieRef.current) {
+            if (paymentConfirmPhase === 'entering') {
+                paymentLottieRef.current.play(0, 66);
+            } else if (paymentConfirmPhase === 'flying') {
+                paymentLottieRef.current.play(10, 66);
+            } else {
+                paymentLottieRef.current.play(75, 179);
+            }
+        }
+    }, [showPaymentConfirm, paymentConfirmPhase]);
 
     const handleCheckout = async () => {
         setShowPaymentModal(false);
@@ -194,6 +244,14 @@ export default function CartScreen() {
                 );
 
                 if (formUrl) {
+                    // Store coupon info on the invoice for credit card path
+                    if (couponId) {
+                        await supabase
+                            .from('invoices')
+                            .update({ coupon_id: couponId, discount_amount: discount })
+                            .eq('id', paymentId);
+                        await supabase.rpc('use_coupon', { p_coupon_id: couponId });
+                    }
                     router.push({
                         pathname: '/payment',
                         params: { formUrl, invoiceId: paymentId },
@@ -202,51 +260,120 @@ export default function CartScreen() {
                     throw new Error('לא התקבל קישור לתשלום');
                 }
             } else {
-                const { data: invoice } = await supabase
+                const { data: invoiceData, error: invoiceError } = await supabase
                     .from('invoices')
                     .insert({
-                        id: invoiceId,
                         user_id: user.id,
                         client_id: user.id,
-                        green_invoice_id: `pending-${invoiceId}`,
+                        green_invoice_id: `pending-${Date.now()}`,
                         green_document_type: 320,
                         amount: finalAmount,
                         vat_amount: finalAmount * 0.17,
                         total_amount: finalAmount * 1.17,
                         payment_type: selectedPaymentType,
                         payment_status: 'pending',
+                        items: cartItemsFormatted.map(item => ({
+                            description: item.name,
+                            quantity: item.quantity,
+                            price: item.price,
+                            currency: 'ILS',
+                            vatType: 0,
+                        })),
                         cart_items: cartItemsFormatted,
                         description: `רכישה: ${cart.map(i => i.package.name).join(', ')}`,
+                        ...(couponId ? { coupon_id: couponId, discount_amount: discount } : {}),
                     })
-                    .select()
+                    .select('id')
                     .single();
 
-                await supabase
-                    .from('pending_payment_approvals')
-                    .insert({
-                        invoice_id: invoiceId,
-                        user_id: user.id,
-                        payment_method: selectedPaymentType === PAYMENT_TYPES.BIT ? 'bit' : 'cash',
-                        amount: finalAmount,
-                        cart_items: cartItemsFormatted,
-                        status: 'pending',
-                    });
+                if (invoiceError || !invoiceData) {
+                    console.error('[Shop] Invoice insert error:', invoiceError);
+                    throw new Error('שגיאה ביצירת חשבונית');
+                }
 
-                Alert.alert(
-                    selectedPaymentType === PAYMENT_TYPES.BIT ? 'תשלום ב-Bit' : 'תשלום במזומן',
-                    `סכום לתשלום: ₪${finalAmount}\n\n` +
-                    (selectedPaymentType === PAYMENT_TYPES.BIT
-                        ? 'אנא בצע העברה למספר: 050-XXX-XXXX\n'
-                        : 'אנא הגע לסטודיו לביצוע התשלום.\n') +
-                    'המנוי/כרטיסייה יופעלו לאחר אישור המנהל.',
-                    [{
-                        text: 'הבנתי',
-                        onPress: () => {
-                            clearCart();
-                            router.back();
+                // Mark coupon as used
+                if (couponId) {
+                    await supabase.rpc('use_coupon', { p_coupon_id: couponId });
+                }
+
+                if (finalAmount === 0) {
+                    // Free purchase (100% coupon) — auto-create subscriptions/tickets
+                    await supabase.from('invoices').update({ payment_status: 'paid' }).eq('id', invoiceData.id);
+
+                    for (const item of cartItemsFormatted) {
+                        if (item.plan_type === 'ticket') {
+                            const expiryDate = new Date();
+                            expiryDate.setDate(expiryDate.getDate() + (item.validity_days || 90));
+                            await supabase.from('user_tickets').insert({
+                                user_id: user!.id,
+                                plan_id: item.plan_id,
+                                total_sessions: item.total_sessions || 0,
+                                sessions_remaining: item.total_sessions || 0,
+                                status: 'active',
+                                purchase_date: new Date().toISOString(),
+                                expiry_date: expiryDate.toISOString(),
+                                payment_method: 'coupon',
+                                payment_reference: `COUPON-${invoiceData.id}`,
+                                invoice_id: invoiceData.id,
+                                has_debt: false,
+                                debt_amount: 0,
+                            });
+                        } else if (item.plan_type === 'subscription') {
+                            const startDate = new Date();
+                            const endDate = new Date();
+                            endDate.setMonth(endDate.getMonth() + (item.duration_months || 1));
+                            await supabase.from('user_subscriptions').insert({
+                                user_id: user!.id,
+                                subscription_id: item.plan_id,
+                                start_date: startDate.toISOString(),
+                                end_date: endDate.toISOString(),
+                                is_active: true,
+                                plan_status: 'active',
+                                payment_method: 'coupon',
+                                payment_reference: `COUPON-${invoiceData.id}`,
+                                invoice_id: invoiceData.id,
+                                has_debt: false,
+                                debt_amount: 0,
+                                outstanding_balance: 0,
+                            });
                         }
-                    }]
-                );
+                    }
+
+                    setPaymentConfirmTitle('הרכישה הושלמה!');
+                    setPaymentConfirmMessage('המנוי/כרטיסייה הופעלו בהצלחה.');
+                    setPaymentConfirmPhase('entering');
+                    setShowPaymentConfirm(true);
+                } else {
+                    // Manual payment — create approval for admin
+                    const { error: approvalError } = await supabase
+                        .from('pending_payment_approvals')
+                        .insert({
+                            invoice_id: invoiceData.id,
+                            user_id: user!.id,
+                            payment_method: selectedPaymentType === PAYMENT_TYPES.BIT ? 'bit' : 'cash',
+                            amount: finalAmount,
+                            cart_items: cartItemsFormatted,
+                            status: 'pending',
+                        });
+
+                    if (approvalError) {
+                        console.error('[Shop] Approval insert error:', approvalError);
+                        throw new Error('שגיאה ביצירת בקשת אישור');
+                    }
+
+                    setPaymentConfirmTitle(
+                        selectedPaymentType === PAYMENT_TYPES.BIT ? 'תשלום ב-Bit' : 'תשלום במזומן'
+                    );
+                    setPaymentConfirmMessage(
+                        `סכום לתשלום: ₪${finalAmount}\n\n` +
+                        (selectedPaymentType === PAYMENT_TYPES.BIT
+                            ? 'אנא בצע העברה למספר: 050-XXX-XXXX\n'
+                            : 'אנא הגע לסטודיו לביצוע התשלום.\n') +
+                        'המנוי/כרטיסייה יופעלו לאחר אישור המנהל.'
+                    );
+                    setPaymentConfirmPhase('entering');
+                    setShowPaymentConfirm(true);
+                }
             }
         } catch (error: any) {
             console.error('[Shop] Payment error:', error);
@@ -314,7 +441,7 @@ export default function CartScreen() {
                                             style={styles.quantityButton}
                                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                         >
-                                            <Plus size={14} color="#64748b" strokeWidth={2.5} />
+                                            <Plus size={16} color="#64748b" strokeWidth={2.5} />
                                         </TouchableOpacity>
                                         <Text style={styles.quantityText}>{item.quantity}</Text>
                                         <TouchableOpacity
@@ -322,7 +449,7 @@ export default function CartScreen() {
                                             style={styles.quantityButton}
                                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                         >
-                                            <Minus size={14} color="#64748b" strokeWidth={2.5} />
+                                            <Minus size={16} color="#64748b" strokeWidth={2.5} />
                                         </TouchableOpacity>
                                     </View>
 
@@ -332,9 +459,7 @@ export default function CartScreen() {
                                             {item.package.durationMonths
                                                 ? `${item.package.durationMonths} חודשים`
                                                 : `${item.package.totalClasses} כניסות`}
-                                        </Text>
-                                        <Text style={styles.itemUnitPrice}>
-                                            ₪{item.package.price.toLocaleString()} ליחידה
+                                        
                                         </Text>
                                     </View>
 
@@ -367,7 +492,7 @@ export default function CartScreen() {
                                 {couponApplied ? (
                                     <View style={styles.couponBadge}>
                                         <Check size={14} color="#10b981" />
-                                        <Text style={styles.couponBadgeText}>-10%</Text>
+                                        <Text style={styles.couponBadgeText}>{couponLabel}</Text>
                                     </View>
                                 ) : (
                                     <ChevronLeft
@@ -393,16 +518,20 @@ export default function CartScreen() {
                                         onPress={handleApplyCoupon}
                                         style={[
                                             styles.applyButton,
-                                            !couponCode.trim() && styles.applyButtonDisabled
+                                            (!couponCode.trim() || validatingCoupon) && styles.applyButtonDisabled
                                         ]}
-                                        disabled={!couponCode.trim()}
+                                        disabled={!couponCode.trim() || validatingCoupon}
                                     >
-                                        <Text style={[
-                                            styles.applyButtonText,
-                                            !couponCode.trim() && styles.applyButtonTextDisabled
-                                        ]}>
-                                            החל
-                                        </Text>
+                                        {validatingCoupon ? (
+                                            <Spinner size="sm" />
+                                        ) : (
+                                            <Text style={[
+                                                styles.applyButtonText,
+                                                !couponCode.trim() && styles.applyButtonTextDisabled
+                                            ]}>
+                                                החל
+                                            </Text>
+                                        )}
                                     </TouchableOpacity>
                                 </View>
                             )}
@@ -428,7 +557,7 @@ export default function CartScreen() {
                                 <Text style={styles.totalLabel}>סה״כ לתשלום</Text>
                                 <View>
                                     <Text style={styles.totalValue}>₪{total.toLocaleString()}</Text>
-                                    <Text style={styles.vatText}>כולל מע״ם</Text>
+                                    <Text style={styles.vatText}>כולל מע״מ</Text>
                                 </View>
                             </View>
                         </View>
@@ -515,13 +644,13 @@ export default function CartScreen() {
                             style={styles.modalCheckoutButton}
                         >
                             <LinearGradient
-                                colors={['#da4477', '#c23969']}
+                                colors={['#da74baff', '#933f78']}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 0 }}
                                 style={styles.checkoutGradient}
                             >
                                 {processingPayment ? (
-                                    <ActivityIndicator color="white" />
+                                    <Spinner size="sm" />
                                 ) : (
                                     <>
                                         <Lock size={18} color="white" strokeWidth={2.5} />
@@ -532,6 +661,47 @@ export default function CartScreen() {
                         </TouchableOpacity>
                     </Pressable>
                 </Pressable>
+            </Modal>
+
+            {/* Payment Confirmation Modal with 2-phase Lottie */}
+            <Modal
+                visible={showPaymentConfirm}
+                transparent
+                animationType="fade"
+                onRequestClose={() => {}}
+            >
+                <View style={styles.confirmOverlay}>
+                    <View style={styles.confirmDialog}>
+                        <View style={styles.confirmLottieContainer}>
+                            <LottieView
+                                ref={paymentLottieRef}
+                                source={require('@/assets/animations/transfer money.json')}
+                                loop={paymentConfirmPhase === 'flying'}
+                                style={styles.confirmLottie}
+                                onAnimationFinish={() => {
+                                    if (paymentConfirmPhase === 'entering') {
+                                        setPaymentConfirmPhase('flying');
+                                    } else if (paymentConfirmPhase === 'approved') {
+                                        setShowPaymentConfirm(false);
+                                        clearCart();
+                                        router.back();
+                                    }
+                                }}
+                            />
+                        </View>
+                        <Text style={styles.confirmTitle}>{paymentConfirmTitle}</Text>
+                        <Text style={styles.confirmMessage}>{paymentConfirmMessage}</Text>
+                        {paymentConfirmPhase !== 'approved' && (
+                            <TouchableOpacity
+                                style={styles.confirmButton}
+                                onPress={handlePaymentConfirmDismiss}
+                                activeOpacity={0.8}
+                            >
+                                <Text style={styles.confirmButtonText}>הבנתי</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                </View>
             </Modal>
 
             {/* Sticky Footer */}
@@ -574,7 +744,7 @@ const styles = StyleSheet.create({
         borderBottomColor: '#f1f5f9',
     },
     backButton: {
-        flexDirection: 'row',
+        flexDirection: 'row-reverse',
         alignItems: 'center',
         gap: 2,
     },
@@ -584,8 +754,8 @@ const styles = StyleSheet.create({
         color: '#1a1a2e',
     },
     headerTitle: {
-        fontSize: 18,
-        fontWeight: '700',
+        fontSize: 24,
+        fontWeight: '800',
         color: '#1a1a2e',
     },
     scrollContent: {
@@ -626,7 +796,7 @@ const styles = StyleSheet.create({
         elevation: 4,
     },
     cardHeader: {
-        flexDirection: 'row',
+        flexDirection: 'row-reverse',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
@@ -636,17 +806,17 @@ const styles = StyleSheet.create({
         borderBottomColor: '#f1f5f9',
     },
     cardTitle: {
-        fontSize: 16,
+        fontSize: 20,
         fontWeight: '700',
         color: '#1a1a2e',
     },
     itemCount: {
-        fontSize: 13,
-        fontWeight: '500',
+        fontSize: 18,
+        fontWeight: '600',
         color: '#94a3b8',
     },
     cartItem: {
-        flexDirection: 'row',
+        flexDirection: 'row-reverse',
         alignItems: 'center',
         paddingVertical: 16,
         paddingHorizontal: 20,
@@ -665,19 +835,19 @@ const styles = StyleSheet.create({
     },
     itemInfo: {
         flex: 1,
-        alignItems: 'flex-end',
+        alignItems: 'flex-start',
         marginHorizontal: 14,
     },
     itemName: {
-        fontSize: 15,
+        fontSize: 18,
         fontWeight: '600',
         color: '#1a1a2e',
         textAlign: 'right',
     },
     itemDuration: {
-        fontSize: 13,
+        fontSize: 14,
         color: '#64748b',
-        marginTop: 2,
+        marginTop: -3,
     },
     itemUnitPrice: {
         fontSize: 12,
@@ -702,18 +872,18 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     quantityText: {
-        fontSize: 15,
+        fontSize: 17,
         fontWeight: '700',
         color: '#1a1a2e',
         minWidth: 28,
         textAlign: 'center',
     },
     itemPrice: {
-        fontSize: 16,
+        fontSize: 20,
         fontWeight: '700',
         color: '#1a1a2e',
         minWidth: 70,
-        textAlign: 'left',
+        textAlign: 'right',
     },
     couponHeader: {
         flexDirection: 'row',
@@ -738,7 +908,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#10b981',
     },
     couponTitle: {
-        fontSize: 15,
+        fontSize: 18,
         fontWeight: '600',
         color: '#1a1a2e',
     },
@@ -778,7 +948,7 @@ const styles = StyleSheet.create({
     applyButton: {
         height: 48,
         paddingHorizontal: 24,
-        backgroundColor: '#da4477',
+        backgroundColor: Colors.primary,
         borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',
@@ -832,7 +1002,7 @@ const styles = StyleSheet.create({
         paddingVertical: 16,
     },
     totalLabel: {
-        fontSize: 15,
+        fontSize: 18,
         fontWeight: '600',
         color: '#1a1a2e',
     },
@@ -842,7 +1012,7 @@ const styles = StyleSheet.create({
         color: '#1a1a2e',
     },
     vatText: {
-        fontSize: 12,
+        fontSize: 13,
         color: '#94a3b8',
         marginTop: 2,
     },
@@ -922,11 +1092,13 @@ const styles = StyleSheet.create({
         right: 0,
         backgroundColor: '#fff',
         paddingHorizontal: 20,
+        borderTopRightRadius:20,
+        borderTopLeftRadius:20,
         paddingTop: 16,
         borderTopWidth: 1,
         borderTopColor: '#f1f5f9',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: -4 },
+        shadowOffset: { width: 0, height: -8 },
         shadowOpacity: 0.08,
         shadowRadius: 12,
         elevation: 10,
@@ -958,7 +1130,7 @@ const styles = StyleSheet.create({
         paddingVertical: 18,
     },
     checkoutText: {
-        fontSize: 17,
+        fontSize: 20,
         fontWeight: '700',
         color: '#fff',
     },
@@ -995,12 +1167,12 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     modalTitle: {
-        fontSize: 18,
-        fontWeight: '700',
+        fontSize: 20,
+        fontWeight: '800',
         color: '#1a1a2e',
     },
     modalTotal: {
-        flexDirection: 'row',
+        flexDirection: 'row-reverse',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingVertical: 20,
@@ -1009,7 +1181,7 @@ const styles = StyleSheet.create({
         marginTop: 20,
     },
     modalTotalLabel: {
-        fontSize: 15,
+        fontSize: 17,
         fontWeight: '600',
         color: '#64748b',
     },
@@ -1022,5 +1194,61 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         overflow: 'hidden',
         marginTop: 8,
+    },
+    confirmOverlay: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        padding: 24,
+    },
+    confirmDialog: {
+        width: SCREEN_WIDTH - 48,
+        maxWidth: 340,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 24,
+        padding: 24,
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.25,
+        shadowRadius: 20,
+        elevation: 20,
+    },
+    confirmLottieContainer: {
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    confirmLottie: {
+        width: 320,
+        height: 320,
+        marginVertical: -50,
+    },
+    confirmTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#111827',
+        textAlign: 'center',
+        marginBottom: 8,
+    },
+    confirmMessage: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: '#6B7280',
+        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: 24,
+    },
+    confirmButton: {
+        backgroundColor: Colors.primary,
+        borderRadius: 14,
+        paddingVertical: 14,
+        paddingHorizontal: 40,
+        alignItems: 'center',
+    },
+    confirmButtonText: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#FFFFFF',
     },
 });

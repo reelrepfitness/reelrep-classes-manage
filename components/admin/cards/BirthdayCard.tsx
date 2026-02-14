@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, FlatList, ActivityIndicator, Alert, Image } from 'react-native';
+import { View, Text, TouchableOpacity, FlatList, Alert, Image } from 'react-native';
+import { Spinner } from '@/components/ui/spinner';
 import { supabase } from '@/constants/supabase';
 import Colors from '@/constants/colors';
 import { MessageCircle, Gift, Calendar, Cake } from 'lucide-react-native';
@@ -149,7 +150,7 @@ export const BirthdayCard = () => {
             {/* List */}
             <View className="flex-1">
                 {loading ? (
-                    <ActivityIndicator color="white" />
+                    <Spinner size="sm" />
                 ) : upcomingList.length === 0 ? (
                     <View className="flex-1 items-center justify-center">
                         <Text className="text-pink-100 text-sm">אין ימי הולדת קרובים</Text>

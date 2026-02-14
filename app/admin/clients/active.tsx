@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, ActivityIndicator } from 'react-native';
+import { Spinner } from '@/components/ui/spinner';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Users, ChevronRight } from 'lucide-react-native';
@@ -82,7 +83,7 @@ export default function ActiveClientsScreen() {
             >
                 {isLoading ? (
                     <View style={styles.centered}>
-                        <ActivityIndicator color={Colors.primary} size="large" />
+                        <Spinner size="sm" />
                     </View>
                 ) : (clients || []).map((client: any) => {
                     const subscription = client.user_subscriptions?.[0];

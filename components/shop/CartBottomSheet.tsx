@@ -220,14 +220,14 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   itemName: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: Colors.text || '#fff',
     marginBottom: 4,
     textAlign: 'right',
   },
   itemDetails: {
-    fontSize: 14,
+    fontSize: 16,
     color: Colors.textSecondary || '#aaa',
     marginBottom: 8,
     textAlign: 'right',

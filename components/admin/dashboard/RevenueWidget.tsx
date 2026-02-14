@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     title: {
-        fontSize: 16,
+        fontSize: 20,
         fontWeight: '600',
         color: '#9CA3AF',
         textAlign: 'right',

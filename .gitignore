@@ -29,6 +29,13 @@ yarn-error.*
 .DS_Store
 *.pem
 
+# Duplicate build/dependency folders (macOS copies)
+ios/Pods 2/
+ios/build 2/
+ios/reelreptraining 2/
+android/build 2/
+android/app 2/
+
 # local env files
 .env*.local
 

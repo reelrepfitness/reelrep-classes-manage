@@ -1,0 +1,51 @@
+# --- Everything from .gitignore (required since .easignore replaces it) ---
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+.vercel
+
+# Snyk Security Extension
+.github/instructions/snyk_rules.instructions.md
+
+# --- EAS-specific exclusions ---
+
+# Native directories (EAS runs prebuild on the server)
+ios/
+android/
+
+# Not needed for builds
+coverage/
+eas-docs/
+firebase-debug.log

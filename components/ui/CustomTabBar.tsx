@@ -71,8 +71,8 @@ const TabBadge = ({ item, isSelected, onSelect, badgeCount }: TabBadgeProps) => 
         };
     });
 
-    const activeColor = '#da4477';
-    const inactiveColor = '#9CA3AF';
+    const activeColor = '#933f78';
+    const inactiveColor = '#b4b4b4ff';
 
     // Convert badgeCount to number and ensure it's valid
     const validBadgeCount = typeof badgeCount === 'number' && badgeCount > 0 ? badgeCount : null;
@@ -190,7 +190,7 @@ const styles = StyleSheet.create({
         bottom: 0,
         left: 0,
         right: 0,
-        backgroundColor: '#FFFFFF',
+        backgroundColor:"#ffffff",
         borderTopLeftRadius: 30,
         borderTopRightRadius: 30,
         zIndex: 100,
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
         elevation: 8,
     },
     cardContainer: {
-        flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
+        flexDirection:'row',
         alignItems: 'center',
         justifyContent: 'space-evenly',
         paddingVertical: 6,
@@ -214,9 +214,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         borderRadius: 999,
         justifyContent: 'center',
-    },
-    badgeSelected: {
-        backgroundColor: '#F3F4F6',
+   
     },
     iconContainer: {
         zIndex: 2,
@@ -229,9 +227,9 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     label: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#1c1c1c',
+        fontSize: 20,
+        fontWeight: '500',
+        color: '#933f78',
         textAlign: 'left',
     },
     badge: {

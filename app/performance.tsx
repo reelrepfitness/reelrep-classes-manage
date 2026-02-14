@@ -6,7 +6,6 @@ import {
     TouchableOpacity,
     StyleSheet,
     Alert,
-    ActivityIndicator,
     Image,
     I18nManager,
     TextInput,
@@ -37,6 +36,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/constants/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Image as OptimizedImage } from '@/components/ui/image';
+import { Spinner } from '@/components/ui/spinner';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -581,7 +581,7 @@ export default function PerformanceScreen() {
                 {/* Exercise List */}
                 {loadingExercises || (activeTab === 'myPRs' && loadingUserStats) ? (
                     <View style={{ height: 200, justifyContent: 'center' }}>
-                        <ActivityIndicator size="large" color={Colors.primary} />
+                        <Spinner size="lg" />
                     </View>
                 ) : displayedExercises.length === 0 ? (
                     <View style={styles.emptyStateContainer}>
@@ -723,7 +723,7 @@ export default function PerformanceScreen() {
                                                 {/* Chart */}
                                                 <View style={styles.chartWrapper}>
                                                     {loadingLogs ? (
-                                                        <ActivityIndicator size="small" color={chartColor} />
+                                                        <Spinner size="sm" />
                                                     ) : exerciseLogs.length > 0 ? (
                                                         <LineChart
                                                             data={exerciseLogs.map((log: any) => ({
@@ -999,7 +999,7 @@ export default function PerformanceScreen() {
                                         return (
                                             <View style={styles.chartWrapper}>
                                                 {loadingLogs ? (
-                                                    <ActivityIndicator color={chartColor} />
+                                                    <Spinner size="sm" />
                                                 ) : (
                                                     <LineChart
                                                         data={chartData}

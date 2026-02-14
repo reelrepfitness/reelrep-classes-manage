@@ -5,7 +5,6 @@ import {
     ScrollView,
     TouchableOpacity,
     Alert,
-    ActivityIndicator,
     LayoutAnimation,
     Platform,
     UIManager,
@@ -18,6 +17,7 @@ import BottomSheet from '@gorhom/bottom-sheet';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { SlideInUp, SlideOutDown, SlideInDown, SlideOutUp } from 'react-native-reanimated';
 import { Icon } from '@/components/ui/icon';
+import { Spinner } from '@/components/ui/spinner';
 import { supabase } from '@/constants/supabase';
 import { useShop } from '@/contexts/ShopContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -94,7 +94,7 @@ export default function ShopScreen() {
                 className="bg-white px-6 items-center"
             >
                 <ShoppingCartIcon size={48} />
-                <Text className="text-slate-500 text-sm font-medium mb-6 mt-2">בחרו את התוכנית שהכי מתאימה עבורכם</Text>
+                <Text className="text-slate-500 text-base font-medium mb-6 mt-2">בחרו את התוכנית שהכי מתאימה עבורכם</Text>
 
                 {/* Segmented Control */}
                 <View className="flex-row bg-slate-100 p-1 rounded-full w-full max-w-[300px]">
@@ -110,7 +110,7 @@ export default function ShopScreen() {
                         )}
                     >
                         <Text className={cn(
-                            "text-sm font-bold",
+                            "text-base font-bold",
                             selectedCategory === 'subscriptions' ? "text-slate-900" : "text-slate-500"
                         )}>מנויים</Text>
                     </TouchableOpacity>
@@ -126,7 +126,7 @@ export default function ShopScreen() {
                         )}
                     >
                         <Text className={cn(
-                            "text-sm font-bold",
+                            "text-base font-bold",
                             selectedCategory === 'tickets' ? "text-slate-900" : "text-slate-500"
                         )}>כרטיסיות</Text>
                     </TouchableOpacity>
@@ -140,7 +140,7 @@ export default function ShopScreen() {
                 className="bg-white"
             >
                 {isLoading ? (
-                    <ActivityIndicator size="large" color={Colors.primary} className="mt-10" />
+                    <Spinner size="lg" />
                 ) : (
                     filteredPackages.map((pkg) => {
                         const isSelected = selectedPkgId === pkg.id;
@@ -200,7 +200,7 @@ export default function ShopScreen() {
                                                     end={{ x: 1, y: 0 }}
                                                     style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 100 }}
                                                 >
-                                                    <Text className="text-[10px] font-bold text-white uppercase tracking-wider">החבילה המשתלמת</Text>
+                                                    <Text className="text-[16px] font-bold text-black uppercase tracking-wider">החבילה המשתלמת</Text>
                                                 </LinearGradient>,
 
                                                 <LinearGradient
@@ -210,7 +210,7 @@ export default function ShopScreen() {
                                                     end={{ x: 1, y: 0 }}
                                                     style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 100 }}
                                                 >
-                                                    <Text className="text-[10px] font-bold text-white">חופשי חודשי</Text>
+                                                    <Text className="text-[16px] font-bold text-white">חופשי חודשי</Text>
                                                 </LinearGradient>,
 
                                                 <LinearGradient
@@ -220,7 +220,7 @@ export default function ShopScreen() {
                                                     end={{ x: 1, y: 0 }}
                                                     style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 100 }}
                                                 >
-                                                    <Text className="text-[10px] font-bold text-white">ליווי תזונה</Text>
+                                                    <Text className="text-[16px] font-bold text-white">ליווי תזונה</Text>
                                                 </LinearGradient>
                                             ] : isTicket ? (
                                                 <LinearGradient
@@ -229,7 +229,7 @@ export default function ShopScreen() {
                                                     end={{ x: 1, y: 0 }}
                                                     style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 100 }}
                                                 >
-                                                    <Text className="text-[10px] font-bold text-white">
+                                                    <Text className="text-[16px] font-bold text-white">
                                                         {pkg.totalClasses === 10 ? '69₪ לאימון' : pkg.totalClasses === 20 ? '54₪ לאימון' : ''}
                                                     </Text>
                                                 </LinearGradient>
@@ -241,7 +241,7 @@ export default function ShopScreen() {
                                                         end={{ x: 1, y: 0 }}
                                                         style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 100 }}
                                                     >
-                                                        <Text className="text-[10px] font-bold text-white">חופשי חודשי</Text>
+                                                        <Text className="text-[16px] font-bold text-white">חופשי חודשי</Text>
                                                     </LinearGradient>
                                                 )
                                             )}
@@ -250,20 +250,20 @@ export default function ShopScreen() {
                                     <View className="items-end">
                                         {pkg.name?.toUpperCase().includes('ELITE') && pkg.pricePerMonth ? (
                                             <>
-                                                <Text className="text-3xl font-extrabold text-slate-900">
+                                                <Text className="text-2xl font-bold text-slate-900">
                                                     {pkg.currency}{pkg.pricePerMonth}
                                                 </Text>
-                                                <Text className="text-xs text-slate-400">לחודש</Text>
+                                                <Text className="text-base text-slate-400">לחודש</Text>
                                             </>
                                         ) : pkg.name?.toUpperCase().includes('ONE') ? (
                                             <>
-                                                <Text className="text-3xl font-extrabold text-slate-900">
+                                                <Text className="text-2xl font-bold text-slate-900">
                                                     {pkg.currency}{pkg.price}
                                                 </Text>
-                                                <Text className="text-xs text-slate-400">לחצי שנה</Text>
+                                                <Text className="text-base text-slate-400">לחצי שנה</Text>
                                             </>
                                         ) : (
-                                            <Text className="text-3xl font-extrabold text-slate-900">
+                                            <Text className="text-2xl font-bold text-slate-900">
                                                 {pkg.currency}{pkg.price}
                                             </Text>
                                         )}
@@ -336,7 +336,7 @@ export default function ShopScreen() {
                                 {/* Expand Indicator */}
                                 {!isSelected && (
                                     <View className="items-center mt-2">
-                                        <ChevronDown size={20} color="#E2E8F0" />
+                                        <ChevronDown size={20} color="#b9b9b9ff" />
                                     </View>
                                 )}
                             </TouchableOpacity>
@@ -362,20 +362,20 @@ export default function ShopScreen() {
                 >
                     <View className="flex-row justify-between items-center">
                         <View className="flex-1 mr-4">
-                            <Text className="text-xs text-slate-400 font-medium text-left">התוכנית שבחרת</Text>
-                            <Text className="text-base font-bold text-slate-900 text-left" numberOfLines={1}>
+                            <Text className="text-base text-slate-400 font-bold text-left">התוכנית שבחרת</Text>
+                            <Text className="text-2xl font-bold text-slate-900 text-left" numberOfLines={1}>
                                 {packages.find(p => p.id === selectedPkgId)?.name}
                             </Text>
                         </View>
 
                         <TouchableOpacity onPress={handlePurchaseNow} activeOpacity={0.8} className="flex-shrink-0">
                             <LinearGradient
-                                colors={['#60A5FA', '#3B82F6']}
+                                colors={['#d47cb9ff', '#933f78']}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 0 }}
                                 style={{ paddingHorizontal: 24, paddingVertical: 14, borderRadius: 16 }}
                             >
-                                <Text className="text-white font-bold text-base">המשך לתשלום</Text>
+                                <Text className="text-white font-bold text-xl">המשך לתשלום</Text>
                             </LinearGradient>
                         </TouchableOpacity>
                     </View>

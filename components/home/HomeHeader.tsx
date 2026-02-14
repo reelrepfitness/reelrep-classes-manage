@@ -97,7 +97,7 @@ export function HomeHeader({ onMenuToggle }: HomeHeaderProps) {
         setTimeout(async () => {
             if (item.action === 'signout') {
                 await signOut();
-                router.replace('/(auth)/login' as any);
+                router.replace('/auth' as any);
             } else if (item.action === 'share') {
                 try {
                     await Share.share({
@@ -277,7 +277,7 @@ export function HomeHeader({ onMenuToggle }: HomeHeaderProps) {
 
             {/* Header Bar */}
             <LinearGradient
-                colors={['#1F2937', '#000000']}
+                colors={['#933f78', '#000000']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 0, y: 1 }}
                 style={[styles.header, { paddingTop: insets.top + 8 }]}
@@ -394,8 +394,8 @@ const styles = StyleSheet.create({
     },
     dateSubtitle: {
         color: 'rgba(255,255,255,0.6)',
-        fontSize: 15,
-        fontWeight: '500',
+        fontSize: 16,
+        fontWeight: '600',
         marginTop: 2,
         textAlign: 'left',
     },
@@ -432,10 +432,11 @@ const styles = StyleSheet.create({
         elevation: 10,
     },
     planCard: {
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: 'rgba(255, 255, 255, 0.14)',
         borderRadius: 12,
         padding: 14,
-        marginBottom: 16,
+        marginTop: 14,
+        marginBottom: 14,
     },
     planCardTopRow: {
         flexDirection: 'row',
@@ -449,7 +450,7 @@ const styles = StyleSheet.create({
     },
     subscriptionPlan: {
         color: '#FFFFFF',
-        fontSize: 15,
+        fontSize: 20,
         fontWeight: '600',
     },
     planImage: {
@@ -463,7 +464,7 @@ const styles = StyleSheet.create({
     },
     statusText: {
         color: '#FFFFFF',
-        fontSize: 11,
+        fontSize: 16,
         fontWeight: '700',
     },
     planProgressSection: {
@@ -478,7 +479,7 @@ const styles = StyleSheet.create({
     },
     planProgressFill: {
         height: '100%',
-        backgroundColor: Colors.primary,
+        backgroundColor: "#FFFFFF",
         borderRadius: 3,
     },
     planProgressLabels: {
@@ -487,14 +488,14 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     planProgressText: {
-        color: 'rgba(255,255,255,0.6)',
-        fontSize: 14,
+        color: 'rgba(255, 255, 255, 0.87)',
+        fontSize: 16,
         fontWeight: '700',
         writingDirection: 'rtl',
     },
     planExpiryText: {
-        color: 'rgba(255,255,255,0.4)',
-        fontSize: 14,
+        color: 'rgba(255, 255, 255, 0.76)',
+        fontSize: 16,
         fontWeight: '800',
         writingDirection: 'rtl',
     },
@@ -513,7 +514,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 8,
     },
     menuGridText: {
-        fontSize: 14,
+        fontSize: 16,
         color: '#E2E8F0',
         fontWeight: '700',
     },
@@ -530,8 +531,8 @@ const styles = StyleSheet.create({
     },
     menuBadge: {
         backgroundColor: Colors.primary,
-        minWidth: 18,
-        height: 18,
+        minWidth: 20,
+        height: 20,
         borderRadius: 9,
         alignItems: 'center',
         justifyContent: 'center',
@@ -539,7 +540,7 @@ const styles = StyleSheet.create({
     },
     menuBadgeText: {
         color: '#FFFFFF',
-        fontSize: 11,
+        fontSize: 14,
         fontWeight: '700',
     },
 });

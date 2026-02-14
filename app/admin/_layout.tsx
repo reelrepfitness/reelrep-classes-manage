@@ -22,6 +22,7 @@ export default function AdminLayout() {
                 <Stack.Screen name="forms/index" />
                 <Stack.Screen name="financial" />
                 <Stack.Screen name="store" />
+                <Stack.Screen name="subscriptions" />
                 <Stack.Screen
                     name="pos/payment"
                     options={{

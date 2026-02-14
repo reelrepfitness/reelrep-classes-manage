@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Switch, Platform, Alert, ActivityIndicator, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Switch, Platform, Alert, TouchableOpacity, StyleSheet } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/constants/supabase';
 import Colors from '@/constants/colors';
+import { Spinner } from '@/components/ui/spinner';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // --- Types ---
@@ -184,7 +185,7 @@ export default function UserNotificationSettingsScreen() {
       <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}>
         {loading ? (
           <View style={{ marginTop: 40 }}>
-            <ActivityIndicator size="large" color={Colors.primary} />
+            <Spinner size="lg" />
           </View>
         ) : (
           SECTIONS.map((section, index) => (

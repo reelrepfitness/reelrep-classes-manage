@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, FlatList, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { Spinner } from '@/components/ui/spinner';
+import { View, Text, FlatList, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/constants/supabase';
 import { Check, X, Clock, CreditCard, Smartphone, Banknote, AlertCircle } from 'lucide-react-native';
@@ -202,7 +203,7 @@ export default function PendingPaymentsScreen() {
       <View className="flex-1 bg-gray-50">
         {approvalsQuery.isLoading ? (
           <View className="flex-1 items-center justify-center">
-            <ActivityIndicator size="large" color={Colors.primary} />
+            <Spinner size="lg" />
             <Text className="text-gray-500 mt-4">טוען תשלומים...</Text>
           </View>
         ) : approvalsQuery.error ? (
@@ -244,7 +245,7 @@ export default function PendingPaymentsScreen() {
         {approveMutation.isPending && (
           <View className="absolute inset-0 bg-black/30 items-center justify-center">
             <View className="bg-white rounded-2xl p-6 items-center">
-              <ActivityIndicator size="large" color={Colors.primary} />
+              <Spinner size="lg" />
               <Text className="text-gray-700 mt-4 font-medium">מעבד...</Text>
             </View>
           </View>

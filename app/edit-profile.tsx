@@ -8,7 +8,6 @@ import {
     TextInput,
     Image,
     Alert,
-    ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
     Modal,
@@ -18,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
+import { Spinner } from '@/components/ui/spinner';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/constants/supabase';
@@ -368,7 +368,7 @@ export default function EditProfileScreen() {
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={Colors.primary} />
+                <Spinner size="lg" />
             </View>
         );
     }
@@ -404,7 +404,7 @@ export default function EditProfileScreen() {
                             disabled={saving}
                         >
                             {saving ? (
-                                <ActivityIndicator size="small" color="#FFFFFF" />
+                                <Spinner size="sm" />
                             ) : (
                                 <Text style={styles.saveText}>שמור</Text>
                             )}
@@ -434,7 +434,7 @@ export default function EditProfileScreen() {
                             >
                                 {uploadingImage ? (
                                     <View style={styles.avatarPlaceholder}>
-                                        <ActivityIndicator size="large" color="#FFFFFF" />
+                                        <Spinner size="lg" />
                                     </View>
                                 ) : avatarUrl ? (
                                     <Image source={{ uri: avatarUrl }} style={styles.avatar} />

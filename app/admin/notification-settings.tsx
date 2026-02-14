@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Switch, Platform, Alert, ActivityIndicator, TouchableOpacity, StyleSheet } from 'react-native';
+import { Spinner } from '@/components/ui/spinner';
+import { View, Text, ScrollView, Switch, Platform, Alert, TouchableOpacity, StyleSheet } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/constants/supabase';
@@ -168,7 +169,7 @@ export default function AdminNotificationSettings() {
             <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: insets.bottom + 40 }}>
                 {loading ? (
                     <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" color={Colors.primary} />
+                        <Spinner size="lg" />
                     </View>
                 ) : (
                     SECTIONS.map((section, index) => (

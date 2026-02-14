@@ -15,36 +15,59 @@ function getPloniFontFamily(fontWeight) {
   return 'Ploni-Regular';
 }
 
+function isPloniFont(fontFamily) {
+  return typeof fontFamily === 'string' && fontFamily.startsWith('Ploni-');
+}
+
 function flattenStyle(style) {
   if (!style) return {};
-  if (Array.isArray(style)) return Object.assign({}, ...style.map(flattenStyle));
-  return style;
+  return RN.StyleSheet.flatten(style) || {};
 }
 
 const WrappedText = React.forwardRef(function Text(props, ref) {
   const flat = flattenStyle(props.style);
+
   if (!flat.fontFamily) {
     const font = getPloniFontFamily(flat.fontWeight);
     return React.createElement(RN.Text, {
       ...props,
       ref,
-      style: [{ fontFamily: font }, props.style, flat.fontWeight ? { fontWeight: undefined } : null],
+      style: [{ fontFamily: font, fontWeight: undefined, letterSpacing: 0 }, props.style, { fontWeight: undefined }],
     });
   }
+
+  if (isPloniFont(flat.fontFamily)) {
+    return React.createElement(RN.Text, {
+      ...props,
+      ref,
+      style: [{ letterSpacing: 0 }, props.style, { fontWeight: undefined }],
+    });
+  }
+
   return React.createElement(RN.Text, { ...props, ref });
 });
 WrappedText.displayName = 'Text';
 
 const WrappedTextInput = React.forwardRef(function TextInput(props, ref) {
   const flat = flattenStyle(props.style);
+
   if (!flat.fontFamily) {
     const font = getPloniFontFamily(flat.fontWeight);
     return React.createElement(RN.TextInput, {
       ...props,
       ref,
-      style: [{ fontFamily: font }, props.style, flat.fontWeight ? { fontWeight: undefined } : null],
+      style: [{ fontFamily: font, fontWeight: undefined, letterSpacing: 0 }, props.style, { fontWeight: undefined }],
     });
   }
+
+  if (isPloniFont(flat.fontFamily)) {
+    return React.createElement(RN.TextInput, {
+      ...props,
+      ref,
+      style: [{ letterSpacing: 0 }, props.style, { fontWeight: undefined }],
+    });
+  }
+
   return React.createElement(RN.TextInput, { ...props, ref });
 });
 WrappedTextInput.displayName = 'TextInput';

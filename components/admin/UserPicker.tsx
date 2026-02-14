@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, Modal } from 'react-native';
+import { Spinner } from '@/components/ui/spinner';
 import { Search, X, User as UserIcon } from 'lucide-react-native';
 import { supabase } from '@/constants/supabase';
 import Colors from '@/constants/colors';
@@ -63,7 +64,7 @@ export default function UserPicker({ visible, onClose, onSelect }: UserPickerPro
                     </View>
 
                     {loading ? (
-                        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+                        <Spinner size="lg" />
                     ) : (
                         <FlatList
                             data={results}

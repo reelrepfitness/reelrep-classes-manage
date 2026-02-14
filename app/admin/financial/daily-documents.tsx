@@ -2,13 +2,13 @@
 // Daily Income and Documents View
 
 import React, { useState, useEffect } from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
+  TouchableOpacity
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -178,7 +178,7 @@ export default function DailyDocuments() {
       {/* Documents List */}
       {loading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <Spinner size="lg" />
         </View>
       ) : documents.length === 0 ? (
         <View style={styles.centered}>

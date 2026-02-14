@@ -2,6 +2,7 @@
 // Lead Detail — Command Center
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import {
     View,
     Text,
@@ -13,7 +14,6 @@ import {
     Modal,
     Linking,
     RefreshControl,
-    ActivityIndicator,
     Platform,
 
 } from 'react-native';
@@ -354,7 +354,7 @@ export default function LeadDetailScreen() {
     if (loading) {
         return (
             <View style={[styles.container, { paddingTop: insets.top }]}>
-                <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 60 }} />
+                <Spinner size="lg" />
             </View>
         );
     }
@@ -934,7 +934,7 @@ export default function LeadDetailScreen() {
                         disabled={!messageText.trim() || sendingMessage}
                     >
                         {sendingMessage ? (
-                            <ActivityIndicator color="#fff" />
+                            <Spinner size="sm" />
                         ) : (
                             <>
                                 <Ionicons name="send" size={18} color="#fff" />
@@ -985,7 +985,7 @@ export default function LeadDetailScreen() {
                         disabled={!noteText.trim() || savingNote}
                     >
                         {savingNote ? (
-                            <ActivityIndicator color="#fff" />
+                            <Spinner size="sm" />
                         ) : (
                             <>
                                 <Ionicons name="checkmark" size={18} color="#fff" />

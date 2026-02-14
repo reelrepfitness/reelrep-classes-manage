@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import {
     View,
     Text,
@@ -6,9 +7,8 @@ import {
     TouchableOpacity,
     ScrollView,
     RefreshControl,
-    ActivityIndicator,
     PanResponder,
-    Alert
+    Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -351,7 +351,7 @@ export default function ClassesListScreen() {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             >
                 {loading ? (
-                    <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+                    <Spinner size="lg" />
                 ) : (
                     <View style={styles.listSection}>
                         {classes.length > 0 ? (

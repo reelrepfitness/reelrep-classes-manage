@@ -227,13 +227,6 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
       throw new Error('יש להתחבר כדי להירשם לשיעור');
     }
 
-    // Admins bypass all subscription checks
-    if (!isAdmin) {
-      if (!user?.subscription) {
-        throw new Error('נדרש מנוי פעיל');
-      }
-    }
-
     const classItem = classes.find(c => c.id === classId);
     if (!classItem) {
       throw new Error('השיעור לא נמצא');
@@ -243,12 +236,29 @@ export const [ClassesProvider, useClasses] = createContextHook(() => {
       throw new Error('השיעור מלא');
     }
 
-    if (!isAdmin && user?.subscription && !classItem.requiredSubscription.includes(user.subscription.type)) {
-      throw new Error('המנוי שלך אינו כולל שיעור זה');
-    }
+    // Admins bypass all subscription/ticket checks
+    if (!isAdmin) {
+      // Fresh database check: validate subscription/ticket against the CLASS DATE (not today)
+      const classDateTime = new Date(`${classItem.date}T${classItem.time}`);
+      const { data: validation, error: validationError } = await supabase
+        .rpc('validate_booking_eligibility', {
+          p_user_id: user.id,
+          p_class_date: classDateTime.toISOString(),
+        });
 
-    if (!isAdmin && user?.subscription && user.subscription.classesUsed >= user.subscription.classesPerMonth) {
-      throw new Error('מיצית את מכסת השיעורים החודשית');
+      if (validationError) {
+        console.error('Booking validation RPC error:', validationError);
+        const error = new Error('no_plan');
+        error.name = 'BookingValidationError';
+        throw error;
+      }
+
+      if (!validation?.eligible) {
+        const reason = validation?.reason || 'no_plan';
+        const error = new Error(reason);
+        error.name = 'BookingValidationError';
+        throw error;
+      }
     }
 
     // Check if already booked using schedule and date (consistent with isClassBooked)

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import {
     View,
     Text,
@@ -8,8 +9,7 @@ import {
     Image,
     Modal,
     TextInput,
-    Alert,
-    ActivityIndicator,
+    Alert
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -349,7 +349,7 @@ const AddClientModal = ({ visible, onClose, onAddClient, classId }: AddClientMod
                     </View>
 
                     {searching && (
-                        <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 16 }} />
+                        <Spinner size="sm" />
                     )}
 
                     <ScrollView style={modalStyles.resultsList}>

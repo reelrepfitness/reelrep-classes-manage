@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import {
     View,
     Text,
@@ -6,7 +7,6 @@ import {
     TextInput,
     TouchableOpacity,
     Alert,
-    ActivityIndicator,
     Modal,
     Image,
     ScrollView,
@@ -683,7 +683,7 @@ export default function WorkoutContentScreen() {
     if (loading) {
         return (
             <View style={[styles.container, styles.loadingContainer]}>
-                <ActivityIndicator size="large" color={Colors.primary} />
+                <Spinner size="lg" />
             </View>
         );
     }

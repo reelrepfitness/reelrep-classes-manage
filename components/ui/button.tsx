@@ -3,10 +3,10 @@ import {
   TouchableOpacity,
   Text,
   StyleSheet,
-  ActivityIndicator,
   ViewStyle,
   TextStyle,
 } from 'react-native';
+import { Spinner } from '@/components/ui/spinner';
 
 interface ButtonProps {
   onPress: () => void;
@@ -38,7 +38,7 @@ export function Button({
       activeOpacity={0.8}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'outline' ? '#da4477' : '#fff'} />
+        <Spinner size="sm" />
       ) : (
         <Text
           style={[

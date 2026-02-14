@@ -1,12 +1,12 @@
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { View } from '@/components/ui/view';
+import { Spinner } from '@/components/ui/spinner';
 import { useColor } from '@/hooks/useColor';
 import { CORNERS, FONT_SIZE, HEIGHT } from '@/theme/globals';
 import { Search, X } from 'lucide-react-native';
 import React, { useCallback, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   TextInput,
   TextInputProps,
   TextStyle,
@@ -120,11 +120,7 @@ export function SearchBar({
 
       {/* Loading Indicator */}
       {loading && (
-        <ActivityIndicator
-          size='small'
-          color={muted}
-          style={{ marginRight: 4 }}
-        />
+        <Spinner size="sm" />
       )}
 
       {/* Clear Button */}

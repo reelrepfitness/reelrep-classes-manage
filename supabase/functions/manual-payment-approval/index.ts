@@ -56,11 +56,11 @@ serve(async (req: Request) => {
     // Check if user is admin
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("is_admin")
+      .select("is_admin, role")
       .eq("id", user.id)
       .single()
 
-    if (profileError || !profile?.is_admin) {
+    if (profileError || (!profile?.is_admin && profile?.role !== 'admin')) {
       console.error("[manual-payment-approval] User is not admin:", user.id)
       return new Response(
         JSON.stringify({ error: "Admin access required" }),
@@ -81,7 +81,7 @@ serve(async (req: Request) => {
 
     console.log(`[manual-payment-approval] Action: ${action} for approval: ${approvalId}`)
 
-    // Fetch pending approval
+    // Fetch pending approval with invoice
     const { data: approval, error: approvalError } = await supabase
       .from("pending_payment_approvals")
       .select("*, invoices(id, user_id, cart_items, payment_status)")
@@ -144,15 +144,15 @@ serve(async (req: Request) => {
       const createdSubscriptions: string[] = []
       const createdTickets: string[] = []
 
+      // All manual payment methods (cash, bit, debt) create debt until payment is collected
+      const amount = approval.amount
+
       for (const item of cartItems) {
         try {
           if (item.plan_type === 'ticket') {
             // Create Ticket
             const expiryDate = new Date()
             expiryDate.setDate(expiryDate.getDate() + (item.validity_days || 90))
-
-            // For cash payments, set outstanding_balance so they appear in admin debts screen
-            const isCashOrDebt = approval.payment_method === 'debt' || approval.payment_method === 'cash';
 
             const { data: ticket, error: ticketError } = await supabase
               .from('user_tickets')
@@ -167,9 +167,8 @@ serve(async (req: Request) => {
                 payment_method: approval.payment_method,
                 payment_reference: `MANUAL-${approvalId}`,
                 invoice_id: invoice.id,
-                has_debt: isCashOrDebt,
-                debt_amount: isCashOrDebt ? approval.amount : null,
-                outstanding_balance: approval.payment_method === 'cash' ? approval.amount : 0,
+                has_debt: true,
+                debt_amount: amount,
               })
               .select()
               .single()
@@ -190,27 +189,25 @@ serve(async (req: Request) => {
 
           } else if (item.plan_type === 'subscription') {
             // Create Subscription
+            const startDate = new Date()
             const endDate = new Date()
             endDate.setMonth(endDate.getMonth() + (item.duration_months || 1))
-
-            // For cash payments, set outstanding_balance so they appear in admin debts screen
-            const isCashOrDebtSub = approval.payment_method === 'debt' || approval.payment_method === 'cash';
 
             const { data: subscription, error: subError } = await supabase
               .from('user_subscriptions')
               .insert({
                 user_id: invoice.user_id,
-                plan_id: item.plan_id,
-                status: 'active',
-                start_date: new Date().toISOString(),
+                subscription_id: item.plan_id,
+                start_date: startDate.toISOString(),
                 end_date: endDate.toISOString(),
+                is_active: true,
+                plan_status: 'active',
                 payment_method: approval.payment_method,
                 payment_reference: `MANUAL-${approvalId}`,
-                sessions_used_this_week: 0,
                 invoice_id: invoice.id,
-                has_debt: isCashOrDebtSub,
-                debt_amount: isCashOrDebtSub ? approval.amount : null,
-                outstanding_balance: approval.payment_method === 'cash' ? approval.amount : 0,
+                has_debt: true,
+                debt_amount: amount,
+                outstanding_balance: amount,
               })
               .select()
               .single()
@@ -239,11 +236,9 @@ serve(async (req: Request) => {
       await supabase.from('purchase_notifications').insert({
         user_id: invoice.user_id,
         invoice_id: invoice.id,
-        notification_type: approval.payment_method === 'debt' ? 'debt_activated' : 'purchase_success',
-        title: approval.payment_method === 'debt' ? 'מנוי הופעל (חוב)' : 'תשלום אושר!',
-        message: approval.payment_method === 'debt'
-          ? `המנוי/כרטיסייה שלך הופעל/ה. שים לב: יש לך חוב של ₪${approval.amount}.`
-          : 'התשלום שלך אושר והמנוי/כרטיסייה הופעל/ה. תוכל להתחיל להזמין אימונים.',
+        notification_type: 'debt_activated',
+        title: 'מנוי הופעל',
+        message: `המנוי/כרטיסייה שלך הופעל/ה. יתרת חוב: ₪${amount}.`,
         is_read: false,
         push_sent: false,
         email_sent: false,

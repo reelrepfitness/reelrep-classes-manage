@@ -8,7 +8,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Switch,
   Platform,
 } from 'react-native';
@@ -25,6 +24,7 @@ import {
   CheckCircle,
   XCircle,
 } from 'lucide-react-native';
+import { Spinner } from '@/components/ui/spinner';
 import { useHealthSync } from '@/lib/hooks/useHealthSync';
 import Colors from '@/constants/colors';
 
@@ -205,7 +205,7 @@ export default function HealthSyncScreen() {
                 disabled={isSyncing}
               >
                 {isSyncing ? (
-                  <ActivityIndicator size="small" color={Colors.primary} />
+                  <Spinner size="sm" />
                 ) : (
                   <RefreshCw size={20} color={Colors.primary} />
                 )}
@@ -270,7 +270,7 @@ export default function HealthSyncScreen() {
             disabled={isSyncing}
           >
             {isSyncing ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <Spinner size="sm" />
             ) : (
               <>
                 <RefreshCw size={20} color="#fff" />

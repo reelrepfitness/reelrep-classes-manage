@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import {
     View,
     Text,
@@ -8,8 +9,7 @@ import {
     TextInput,
     Alert,
     Dimensions,
-    FlatList,
-    ActivityIndicator,
+    FlatList
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -248,7 +248,7 @@ export default function FormDetailScreen() {
 
     if (loading) return (
         <View style={styles.centered}>
-            <ActivityIndicator size="large" color={Colors.primary} />
+            <Spinner size="lg" />
         </View>
     );
 
@@ -266,7 +266,7 @@ export default function FormDetailScreen() {
                     </View>
                 </View>
                 <TouchableOpacity onPress={handleSave} disabled={saving} style={styles.saveButtonWrapper}>
-                    {saving ? <ActivityIndicator size="small" color={Colors.primary} /> : <Save size={24} color={Colors.primary} />}
+                    {saving ? <Spinner size="sm" /> : <Save size={24} color={Colors.primary} />}
                 </TouchableOpacity>
             </View>
 

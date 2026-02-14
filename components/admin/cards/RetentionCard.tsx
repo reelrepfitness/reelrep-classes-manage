@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, TouchableOpacity, FlatList, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, FlatList, Alert, ScrollView } from 'react-native';
+import { Spinner } from '@/components/ui/spinner';
 import { supabase } from '@/constants/supabase';
 import Colors from '@/constants/colors';
 import { MessageCircle, User } from 'lucide-react-native';
@@ -155,7 +156,7 @@ export const RetentionCard = () => {
             {/* List */}
             <View className="flex-1">
                 {loading ? (
-                    <ActivityIndicator color={Colors.primary} />
+                    <Spinner size="sm" />
                 ) : currentList.length === 0 ? (
                     <View className="flex-1 items-center justify-center">
                         <Text className="text-gray-400 text-sm">אין משתמשים ברשימה זו ✅</Text>

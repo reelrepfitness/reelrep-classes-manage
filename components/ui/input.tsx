@@ -13,12 +13,16 @@ interface InputProps extends TextInputProps {
   label?: string;
   error?: string | undefined;
   icon?: LucideIcon;
+  iconColor?: string;
+  iconBgColor?: string;
 }
 
 export function Input({
   label,
   error,
   icon: Icon,
+  iconColor,
+  iconBgColor,
   style,
   ...props
 }: InputProps) {
@@ -27,8 +31,8 @@ export function Input({
       {label && <Text style={styles.label}>{label}</Text>}
       <View style={[styles.inputContainer, error && styles.inputContainerError]}>
         {Icon && (
-          <View style={styles.iconContainer}>
-            <Icon size={20} color={error ? '#ff6b6b' : '#888'} />
+          <View style={[styles.iconContainer, iconBgColor ? { backgroundColor: iconBgColor } : undefined]}>
+            <Icon size={20} color={error ? '#ff6b6b' : (iconColor || '#888')} />
           </View>
         )}
         <TextInput
@@ -65,7 +69,9 @@ const styles = StyleSheet.create({
     borderColor: Colors.error,
   },
   iconContainer: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+    alignSelf: 'stretch',
   },
   input: {
     flex: 1,

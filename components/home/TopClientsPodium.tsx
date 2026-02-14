@@ -4,10 +4,10 @@ import {
   Text,
   Image,
   StyleSheet,
-  ActivityIndicator,
   Dimensions,
 } from 'react-native';
 import type { TopClient } from '@/hooks/useTopClients';
+import { Spinner } from '@/components/ui/spinner';
 
 const { width } = Dimensions.get('window');
 
@@ -29,7 +29,7 @@ export default function TopClientsPodium({ topClients, loading }: TopClientsPodi
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="small" color="#9CA3AF" />
+        <Spinner size="sm" />
       </View>
     );
   }

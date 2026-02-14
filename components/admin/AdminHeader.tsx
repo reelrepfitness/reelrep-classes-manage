@@ -219,8 +219,8 @@ const styles = StyleSheet.create({
     },
     headerTitle: {
         color: '#FFFFFF',
-        fontSize: 18,
-        fontWeight: '700',
+        fontSize: 22,
+        fontWeight: '800',
         textAlign: 'center',
     },
     backdrop: {
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     menuItemText: {
-        fontSize: 16,
+        fontSize: 18,
         color: '#9CA3AF',
         fontWeight: '600',
     },

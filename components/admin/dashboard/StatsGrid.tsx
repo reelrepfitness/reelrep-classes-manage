@@ -49,7 +49,7 @@ const styles = StyleSheet.create({
         marginBottom: 32,
     },
     sectionTitle: {
-        fontSize: 18,
+        fontSize: 24,
         fontWeight: '700',
         color: '#111827',
         textAlign: 'right',

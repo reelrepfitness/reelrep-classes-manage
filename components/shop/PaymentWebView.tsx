@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, ActivityIndicator, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { Spinner } from '@/components/ui/spinner';
 import { WebView } from 'react-native-webview';
 import { ArrowLeft } from 'lucide-react-native';
 import Colors from '@/constants/colors';
@@ -33,7 +34,7 @@ export function PaymentWebView({
             {/* Loading Indicator */}
             {loading && (
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={Colors.primary || '#D81B60'} />
+                    <Spinner size="lg" />
                     <Text style={styles.loadingText}>טוען טופס תשלום...</Text>
                 </View>
             )}

@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import {
     View,
     Text,
     StyleSheet,
     TouchableOpacity,
     ScrollView,
-    Alert,
-    ActivityIndicator,
+    Alert
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -133,7 +133,7 @@ export default function DuplicateContentScreen() {
                     <Text style={styles.subtitle}>בחר שיעורים אליהם תרצה להעתיק את התוכן:</Text>
 
                     {loading ? (
-                        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+                        <Spinner size="lg" />
                     ) : (
                         <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
                             {classes.map((item) => {

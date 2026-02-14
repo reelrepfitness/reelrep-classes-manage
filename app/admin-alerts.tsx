@@ -6,7 +6,6 @@ import {
     TouchableOpacity,
     ScrollView,
     Image,
-    ActivityIndicator,
     RefreshControl,
     Platform,
     StatusBar
@@ -24,6 +23,7 @@ import {
     AlertOctagon,
     Clock
 } from 'lucide-react-native';
+import { Spinner } from '@/components/ui/spinner';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/constants/supabase';
@@ -259,7 +259,7 @@ export default function AdminAlertsScreen() {
             {/* --- Content --- */}
             {loading ? (
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#FF3366" />
+                    <Spinner size="lg" />
                 </View>
             ) : (
                 <ScrollView

@@ -151,21 +151,20 @@ export default function LeadsManagementScreen() {
               key={status}
               style={[
                 styles.filterChip,
-                selectedStatus === status && styles.filterChipActive,
-                { borderColor: config.color },
+                selectedStatus === status && { borderBottomColor: config.color },
               ]}
               onPress={() => setSelectedStatus(status as LeadStatus)}
             >
               <Ionicons
                 name={config.icon as any}
                 size={16}
-                color={selectedStatus === status ? '#fff' : config.color}
+                color={selectedStatus === status ? config.color : '#9CA3AF'}
                 style={{ marginLeft: 4 }}
               />
               <Text
                 style={[
                   styles.filterText,
-                  selectedStatus === status && styles.filterTextActive,
+                  selectedStatus === status && [styles.filterTextActive, { color: config.color }],
                 ]}
               >
                 {config.title} ({count})
@@ -414,30 +413,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     gap: 8,
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
   },
   filterChip: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    borderWidth: 1.5,
-    borderColor: '#e5e7eb',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
     gap: 4,
   },
-  filterChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
+  filterChipActive: {},
   filterText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#9CA3AF',
   },
   filterTextActive: {
-    color: '#fff',
+    fontWeight: '800',
   },
   leadsContainer: {
     flex: 1,

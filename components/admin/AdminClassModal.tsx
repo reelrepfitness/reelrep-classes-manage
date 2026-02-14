@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Modal, TouchableOpacity, ScrollView, Image, ActivityIndicator, Alert, Linking, ActionSheetIOS, Platform } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, ScrollView, Image, Alert, Linking, ActionSheetIOS, Platform } from 'react-native';
+import { Spinner } from '@/components/ui/spinner';
 import { X, Check, Trash2, Plus, MessageCircle, MoreVertical, User as UserIcon, Calendar, Clock, MapPin, AlarmClock } from 'lucide-react-native';
 import { useClasses } from '@/contexts/ClassesContext';
 import Colors from '@/constants/colors';
@@ -246,7 +247,7 @@ export default function AdminClassModal({ visible, classItem, onClose }: AdminCl
                 {/* List */}
                 <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
                     {loading ? (
-                        <ActivityIndicator size="large" color="#000" style={{ marginTop: 40 }} />
+                        <Spinner size="lg" />
                     ) : displayList.length === 0 ? (
                         <View style={{ alignItems: 'center', marginTop: 60, opacity: 0.5 }}>
                             <UserIcon size={48} color="#000" />

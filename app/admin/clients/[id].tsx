@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import {
     View,
     Text,
@@ -7,8 +8,7 @@ import {
     TouchableOpacity,
     Image,
     Alert,
-    ActivityIndicator,
-    TextInput,
+    TextInput, 
     RefreshControl,
     Linking,
 } from 'react-native';
@@ -371,7 +371,7 @@ export default function ClientManagerScreen() {
     if (loading) {
         return (
             <View style={[styles.container, styles.centered]}>
-                <ActivityIndicator size="large" color={Colors.primary} />
+                <Spinner size="lg" />
             </View>
         );
     }

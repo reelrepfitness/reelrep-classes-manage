@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Alert, ActivityIndicator, Image, I18nManager, StyleSheet, Switch, ScrollView } from 'react-native';
+import { Spinner } from '@/components/ui/spinner';
+import { View, Text, TouchableOpacity, TextInput, Alert, Image, I18nManager, StyleSheet, Switch, ScrollView } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -322,7 +323,7 @@ export default function EditExerciseScreen() {
       <View style={{ flex: 1, backgroundColor: '#fff' }}>
         <AdminHeader title="עריכת תרגיל" />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <Spinner size="lg" />
           <Text style={{ marginTop: 12, color: '#64748B' }}>טוען נתוני תרגיל...</Text>
         </View>
       </View>

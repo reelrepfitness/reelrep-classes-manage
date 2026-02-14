@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
     TouchableOpacity,
-    ActivityIndicator,
     Alert,
     Dimensions,
 } from 'react-native';
@@ -105,7 +105,7 @@ export default function FormsHubScreen() {
                 </View>
 
                 {loading ? (
-                    <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+                    <Spinner size="lg" />
                 ) : (
                     <View style={styles.formsGrid}>
                         {forms.map((form) => {

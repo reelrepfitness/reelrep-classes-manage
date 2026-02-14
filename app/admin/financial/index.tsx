@@ -1,5 +1,6 @@
 // app/admin/financial/index.tsx — KPI Financial Dashboard
 import React, { useState, useCallback } from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import {
   View,
   Text,
@@ -10,7 +11,6 @@ import {
   Modal,
   TextInput,
   Switch,
-  ActivityIndicator,
   Dimensions,
   Alert,
   KeyboardAvoidingView,
@@ -164,7 +164,7 @@ export default function KPIFinancialDashboard() {
       <View style={styles.container}>
         <AdminHeader title="דשבורד KPI פיננסי" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#DA4477" />
+          <Spinner size="lg" />
           <Text style={styles.loadingText}>טוען מדדים פיננסיים...</Text>
         </View>
       </View>
@@ -221,7 +221,7 @@ export default function KPIFinancialDashboard() {
                 onPress={() => setSelectedMonth(m.id)}
               >
                 <Text style={[styles.monthText, isSelected && styles.monthTextSelected]}>
-                  {m.label}
+                  {m.full}
                 </Text>
               </TouchableOpacity>
             );
@@ -237,7 +237,7 @@ export default function KPIFinancialDashboard() {
           disabled={syncing}
         >
           {syncing ? (
-            <ActivityIndicator size="small" color="#DA4477" />
+            <Spinner size="sm" />
           ) : (
             <RefreshCw size={16} color="#DA4477" />
           )}
@@ -594,7 +594,7 @@ export default function KPIFinancialDashboard() {
           <TouchableOpacity style={styles.quickActionBtn} onPress={handleSync} disabled={syncing}>
             <View style={[styles.quickActionIcon, { backgroundColor: '#FDF2F8' }]}>
               {syncing ? (
-                <ActivityIndicator size="small" color="#DA4477" />
+                <Spinner size="sm" />
               ) : (
                 <RefreshCw size={20} color="#DA4477" />
               )}
@@ -849,7 +849,7 @@ function ExpenseModal({
               disabled={saving}
             >
               {saving ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <Spinner size="sm" />
               ) : (
                 <Text style={styles.submitButtonText}>שמור הוצאה</Text>
               )}
@@ -1001,7 +1001,7 @@ function MarketingModal({
               disabled={saving}
             >
               {saving ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <Spinner size="sm" />
               ) : (
                 <Text style={styles.submitButtonText}>שמור</Text>
               )}
@@ -1114,7 +1114,7 @@ function ConfigModal({
               disabled={saving}
             >
               {saving ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <Spinner size="sm" />
               ) : (
                 <Text style={styles.submitButtonText}>שמור הגדרות</Text>
               )}
@@ -1192,22 +1192,22 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   monthPill: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
   },
   monthPillSelected: {
-    backgroundColor: '#000000ff',
+    borderBottomColor: '#111827',
   },
   monthText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: '#9CA3AF',
     fontWeight: '500',
   },
   monthTextSelected: {
-    color: '#fff',
-    fontWeight: '900',
+    color: '#111827',
+    fontWeight: '800',
   },
 
   // --- Warning / Info Banners ---

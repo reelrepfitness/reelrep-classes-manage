@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import {
     View,
     Text,
@@ -10,7 +11,6 @@ import {
     TextInput,
     Modal,
     KeyboardAvoidingView,
-    ActivityIndicator,
     I18nManager,
     Dimensions,
     LayoutAnimation,
@@ -401,7 +401,7 @@ export default function POSPaymentScreen() {
                     disabled={!isFullyPaid || loading}
                 >
                     {loading ? (
-                        <ActivityIndicator color="#fff" />
+                        <Spinner size="sm" />
                     ) : (
                         <>
                             <Text style={styles.mainButtonText}>סיים והפק חשבונית</Text>

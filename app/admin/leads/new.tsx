@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import {
     View,
     Text,
@@ -6,7 +7,6 @@ import {
     ScrollView,
     TextInput,
     TouchableOpacity,
-    ActivityIndicator,
     Alert,
     KeyboardAvoidingView,
     Platform,
@@ -206,7 +206,7 @@ export default function NewLeadScreen() {
                     activeOpacity={0.7}
                 >
                     {loading ? (
-                        <ActivityIndicator color="#fff" />
+                        <Spinner size="sm" />
                     ) : (
                         <>
                             <Check size={20} color="#fff" />

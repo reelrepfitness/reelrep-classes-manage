@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import {
     View,
     Text,
@@ -6,7 +7,6 @@ import {
     TouchableOpacity,
     ScrollView,
     TextInput,
-    ActivityIndicator,
     Alert,
     Image,
     Platform,
@@ -425,7 +425,7 @@ export default function POSCartScreen() {
                         {searchQuery.length > 1 && (
                             <View style={styles.searchResults}>
                                 {loadingClients ? (
-                                    <ActivityIndicator color={Colors.primary} style={{ padding: 16 }} />
+                                    <Spinner size="sm" />
                                 ) : clients.length === 0 ? (
                                     <Text style={styles.noResults}>לא נמצאו תוצאות</Text>
                                 ) : (
@@ -458,7 +458,7 @@ export default function POSCartScreen() {
 
                 {/* Plans - Expandable Cards like Shop */}
                 {loadingPlans ? (
-                    <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+                    <Spinner size="lg" />
                 ) : (
                     plans.map((plan) => {
                         const isSelected = selectedPlanId === plan.id;

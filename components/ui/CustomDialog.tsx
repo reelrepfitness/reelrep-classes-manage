@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, ReactNode } from 'react';
 import {
     View,
     Text,
@@ -7,12 +7,14 @@ import {
     TouchableOpacity,
     Image,
     Dimensions,
+    ScrollView,
 } from 'react-native';
+import LottieView from 'lottie-react-native';
 import Colors from '@/constants/colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// GIF duration for auto-close
+// Lottie animation duration for auto-close (45 frames @ 29.97fps ≈ 1500ms + buffer)
 const SUCCESS_GIF_DURATION = 1800;
 
 export type DialogType = 'success' | 'warning' | 'error' | 'confirm';
@@ -31,6 +33,8 @@ export interface CustomDialogProps {
     message?: string;
     buttons?: DialogButton[];
     image?: any;
+    lottieSource?: any;
+    customContent?: ReactNode;
     showSuccessGif?: boolean;
     showWarningGif?: boolean;
     showCancelGif?: boolean;
@@ -45,12 +49,17 @@ export default function CustomDialog({
     message,
     buttons,
     image,
+    lottieSource,
+    customContent,
     showSuccessGif = false,
     showWarningGif = false,
     showCancelGif = false,
     autoCloseAfterGif = false,
 }: CustomDialogProps) {
     const autoCloseTimer = useRef<NodeJS.Timeout | null>(null);
+
+    // Animated values for content slide-in after lottie finishes
+    // No delayed entrance — content enters together with lottie
 
     // Handle auto-close
     useEffect(() => {
@@ -121,7 +130,33 @@ export default function CustomDialog({
         return image;
     };
 
-    const hasImage = showSuccessGif || showWarningGif || showCancelGif || image;
+    const hasImage = showSuccessGif || showWarningGif || showCancelGif || image || lottieSource;
+
+    // Success with Lottie animation only — no dialog box
+    if (showSuccessGif && autoCloseAfterGif) {
+        return (
+            <Modal
+                visible={visible}
+                transparent
+                animationType="fade"
+                onRequestClose={onClose}
+            >
+                <TouchableOpacity
+                    style={styles.lottieOverlay}
+                    activeOpacity={1}
+                    onPress={onClose}
+                >
+                    <LottieView
+                        source={require('@/assets/animations/Success.json')}
+                        autoPlay
+                        loop={false}
+                        style={styles.lottieAnimation}
+                        onAnimationFinish={onClose}
+                    />
+                </TouchableOpacity>
+            </Modal>
+        );
+    }
 
     return (
         <Modal
@@ -131,17 +166,29 @@ export default function CustomDialog({
             onRequestClose={onClose}
         >
             <TouchableOpacity
-                style={styles.overlay}
+                style={[styles.overlay, lottieSource && styles.overlayDarker]}
                 activeOpacity={1}
                 onPress={onClose}
             >
                 <TouchableOpacity
-                    style={styles.dialog}
+                    style={[styles.dialog, lottieSource && styles.dialogTransparent]}
                     activeOpacity={1}
                     onPress={() => {}}
                 >
+                    {/* Lottie Animation */}
+                    {lottieSource && (
+                        <View style={styles.imageContainer}>
+                            <LottieView
+                                source={lottieSource}
+                                autoPlay
+                                loop={false}
+                                style={styles.dialogLottie}
+                            />
+                        </View>
+                    )}
+
                     {/* Image/GIF */}
-                    {hasImage && (
+                    {!lottieSource && hasImage && (
                         <View style={styles.imageContainer}>
                             <Image
                                 source={getImageSource()}
@@ -151,43 +198,52 @@ export default function CustomDialog({
                         </View>
                     )}
 
-                    {/* Title */}
-                    {title && (
-                        <Text style={styles.title}>{title}</Text>
-                    )}
+                    <View>
+                        {/* Title */}
+                        {title && (
+                            <Text style={[styles.title, lottieSource && styles.textOnTransparent]}>{title}</Text>
+                        )}
 
-                    {/* Message */}
-                    {message && (
-                        <Text style={styles.message}>{message}</Text>
-                    )}
+                        {/* Message */}
+                        {message && (
+                            <Text style={[styles.message, lottieSource && styles.textOnTransparent]}>{message}</Text>
+                        )}
 
-                    {/* Buttons */}
-                    {!autoCloseAfterGif && (
-                        <View style={[
-                            styles.buttonsContainer,
-                            dialogButtons.length === 1 && styles.singleButtonContainer,
-                        ]}>
-                            {dialogButtons.map((button, index) => (
-                                <TouchableOpacity
-                                    key={index}
-                                    style={[
-                                        styles.button,
-                                        getButtonStyle(button.style),
-                                        dialogButtons.length === 1 && styles.singleButton,
-                                    ]}
-                                    onPress={button.onPress}
-                                    activeOpacity={0.8}
-                                >
-                                    <Text style={[
-                                        styles.buttonText,
-                                        getButtonTextStyle(button.style),
-                                    ]}>
-                                        {button.text}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    )}
+                        {/* Custom Content */}
+                        {customContent && (
+                            <ScrollView style={styles.customContentScroll} showsVerticalScrollIndicator={false}>
+                                {customContent}
+                            </ScrollView>
+                        )}
+
+                        {/* Buttons */}
+                        {!autoCloseAfterGif && (
+                            <View style={[
+                                styles.buttonsContainer,
+                                dialogButtons.length === 1 && styles.singleButtonContainer,
+                            ]}>
+                                {dialogButtons.map((button, index) => (
+                                    <TouchableOpacity
+                                        key={index}
+                                        style={[
+                                            styles.button,
+                                            getButtonStyle(button.style),
+                                            dialogButtons.length === 1 && styles.singleButton,
+                                        ]}
+                                        onPress={button.onPress}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Text style={[
+                                            styles.buttonText,
+                                            getButtonTextStyle(button.style),
+                                        ]}>
+                                            {button.text}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
+                    </View>
                 </TouchableOpacity>
             </TouchableOpacity>
         </Modal>
@@ -202,6 +258,9 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         padding: 24,
     },
+    overlayDarker: {
+        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    },
     dialog: {
         width: SCREEN_WIDTH - 48,
         maxWidth: 340,
@@ -214,13 +273,26 @@ const styles = StyleSheet.create({
         shadowRadius: 20,
         elevation: 20,
     },
+    dialogTransparent: {
+        backgroundColor: 'transparent',
+        shadowOpacity: 0,
+        elevation: 0,
+    },
     imageContainer: {
         alignItems: 'center',
-        marginBottom: 16,
+        marginBottom: 4,
     },
     dialogImage: {
         width: 140,
         height: 140,
+    },
+    customContentScroll: {
+        maxHeight: 250,
+        marginBottom: 16,
+    },
+    dialogLottie: {
+        width: 200,
+        height: 200,
     },
     title: {
         fontSize: 20,
@@ -230,7 +302,8 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     message: {
-        fontSize: 15,
+        fontSize: 18,
+         fontWeight: '700',
         color: '#6B7280',
         textAlign: 'center',
         lineHeight: 22,
@@ -264,7 +337,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#FEE2E2',
     },
     buttonText: {
-        fontSize: 16,
+        fontSize: 18,
         fontWeight: '600',
     },
     defaultButtonText: {
@@ -275,5 +348,18 @@ const styles = StyleSheet.create({
     },
     destructiveButtonText: {
         color: '#DC2626',
+    },
+    lottieOverlay: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    },
+    lottieAnimation: {
+        width: 200,
+        height: 200,
+    },
+    textOnTransparent: {
+        color: '#FFFFFF',
     },
 });

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, Dimensions, ActivityIndicator, Image } from 'react-native';
+import { View, Text, Dimensions, Image } from 'react-native';
+import { Spinner } from '@/components/ui/spinner';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -163,7 +164,7 @@ export const UpcomingWorkoutsStack = () => {
     if (loading) {
         return (
             <View className="h-48 w-full items-center justify-center">
-                <ActivityIndicator color="#D81B60" />
+                <Spinner size="sm" />
             </View>
         );
     }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, ReactNode } from 'react';
 import {
     View,
     Text,
@@ -7,6 +7,7 @@ import {
     TouchableOpacity,
     Image,
     Animated,
+    Linking,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,7 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from '@/components/ui/icon';
-import SwapIcon from '@/components/SwapIcon';
+
 import CustomDialog, { DialogButton } from '@/components/ui/CustomDialog';
 import Colors from '@/constants/colors';
 import { supabase } from '@/constants/supabase';
@@ -282,17 +283,17 @@ const slotStyles = StyleSheet.create({
         flex: 1,
         flexDirection: 'column',
         alignItems: 'flex-start',
-        gap: 2,
+        gap:0,
     },
     slotFirstName: {
-        fontSize: 20,
+        fontSize: 22,
         fontWeight: '900',
         color: '#000000',
-        letterSpacing: -0.3,
+        letterSpacing: 0,
         textAlign: 'right',
     },
     slotLastName: {
-        fontSize: 13,
+        fontSize: 15,
         fontWeight: '500',
         color: '#4B5563',
         textAlign: 'right',
@@ -303,8 +304,8 @@ const slotStyles = StyleSheet.create({
         gap: 4,
     },
     slotAvailable: {
-        fontSize: 9,
-        fontWeight: '800',
+        fontSize: 14,
+        fontWeight: '600',
         color: '#9CA3AF',
         textAlign: 'center',
     },
@@ -473,7 +474,7 @@ const wodStyles = StyleSheet.create({
         padding: 16,
     },
     headerTitle: {
-        fontSize: 15,
+        fontSize: 18,
         fontWeight: '700',
         color: '#111827',
     },
@@ -621,6 +622,8 @@ export default function ClassDetailsScreen() {
         title?: string;
         message?: string;
         buttons?: DialogButton[];
+        lottieSource?: any;
+        customContent?: ReactNode;
         showSuccessGif?: boolean;
         showWarningGif?: boolean;
         showCancelGif?: boolean;
@@ -816,55 +819,86 @@ export default function ClassDetailsScreen() {
         setDialogVisible(false);
     };
 
+    const showPlanErrorDialog = (reason: string) => {
+        const messages: Record<string, string> = {
+            subscription_expired: 'אוי, נראה שהמנוי כבר לא יהיה בתוקף ביום הזה',
+            ticket_expired: 'אוי, נראה שהכרטיסייה כבר לא תהיה בתוקף ביום הזה',
+            ticket_depleted: 'ניצלת את כל האימונם בכרטיסייה שלך',
+            no_plan: 'נדרש מנוי או כרטיסייה פעילה כדי להירשם לשיעור',
+        };
+
+        showDialog({
+            type: 'warning',
+            message: messages[reason] || messages.no_plan,
+            lottieSource: require('@/assets/animations/No data found.json'),
+            buttons: [
+                {
+                    text: 'לדבר עם איוון',
+                    onPress: () => {
+                        hideDialog();
+                        Linking.openURL('https://wa.me/972528406273');
+                    },
+                    style: 'cancel',
+                },
+                {
+                    text: 'לרכישה',
+                    onPress: () => {
+                        hideDialog();
+                        router.push('/shop');
+                    },
+                    style: 'default',
+                },
+            ],
+        });
+    };
+
     const handleRegister = async () => {
         if (!classItem || !user) return;
 
-        // Immediately show success dialog and update UI (optimistic update)
-        showDialog({
-            type: 'success',
-            title: 'נרשמת בהצלחה!',
-            showSuccessGif: true,
-            autoCloseAfterGif: true,
-        });
-
-        // Optimistically update the enrolled count
-        setClassItem((prev: any) => prev ? { ...prev, enrolled: (prev.enrolled || 0) + 1 } : prev);
-
-        // Optimistically add current user to participants
-        setParticipants((prev) => [
-            ...prev,
-            {
-                id: `temp-${Date.now()}`,
-                status: 'confirmed',
-                profiles: {
-                    id: user.id,
-                    full_name: user.name,
-                    avatar_url: user.profileImage,
-                },
-            },
-        ]);
-
-        // Perform actual booking in background
         try {
             await bookClass(classItem.id);
+
+            // Show success dialog after booking succeeds
+            showDialog({
+                type: 'success',
+                title: 'נרשמת בהצלחה!',
+                showSuccessGif: true,
+                autoCloseAfterGif: true,
+            });
+
+            // Update enrolled count
+            setClassItem((prev: any) => prev ? { ...prev, enrolled: (prev.enrolled || 0) + 1 } : prev);
+
+            // Add current user to participants
+            setParticipants((prev) => [
+                ...prev,
+                {
+                    id: `temp-${Date.now()}`,
+                    status: 'confirmed',
+                    profiles: {
+                        id: user.id,
+                        full_name: user.name,
+                        avatar_url: user.profileImage,
+                    },
+                },
+            ]);
+
             // Refresh to get real data
             fetchParticipants();
         } catch (error) {
-            // Revert optimistic updates on error
-            setClassItem((prev: any) => prev ? { ...prev, enrolled: Math.max(0, (prev.enrolled || 1) - 1) } : prev);
-            setParticipants((prev) => prev.filter((p) => p.id !== `temp-${Date.now()}`));
-            fetchParticipants();
+            const err = error as Error;
 
-            // Hide success dialog and show error
-            hideDialog();
-            setTimeout(() => {
+            // Check if this is a plan validation error
+            if (err.name === 'BookingValidationError') {
+                showPlanErrorDialog(err.message);
+            } else {
                 showDialog({
                     type: 'error',
                     title: 'שגיאה',
-                    message: (error as Error).message,
+                    message: err.message,
                     buttons: [{ text: 'אישור', onPress: hideDialog, style: 'default' }],
                 });
-            }, 200);
+            }
         }
     };
 
@@ -897,7 +931,7 @@ export default function ClassDetailsScreen() {
                 type: 'warning',
                 title: 'ביטול מאוחר',
                 message: 'אתה מבטל פחות מ-6 שעות לפני תחילת השיעור.\n\nביטול מאוחר עלול לגרור לחיוב אימון מהכרטסייה.',
-                showWarningGif: true,
+                lottieSource: require('@/assets/animations/Warning Status.json'),
                 buttons: [
                     { text: 'חזרה', onPress: hideDialog, style: 'cancel' },
                     {
@@ -915,7 +949,7 @@ export default function ClassDetailsScreen() {
                 type: 'confirm',
                 title: 'ביטול שיעור',
                 message: 'האם לבטל את ההרשמה?',
-                showCancelGif: true,
+                lottieSource: require('@/assets/animations/Cross, Close, Cancel Icon Animation.json'),
                 buttons: [
                     { text: 'לא', onPress: hideDialog, style: 'cancel' },
                     {
@@ -940,12 +974,122 @@ export default function ClassDetailsScreen() {
         return hoursUntilClass < 6 && hoursUntilClass > 0;
     };
 
+    const performSwitch = async (toClassId: string) => {
+        if (!classItem) return;
+        const booking = getClassBooking(classItem.id);
+        if (!booking) return;
+        try {
+            hideDialog();
+            await cancelBooking(booking.id, false);
+            await bookClass(toClassId);
+            showDialog({
+                type: 'success',
+                title: 'השיעור הוחלף בהצלחה!',
+                showSuccessGif: true,
+                autoCloseAfterGif: true,
+            });
+        } catch (error) {
+            showDialog({
+                type: 'error',
+                title: 'שגיאה',
+                message: error instanceof Error ? error.message : 'לא ניתן להחליף את השיעור',
+                buttons: [{ text: 'אישור', onPress: hideDialog, style: 'default' }],
+            });
+        }
+    };
+
     const handleSwitch = () => {
+        if (!classItem) return;
+        const classDateTime = new Date(`${classItem.date}T${classItem.time}`);
+        const hoursUntilClass = (classDateTime.getTime() - Date.now()) / (1000 * 60 * 60);
+
+        if (hoursUntilClass < 1) {
+            showDialog({
+                type: 'warning',
+                title: 'זמן החלפה עבר',
+                message: 'לא ניתן להחליף שיעור פחות משעה לפני תחילתו.',
+                lottieSource: require('@/assets/animations/Warning Status.json'),
+                buttons: [{ text: 'הבנתי', onPress: hideDialog, style: 'default' }],
+            });
+            return;
+        }
+
+        const now = new Date();
+        const sameDayClasses = classes.filter(c => {
+            if (c.id === classItem.id) return false;
+            if (c.date !== classItem.date) return false;
+            const classTime = new Date(c.date + ' ' + c.time);
+            return classTime > now;
+        });
+
+        if (sameDayClasses.length === 0) {
+            showDialog({
+                type: 'warning',
+                title: 'אין שיעורים זמינים',
+                message: 'אין שיעורים נוספים באותו יום להחלפה.',
+                lottieSource: require('@/assets/animations/Warning Status.json'),
+                buttons: [{ text: 'הבנתי', onPress: hideDialog, style: 'default' }],
+            });
+            return;
+        }
+
+        const classOptions = (
+            <View style={{ gap: 8 }}>
+                {sameDayClasses.map(c => {
+                    const isFull = c.enrolled >= c.capacity;
+                    const alreadyBooked = isClassBooked(c.id);
+                    const disabled = isFull || alreadyBooked;
+                    return (
+                        <TouchableOpacity
+                            key={c.id}
+                            disabled={disabled}
+                            onPress={() => performSwitch(c.id)}
+                            activeOpacity={0.7}
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                backgroundColor: disabled ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.15)',
+                                borderRadius: 12,
+                                paddingVertical: 12,
+                                paddingHorizontal: 16,
+                                borderWidth: 1,
+                                borderColor: disabled ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)',
+                                opacity: disabled ? 0.5 : 1,
+                            }}
+                        >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                {isFull && (
+                                    <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                                        <Text style={{ color: '#DC2626', fontSize: 11, fontWeight: '700' }}>מלא</Text>
+                                    </View>
+                                )}
+                                {alreadyBooked && (
+                                    <View style={{ backgroundColor: '#D1FAE5', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                                        <Text style={{ color: '#059669', fontSize: 11, fontWeight: '700' }}>רשום</Text>
+                                    </View>
+                                )}
+                                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '600' }}>
+                                    {c.enrolled}/{c.capacity}
+                                </Text>
+                            </View>
+                            <View style={{ alignItems: 'flex-end' }}>
+                                <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '700' }}>{c.time}</Text>
+                                <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '500' }}>{c.title}</Text>
+                            </View>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+        );
+
         showDialog({
             type: 'confirm',
             title: 'החלף שיעור',
-            message: 'אנא בטל את השיעור הנוכחי והירשם לשיעור אחר.',
-            buttons: [{ text: 'הבנתי', onPress: hideDialog, style: 'default' }],
+            message: 'בחר שיעור להחלפה:',
+            lottieSource: require('@/assets/animations/Refresh-A-001.json'),
+            customContent: classOptions,
+            buttons: [{ text: 'ביטול', onPress: hideDialog, style: 'cancel' }],
         });
     };
 
@@ -1177,9 +1321,9 @@ export default function ClassDetailsScreen() {
 
                 {/* Sticky Footer with Black Gradient */}
                 <LinearGradient
-                    colors={['#1F2937', '#111827']}
+                    colors={['#ffffffff', '#ffffffffff']}
                     start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
+                    end={{ x: 0, y: 0 }}
                     style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}
                 >
                     {isBooked ? (
@@ -1190,7 +1334,7 @@ export default function ClassDetailsScreen() {
                                 onPress={handleSwitch}
                                 activeOpacity={0.8}
                             >
-                                <SwapIcon size={20} color="#F59E0B" />
+                                <Image source={require('@/assets/images/replace.webp')} style={{ width: 18, height: 18, tintColor: '#F59E0B' }} resizeMode="contain" />
                                 <Text style={styles.whiteButtonText}>החלף שיעור</Text>
                             </TouchableOpacity>
 
@@ -1222,12 +1366,7 @@ export default function ClassDetailsScreen() {
                                     onPress={handleCancelClass}
                                     activeOpacity={0.8}
                                 >
-                                    <Icon
-                                        name="x-circle"
-                                        size={18}
-                                        color="#EF4444"
-                                        strokeWidth={2.5}
-                                    />
+                                    <Image source={require('@/assets/images/cancel.webp')} style={{ width: 18, height: 18, tintColor: '#EF4444' }} resizeMode="contain" />
                                     <Text style={styles.whiteButtonText}>ביטול שיעור</Text>
                                 </TouchableOpacity>
                             )}
@@ -1259,6 +1398,8 @@ export default function ClassDetailsScreen() {
                     title={dialogConfig.title}
                     message={dialogConfig.message}
                     buttons={dialogConfig.buttons}
+                    lottieSource={dialogConfig.lottieSource}
+                    customContent={dialogConfig.customContent}
                     showSuccessGif={dialogConfig.showSuccessGif}
                     showWarningGif={dialogConfig.showWarningGif}
                     showCancelGif={dialogConfig.showCancelGif}
@@ -1308,16 +1449,16 @@ const styles = StyleSheet.create({
         alignSelf: 'stretch',
     },
     headerBackButton: {
-        width: 44,
-        height: 44,
+        width: 40,
+        height: 40,
         alignItems: 'center',
         justifyContent: 'center',
     },
     headerTitle: {
         flex: 1,
-        fontSize: 20,
-        fontWeight: '700',
-        color: '#FFFFFF',
+        fontSize: 30,
+        fontWeight: '800',
+        color: '#ffffffff',
         textAlign: 'center',
     },
     headerBadge: {
@@ -1335,27 +1476,27 @@ const styles = StyleSheet.create({
     headerDateTimeRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginTop: 8,
+        marginTop: -1,
         gap: 8,
     },
     headerDateTime: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: 'rgba(255,255,255,0.85)',
+        fontSize: 18,
+        fontWeight: '600',
+        color: 'rgba(255, 255, 255, 1)',
     },
     headerDateTimeSeparator: {
         fontSize: 14,
         color: 'rgba(255,255,255,0.5)',
     },
     headerCountdown: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: 'rgba(255,255,255,0.7)',
-        marginTop: 6,
+        fontSize: 16,
+        fontWeight: '400',
+        color: 'rgba(250, 250, 250, 0.83)',
+        marginTop: 0,
     },
     headerDivider: {
         height: 1,
-        backgroundColor: 'rgba(255,255,255,0.2)',
+        backgroundColor: 'rgba(238, 238, 238, 0.2)',
         alignSelf: 'stretch',
         marginTop: 12,
         marginBottom: 10,
@@ -1366,8 +1507,8 @@ const styles = StyleSheet.create({
         gap: 10,
     },
     headerInstructorAvatar: {
-        width: 36,
-        height: 36,
+        width: 44,
+        height: 44,
         borderRadius: 18,
         borderWidth: 1.5,
         borderColor: 'rgba(255,255,255,0.3)',
@@ -1376,12 +1517,12 @@ const styles = StyleSheet.create({
         alignItems: 'flex-start',
     },
     headerInstructorName: {
-        fontSize: 14,
+        fontSize: 18,
         fontWeight: '700',
         color: '#FFFFFF',
     },
     headerInstructorRole: {
-        fontSize: 11,
+        fontSize: 14,
         fontWeight: '500',
         color: 'rgba(255,255,255,0.6)',
     },
@@ -1518,7 +1659,7 @@ const styles = StyleSheet.create({
         marginBottom: 6,
     },
     slotsSubtitle: {
-        fontSize: 13,
+        fontSize: 20,
         color: '#6B7280',
         fontWeight: '500',
         textAlign: 'left',
@@ -1646,7 +1787,7 @@ const styles = StyleSheet.create({
         gap: 6,
     },
     secondaryButtonText: {
-        fontSize: 15,
+        fontSize: 18,
         fontWeight: '700',
         color: '#374151',
     },
@@ -1669,7 +1810,7 @@ const styles = StyleSheet.create({
         gap: 6,
     },
     primaryButtonText: {
-        fontSize: 15,
+        fontSize: 18,
         fontWeight: '700',
         color: '#FFFFFF',
     },
@@ -1700,7 +1841,7 @@ const styles = StyleSheet.create({
         gap: 6,
     },
     gradientButtonText: {
-        fontSize: 15,
+        fontSize: 18,
         fontWeight: '700',
     },
     // White button styles for black gradient footer
@@ -1715,7 +1856,7 @@ const styles = StyleSheet.create({
         gap: 6,
     },
     whiteButtonText: {
-        fontSize: 15,
+        fontSize: 18,
         fontWeight: '700',
         color: '#111827',
     },
@@ -1723,13 +1864,13 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF',
         borderRadius: 16,
         paddingVertical: 16,
-        flexDirection: 'row',
+        flexDirection: 'row-reverse',
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
     },
     whiteButtonTextFull: {
-        fontSize: 17,
+        fontSize: 18,
         fontWeight: '700',
         color: '#111827',
     },
@@ -1756,7 +1897,7 @@ const styles = StyleSheet.create({
         gap: 6,
     },
     redGradientButtonText: {
-        fontSize: 15,
+        fontSize: 18,
         fontWeight: '700',
         color: '#FFFFFF',
     },

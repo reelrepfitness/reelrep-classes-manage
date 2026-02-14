@@ -1,5 +1,6 @@
 import { Text } from '@/components/ui/text';
 import { View } from '@/components/ui/view';
+import { Spinner } from '@/components/ui/spinner';
 import { useColor } from '@/hooks/useColor';
 import { BORDER_RADIUS, CORNERS } from '@/theme/globals';
 import {
@@ -8,7 +9,7 @@ import {
   ImageSource,
 } from 'expo-image';
 import { forwardRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 export interface ImageProps extends Omit<ExpoImageProps, 'style'> {
   variant?: 'rounded' | 'circle' | 'default';
@@ -124,10 +125,7 @@ export const Image = forwardRef<ExpoImage, ImageProps>(
         {/* Loading indicator */}
         {isLoading && showLoadingIndicator && (
           <View style={styles.overlay}>
-            <ActivityIndicator
-              size={loadingIndicatorSize}
-              color={loadingIndicatorColor || primaryColor}
-            />
+            <Spinner size={loadingIndicatorSize === 'large' ? 'lg' : 'sm'} />
           </View>
         )}
 

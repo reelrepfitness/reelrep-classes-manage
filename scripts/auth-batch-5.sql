@@ -1,0 +1,126 @@
+INSERT INTO auth.users (
+  instance_id, id, aud, role, email, encrypted_password,
+  email_confirmed_at, phone, raw_user_meta_data, raw_app_meta_data,
+  created_at, updated_at, is_sso_user, is_anonymous
+) VALUES
+  (
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    'kabalomika@gmail.com',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972542262382',
+    '{"full_name": "מיקה קבלו", "phone_number": "+972542262382"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2024-11-21T00:00:00Z', now(),
+    false, false
+  ),(
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    'mikisanservice@gmail.com',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972547228789',
+    '{"full_name": "מיקי סנדרוסי", "phone_number": "+972547228789"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2024-02-08T00:00:00Z', now(),
+    false, false
+  ),(
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    '972546666788@reelrep.temp',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972546666788',
+    '{"full_name": "מני מולדבסקי", "phone_number": "+972546666788"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2024-08-30T00:00:00Z', now(),
+    false, false
+  ),(
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    'maria.petro3@gmail.com',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972533337473',
+    '{"full_name": "מריה פטרו", "phone_number": "+972533337473"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2026-01-08T00:00:00Z', now(),
+    false, false
+  ),(
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    'ayalnoya@gmail.com',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972527323331',
+    '{"full_name": "נויה אייל", "phone_number": "+972527323331"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2025-02-25T00:00:00Z', now(),
+    false, false
+  ),(
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    'noayaish1@gmail.com',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972542359905',
+    '{"full_name": "נועה יעיש", "phone_number": "+972542359905"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2024-02-08T00:00:00Z', now(),
+    false, false
+  ),(
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    '972535219455@reelrep.temp',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972535219455',
+    '{"full_name": "נועה סעדיה", "phone_number": "+972535219455"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2026-01-13T00:00:00Z', now(),
+    false, false
+  ),(
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    'Nofarefraim19@gmail.com',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972504443714',
+    '{"full_name": "נופר אפרים", "phone_number": "+972504443714"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2024-03-02T00:00:00Z', now(),
+    false, false
+  ),(
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    '972524828539@reelrep.temp',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972524828539',
+    '{"full_name": "ניצן בירמן", "phone_number": "+972524828539"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2024-04-14T00:00:00Z', now(),
+    false, false
+  ),(
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    'noabarnea1@gmail.com',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972525459057',
+    '{"full_name": "נעה ברנע", "phone_number": "+972525459057"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2024-02-12T00:00:00Z', now(),
+    false, false
+  );

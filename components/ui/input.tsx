@@ -15,6 +15,7 @@ interface InputProps extends TextInputProps {
   icon?: LucideIcon;
   iconColor?: string;
   iconBgColor?: string;
+  containerStyle?: any;
 }
 
 export function Input({
@@ -24,12 +25,13 @@ export function Input({
   iconColor,
   iconBgColor,
   style,
+  containerStyle,
   ...props
 }: InputProps) {
   return (
     <View style={styles.container}>
       {label && <Text style={styles.label}>{label}</Text>}
-      <View style={[styles.inputContainer, error && styles.inputContainerError]}>
+      <View style={[styles.inputContainer, error && styles.inputContainerError, containerStyle]}>
         {Icon && (
           <View style={[styles.iconContainer, iconBgColor ? { backgroundColor: iconBgColor } : undefined]}>
             <Icon size={20} color={error ? '#ff6b6b' : (iconColor || '#888')} />

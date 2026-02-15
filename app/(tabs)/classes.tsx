@@ -514,12 +514,12 @@ export default function ClassesScreen() {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 {isFull && (
                   <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
-                    <Text style={{ color: '#DC2626', fontSize: 11, fontWeight: '700' }}>מלא</Text>
+                    <Text style={{ color: '#DC2626', fontSize: 14, fontWeight: '700' }}>מלא</Text>
                   </View>
                 )}
                 {isBooked && (
                   <View style={{ backgroundColor: '#D1FAE5', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
-                    <Text style={{ color: '#059669', fontSize: 11, fontWeight: '700' }}>רשום</Text>
+                    <Text style={{ color: '#059669', fontSize: 14, fontWeight: '700' }}>רשום</Text>
                   </View>
                 )}
                 <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '600' }}>
@@ -859,20 +859,20 @@ export default function ClassesScreen() {
                       />
                     ) : (
                       <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center' }}>
-                        <Text style={{ fontSize: 10, fontWeight: '600', color: '#6B7280' }}>
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#6B7280' }}>
                           {classItem.instructor?.charAt(0) || '?'}
                         </Text>
                       </View>
                     )}
-                    <Text className="text-gray-500 font-medium text-sm">{classItem.instructor}</Text>
+                    <Text className="text-gray-500 font-bold text-base">{classItem.instructor}</Text>
                   </View>
                 </View>
 
                 {/* Progress Bar */}
                 <View className="mt-4">
                   <View className="flex-row justify-between mb-1">
-                    <Text className="text-[15px] text-gray-400 font-bold">רשומים</Text>
-                    <Text className="text-[15px] text-gray-600 font-bold">{classItem.enrolled}/{classItem.capacity}</Text>
+                    <Text className="text-[17px] text-gray-400 font-bold">רשומים</Text>
+                    <Text className="text-[17px] text-gray-600 font-bold">{classItem.enrolled}/{classItem.capacity}</Text>
                   </View>
                   <Progress
                     value={percent}
@@ -919,7 +919,7 @@ export default function ClassesScreen() {
                       className="flex-1 bg-gray-50 py-2 rounded-lg items-center border border-gray-200"
                     >
                       <View className="flex-row-reverse items-center justify-center gap-1.5">
-                        <Text className="text-xs font-bold text-gray-700">החלפה</Text>
+                        <Text className="text-base font-bold text-gray-700">החלפה</Text>
                         <Image source={require('@/assets/images/replace.webp')} style={{ width: 14, height: 14, tintColor: '#374151' }} resizeMode="contain" />
                       </View>
                     </TouchableOpacity>
@@ -931,7 +931,7 @@ export default function ClassesScreen() {
                       )}
                     >
                       <View className="flex-row-reverse items-center justify-center gap-1.5">
-                        <Text className={cn("text-xs font-bold", !canCancelClass(classItem) ? "text-red-600" : "text-gray-700")}>
+                        <Text className={cn("text-base font-bold", !canCancelClass(classItem) ? "text-red-600" : "text-gray-700")}>
                           {canCancelClass(classItem) ? 'ביטול' : 'ביטול מאוחר'}
                         </Text>
                         <Image

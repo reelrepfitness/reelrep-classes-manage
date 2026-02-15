@@ -27,7 +27,7 @@ export default function FrozenPlansScreen() {
             freeze_start_date,
             freeze_end_date,
             plan_status,
-            subscription_plans(name)
+            plans:plan_id(name)
           )
         `)
                 .order('created_at', { ascending: false });
@@ -72,7 +72,7 @@ export default function FrozenPlansScreen() {
             >
                 {(clients || []).map((client: any) => {
                     const subscription = client.user_subscriptions?.[0];
-                    const plan = subscription?.subscription_plans;
+                    const plan = (subscription?.plans as any);
                     const freezeStart = subscription?.freeze_start_date
                         ? new Date(subscription.freeze_start_date).toLocaleDateString('he-IL')
                         : '';

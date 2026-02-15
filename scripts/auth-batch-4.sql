@@ -1,0 +1,126 @@
+INSERT INTO auth.users (
+  instance_id, id, aud, role, email, encrypted_password,
+  email_confirmed_at, phone, raw_user_meta_data, raw_app_meta_data,
+  created_at, updated_at, is_sso_user, is_anonymous
+) VALUES
+  (
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    'Libihadad110@gmail.com',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972542061150',
+    '{"full_name": "ליבי חדד", "phone_number": "+972542061150"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2026-01-13T00:00:00Z', now(),
+    false, false
+  ),(
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    'lihiadam@icloud.com',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972527756815',
+    '{"full_name": "ליהי אדם", "phone_number": "+972527756815"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2024-02-12T00:00:00Z', now(),
+    false, false
+  ),(
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    '972542797979@reelrep.temp',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972542797979',
+    '{"full_name": "לימור ראובן", "phone_number": "+972542797979"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2024-09-04T00:00:00Z', now(),
+    false, false
+  ),(
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    'ozlloly8899@gmail.com',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972546488804',
+    '{"full_name": "ליר עוז", "phone_number": "+972546488804"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2024-02-08T00:00:00Z', now(),
+    false, false
+  ),(
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    'maybx5@gmail.com',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972542222312',
+    '{"full_name": "מאי בודאי", "phone_number": "+972542222312"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2025-08-25T00:00:00Z', now(),
+    false, false
+  ),(
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    'maisireni@gmail.com',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972544334533',
+    '{"full_name": "מאי סירני", "phone_number": "+972544334533"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2024-02-08T00:00:00Z', now(),
+    false, false
+  ),(
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    'maypery25@gmail.com',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972546315315',
+    '{"full_name": "מאי פרי", "phone_number": "+972546315315"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2024-02-08T00:00:00Z', now(),
+    false, false
+  ),(
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    'm.l.maya@walla.com',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972524345118',
+    '{"full_name": "מאיה לוי", "phone_number": "+972524345118"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2024-02-08T00:00:00Z', now(),
+    false, false
+  ),(
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    'miarothman1@gmail.com',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972558826280',
+    '{"full_name": "מיה רוטמן", "phone_number": "+972558826280"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2024-02-25T00:00:00Z', now(),
+    false, false
+  ),(
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated', 'authenticated',
+    'maymayki2000@gmail.com',
+    crypt('123456', gen_salt('bf')),
+    now(),
+    '+972549492125',
+    '{"full_name": "מייקי סמוכה", "phone_number": "+972549492125"}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '2024-02-08T00:00:00Z', now(),
+    false, false
+  );

@@ -78,10 +78,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           .single();
 
         if (subData) {
-          // Found active subscription - fetch plan with image_url
+          // Found active subscription - fetch plan from unified plans table
           const { data: planData } = await supabase
-            .from('subscription_plans')
-            .select('name, type, sessions_per_week, image_url')
+            .from('plans')
+            .select('name, category, sessions_per_week, is_unlimited, image_url')
             .eq('id', subData.plan_id)
             .single();
 
@@ -102,9 +102,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
         if (ticketData) {
           console.log('[Auth] Found active ticket:', ticketData);
-          // Fetch ticket plan details with image_url
+          // Fetch ticket plan details from unified plans table
           const { data: ticketPlanData } = await supabase
-            .from('ticket_plans')
+            .from('plans')
             .select('name, image_url, total_sessions')
             .eq('id', ticketData.plan_id)
             .single();
@@ -146,7 +146,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
         if (isActive) {
           userSubscription = {
-            type: plan?.type || (subscription.total_sessions ? (subscription.total_sessions === 20 ? '20-class' : '10-class') : 'basic'),
+            type: plan?.is_unlimited ? 'unlimited' : (plan?.category === 'ticket' ? 'ticket' : (subscription.total_sessions ? (subscription.total_sessions === 20 ? '20-class' : '10-class') : 'basic')),
             status: 'active',
             startDate: subscription.start_date || subscription.purchase_date,
             endDate: subscription.end_date || subscription.expiry_date,
@@ -166,7 +166,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
       const user: User = {
         id: session.user.id,
-        name: profile?.name || profile?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
+        name: profile?.full_name || profile?.name || session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
         email: session.user.email || '',
         role: profile?.is_admin ? 'admin' : (profile?.is_coach ? 'coach' : 'user'),
         profileImage: profile?.avatar_url || session.user.user_metadata?.avatar_url || '',

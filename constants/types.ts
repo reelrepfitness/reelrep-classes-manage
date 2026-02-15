@@ -162,6 +162,7 @@ export interface SubscriptionPackage {
   greenInvoiceUrl?: string;
   disclaimer?: string;
   pricePerMonth?: number;
+  paymentOption?: 'recurring' | 'upfront' | 'monthly_manual';
 }
 
 export interface CartItem {

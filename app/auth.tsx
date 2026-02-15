@@ -14,16 +14,18 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   withDelay,
+  withRepeat,
+  Easing,
 } from 'react-native-reanimated';
 
 I18nManager.allowRTL(true);
 I18nManager.forceRTL(true);
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const LOGO_SIZE = 280;
 const LOGO_SIZE_SMALL = 160;
 const LOGO_SCALE_TARGET = LOGO_SIZE_SMALL / LOGO_SIZE;
-const LOGO_CENTER_Y = (SCREEN_HEIGHT - LOGO_SIZE) / 2 - 60;
+const LOGO_CENTER_Y = (SCREEN_HEIGHT - LOGO_SIZE) / 2;
 const LOGO_FORM_Y = 10;
 
 type AuthMode = 'signin' | 'forgot' | 'otp' | 'verify';
@@ -43,6 +45,7 @@ export default function AuthScreen() {
   const logoScale = useSharedValue(1);
   const logoTop = useSharedValue(LOGO_CENTER_Y);
   const buttonOpacity = useSharedValue(0);
+  const bgTranslateX = useSharedValue(0);
   const formOpacity = useSharedValue(0);
   const formTranslateY = useSharedValue(30);
 
@@ -55,6 +58,12 @@ export default function AuthScreen() {
 
   // Entrance animation on mount
   useEffect(() => {
+    // Background slow slide loop
+    bgTranslateX.value = withRepeat(
+      withTiming(-200, { duration: 20000, easing: Easing.linear }),
+      -1,
+      true
+    );
     // Icon fades in
     logoOpacity.value = withDelay(200, withTiming(1, { duration: 500 }));
     // Button fades in after logo
@@ -79,6 +88,10 @@ export default function AuthScreen() {
     opacity: logoOpacity.value,
     top: logoTop.value,
     transform: [{ scale: logoScale.value }],
+  }));
+
+  const bgStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: bgTranslateX.value }],
   }));
 
   const enterButtonStyle = useAnimatedStyle(() => ({
@@ -151,6 +164,14 @@ export default function AuthScreen() {
         />
       </Animated.View>
 
+      <Animated.View style={[styles.splashBg, bgStyle]}>
+        <ExpoImage
+          source={require('@/assets/images/jnjkn.png')}
+          style={styles.splashBgImage}
+          contentFit="cover"
+        />
+      </Animated.View>
+
       {!showForm ? (
         <>
           <View style={{ flex: 1 }} />
@@ -194,7 +215,7 @@ export default function AuthScreen() {
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
-                  style={styles.input}
+                  containerStyle={styles.inputShadow}
                 />
                 <Input
                   label={hebrew.auth.password}
@@ -206,7 +227,7 @@ export default function AuthScreen() {
                   onChangeText={setPassword}
                   error={passwordError}
                   secureTextEntry
-                  style={styles.input}
+                  containerStyle={styles.inputShadow}
                 />
 
                 <LinearGradient
@@ -386,6 +407,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 10,
   },
+  splashBg: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: SCREEN_WIDTH + 400,
+    left: -200,
+    opacity: 0.15,
+  },
+  splashBgImage: {
+    width: '100%',
+    height: '100%',
+  },
   bottomContainer: {
     alignItems: 'center',
     paddingHorizontal: 24,
@@ -448,7 +481,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   input: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#FFFFFF',
+  },
+  inputShadow: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
   },
   forgotButton: {
     alignSelf: 'center',

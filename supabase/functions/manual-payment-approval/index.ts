@@ -187,8 +187,8 @@ serve(async (req: Request) => {
               .update({ ticket_id: ticket.id })
               .eq('id', invoice.id)
 
-          } else if (item.plan_type === 'subscription') {
-            // Create Subscription
+          } else {
+            // Create Subscription (handles 'subscription', 'unlimited', etc.)
             const startDate = new Date()
             const endDate = new Date()
             endDate.setMonth(endDate.getMonth() + (item.duration_months || 1))
@@ -197,7 +197,7 @@ serve(async (req: Request) => {
               .from('user_subscriptions')
               .insert({
                 user_id: invoice.user_id,
-                subscription_id: item.plan_id,
+                plan_id: item.plan_id,
                 start_date: startDate.toISOString(),
                 end_date: endDate.toISOString(),
                 is_active: true,

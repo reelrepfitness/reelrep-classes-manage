@@ -19,6 +19,7 @@ interface CreateClientRequest {
   city?: string
   taxId?: string
   remarks?: string
+  birthday?: string
   gender: 'male' | 'female'
   role: 'user' | 'coach' | 'admin'
   isAdmin: boolean
@@ -100,6 +101,7 @@ serve(async (req: Request) => {
       city,
       taxId,
       remarks,
+      birthday,
       gender,
       role,
       isAdmin,
@@ -211,6 +213,9 @@ serve(async (req: Request) => {
       is_admin: isAdmin || false,
       is_coach: isCoach || false,
     }
+    if (birthday) {
+      profileUpdate.birthday = birthday
+    }
 
     const { error: updateError } = await supabase
       .from("profiles")
@@ -239,7 +244,7 @@ serve(async (req: Request) => {
         .from("user_subscriptions")
         .insert({
           user_id: newUserId,
-          subscription_id: planId,
+          plan_id: planId,
           start_date: subscriptionStart,
           end_date: subscriptionEnd,
           is_active: true,

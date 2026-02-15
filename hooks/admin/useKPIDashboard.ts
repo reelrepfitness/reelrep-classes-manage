@@ -70,7 +70,7 @@ export function useKPIDashboard(month: number, year: number) {
         // 1. Active subscriptions with plan prices (for MRR)
         supabase
           .from('user_subscriptions')
-          .select('id, user_id, start_date, subscription_id, subscription_plans(id, "price-per-month")')
+          .select('id, user_id, start_date, plan_id, plans(id, price_per_month)')
           .eq('is_active', true)
           .eq('plan_status', 'active'),
 
@@ -167,7 +167,7 @@ export function useKPIDashboard(month: number, year: number) {
 
       // --- Financial KPIs ---
       const subsWithPrice = activeSubs.map((sub: any) => ({
-        price_per_month: sub.subscription_plans?.['price-per-month'] || 0,
+        price_per_month: (sub.plans as any)?.price_per_month || 0,
       }));
       const mrr = calculateMRR(subsWithPrice);
       const activeMembers = activeSubs.length;

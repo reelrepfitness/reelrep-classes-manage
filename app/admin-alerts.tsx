@@ -128,7 +128,7 @@ export default function AdminAlertsScreen() {
           id,
           created_at,
           user:profiles(name),
-          plan:subscription_plans(name)
+          plans:plan_id(name)
         `)
                 .eq('status', 'active')
                 .order('created_at', { ascending: false })
@@ -171,7 +171,7 @@ export default function AdminAlertsScreen() {
                 })) || []),
                 ...(newSubs?.map((sub: any) => {
                     const userName = Array.isArray(sub.user) ? sub.user[0]?.name : sub.user?.name;
-                    const planName = Array.isArray(sub.plan) ? sub.plan[0]?.name : sub.plan?.name;
+                    const planName = Array.isArray(sub.plans) ? sub.plans[0]?.name : (sub.plans as any)?.name;
 
                     return {
                         id: `ns-${sub.id}`,

@@ -28,6 +28,7 @@ interface CreateClientRequest {
     city?: string;
     taxId?: string;
     remarks?: string;
+    birthday?: string;
     gender: 'male' | 'female';
     role: 'user' | 'coach' | 'admin';
     isAdmin: boolean;
@@ -61,6 +62,7 @@ export default function NewClientScreen() {
     const [city, setCity] = useState('');
     const [taxId, setTaxId] = useState('');
     const [remarks, setRemarks] = useState('');
+    const [birthday, setBirthday] = useState('');
     const [gender, setGender] = useState<'male' | 'female' | ''>('');
     const [role, setRole] = useState<'user' | 'coach' | 'admin'>('user');
     const [isAdmin, setIsAdmin] = useState(false);
@@ -143,6 +145,7 @@ export default function NewClientScreen() {
                 city: city.trim() || undefined,
                 taxId: taxId.trim() || undefined,
                 remarks: remarks.trim() || undefined,
+                birthday: birthday.trim() || undefined,
                 gender: gender as 'male' | 'female',
                 role,
                 isAdmin,
@@ -372,6 +375,19 @@ export default function NewClientScreen() {
                             value={taxId}
                             onChangeText={setTaxId}
                             keyboardType="number-pad"
+                            editable={!loading}
+                            textAlign="right"
+                        />
+                    </View>
+
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>תאריך לידה</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="YYYY-MM-DD"
+                            placeholderTextColor="#94A3B8"
+                            value={birthday}
+                            onChangeText={setBirthday}
                             editable={!loading}
                             textAlign="right"
                         />

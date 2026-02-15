@@ -1116,6 +1116,11 @@ const styles = StyleSheet.create({
         borderBottomLeftRadius: 30,
         borderBottomRightRadius: 30,
         paddingHorizontal: 20,
+            shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 3,
     },
     headerTopRow: {
         flexDirection: 'row',
@@ -1130,7 +1135,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     pageTitle: {
-        fontSize: 20,
+        fontSize: 24,
         fontWeight: '900',
         color: '#0F172A',
     },
@@ -1197,12 +1202,13 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         backgroundColor: '#F1F5F9',
         alignItems: 'center',
+        
     },
     tabActive: {
         backgroundColor: Colors.primary,
     },
     tabText: {
-        fontSize: 16,
+        fontSize: 18,
         fontWeight: '700',
         color: '#64748B',
     },

@@ -16,7 +16,7 @@ import {
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import Colors from '@/constants/colors';
 import { Ionicons } from '@expo/vector-icons';
-import { useAdminPlans, SubscriptionPlan, TicketPlan } from '@/hooks/admin/useAdminPlans';
+import { useAdminPlans, Plan } from '@/hooks/admin/useAdminPlans';
 import { useAdminCoupons, Coupon } from '@/hooks/admin/useAdminCoupons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -100,13 +100,13 @@ export default function AdminSubscriptionsScreen() {
 }
 
 function useSubscriptionsTab() {
-  const { fetchSubscriptionPlans, createSubscriptionPlan, updateSubscriptionPlan, deleteSubscriptionPlan } = useAdminPlans();
-  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const { fetchPlans, createPlan, updatePlan, deletePlan } = useAdminPlans();
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
   const loadPlans = async () => {
-    const data = await fetchSubscriptionPlans();
+    const data = await fetchPlans('subscription');
     setPlans(data);
   };
 
@@ -114,24 +114,24 @@ function useSubscriptionsTab() {
     loadPlans();
   }, []);
 
-  const toggleExpand = (id: number) => {
+  const toggleExpand = (id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedId(expandedId === id ? null : id);
   };
 
-  const handleCreate = async (data: Partial<SubscriptionPlan>) => {
-    await createSubscriptionPlan(data);
+  const handleCreate = async (data: Partial<Plan>) => {
+    await createPlan({ ...data, category: 'subscription' });
     setShowCreateForm(false);
     await loadPlans();
   };
 
-  const handleUpdate = async (id: number, data: Partial<SubscriptionPlan>) => {
-    await updateSubscriptionPlan(id, data);
+  const handleUpdate = async (id: string, data: Partial<Plan>) => {
+    await updatePlan(id, data);
     setExpandedId(null);
     await loadPlans();
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     Alert.alert(
       'מחיקת מנוי',
       'האם אתה בטוח שברצונך למחוק את המנוי?',
@@ -141,7 +141,7 @@ function useSubscriptionsTab() {
           text: 'מחק',
           style: 'destructive',
           onPress: async () => {
-            await deleteSubscriptionPlan(id);
+            await deletePlan(id);
             await loadPlans();
           },
         },
@@ -168,13 +168,13 @@ function useSubscriptionsTab() {
 }
 
 function useTicketsTab() {
-  const { fetchTicketPlans, createTicketPlan, updateTicketPlan, deleteTicketPlan } = useAdminPlans();
-  const [plans, setPlans] = useState<TicketPlan[]>([]);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const { fetchPlans, createPlan, updatePlan, deletePlan } = useAdminPlans();
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
   const loadPlans = async () => {
-    const data = await fetchTicketPlans();
+    const data = await fetchPlans('ticket');
     setPlans(data);
   };
 
@@ -182,24 +182,24 @@ function useTicketsTab() {
     loadPlans();
   }, []);
 
-  const toggleExpand = (id: number) => {
+  const toggleExpand = (id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedId(expandedId === id ? null : id);
   };
 
-  const handleCreate = async (data: Partial<TicketPlan>) => {
-    await createTicketPlan(data);
+  const handleCreate = async (data: Partial<Plan>) => {
+    await createPlan({ ...data, category: 'ticket' });
     setShowCreateForm(false);
     await loadPlans();
   };
 
-  const handleUpdate = async (id: number, data: Partial<TicketPlan>) => {
-    await updateTicketPlan(id, data);
+  const handleUpdate = async (id: string, data: Partial<Plan>) => {
+    await updatePlan(id, data);
     setExpandedId(null);
     await loadPlans();
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     Alert.alert(
       'מחיקת כרטיסייה',
       'האם אתה בטוח שברצונך למחוק את הכרטיסייה?',
@@ -209,7 +209,7 @@ function useTicketsTab() {
           text: 'מחק',
           style: 'destructive',
           onPress: async () => {
-            await deleteTicketPlan(id);
+            await deletePlan(id);
             await loadPlans();
           },
         },
@@ -333,10 +333,10 @@ function SubscriptionPlanCard({
   onUpdate,
   onDelete,
 }: {
-  plan: SubscriptionPlan;
+  plan: Plan;
   expanded: boolean;
   onToggle: () => void;
-  onUpdate: (data: Partial<SubscriptionPlan>) => void;
+  onUpdate: (data: Partial<Plan>) => void;
   onDelete: () => void;
 }) {
   const [formData, setFormData] = useState(plan);
@@ -355,12 +355,12 @@ function SubscriptionPlanCard({
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderRight}>
             <Text style={styles.cardTitle}>{plan.name}</Text>
-            <View style={[styles.badge, plan.type === 'unlimited' ? styles.badgeUnlimited : styles.badgeLimited]}>
-              <Text style={styles.badgeText}>{plan.type === 'unlimited' ? 'ללא הגבלה' : 'מוגבל'}</Text>
+            <View style={[styles.badge, plan.is_unlimited ? styles.badgeUnlimited : styles.badgeLimited]}>
+              <Text style={styles.badgeText}>{plan.is_unlimited ? 'ללא הגבלה' : 'מוגבל'}</Text>
             </View>
           </View>
           <View style={styles.cardHeaderLeft}>
-            <Text style={styles.cardPrice}>₪{plan.full_price_in_advance}</Text>
+            <Text style={styles.cardPrice}>₪{plan.price_upfront || plan.price_per_month}</Text>
             <View style={[styles.statusDot, plan.is_active ? styles.statusActive : styles.statusInactive]} />
           </View>
         </View>
@@ -383,27 +383,17 @@ function SubscriptionPlanCard({
         placeholderTextColor="#6B7280"
       />
 
-      <Text style={styles.formLabel}>סוג מנוי</Text>
-      <View style={styles.radioGroup}>
-        <TouchableOpacity
-          style={[styles.radioButton, formData.type === 'unlimited' && styles.radioButtonActive]}
-          onPress={() => setFormData({ ...formData, type: 'unlimited', sessions_per_week: null })}
-        >
-          <Text style={[styles.radioText, formData.type === 'unlimited' && styles.radioTextActive]}>
-            ללא הגבלה
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.radioButton, formData.type === 'limited' && styles.radioButtonActive]}
-          onPress={() => setFormData({ ...formData, type: 'limited' })}
-        >
-          <Text style={[styles.radioText, formData.type === 'limited' && styles.radioTextActive]}>
-            מוגבל
-          </Text>
-        </TouchableOpacity>
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>ללא הגבלת אימונים</Text>
+        <Switch
+          value={formData.is_unlimited}
+          onValueChange={(value) => setFormData({ ...formData, is_unlimited: value, sessions_per_week: value ? null : formData.sessions_per_week })}
+          trackColor={{ false: '#374151', true: Colors.primary }}
+          thumbColor="#fff"
+        />
       </View>
 
-      {formData.type === 'limited' && (
+      {!formData.is_unlimited && (
         <>
           <Text style={styles.formLabel}>אימונים לשבוע</Text>
           <TextInput
@@ -417,25 +407,64 @@ function SubscriptionPlanCard({
         </>
       )}
 
-      <Text style={styles.formLabel}>מחיר מלא מראש</Text>
+      <Text style={styles.formLabel}>מחיר מלא מראש (תשלום מראש)</Text>
       <TextInput
         style={styles.input}
-        value={formData.full_price_in_advance?.toString() || ''}
-        onChangeText={(text) => setFormData({ ...formData, full_price_in_advance: parseFloat(text) || 0 })}
+        value={formData.price_upfront?.toString() || ''}
+        onChangeText={(text) => setFormData({ ...formData, price_upfront: text ? parseFloat(text) : null })}
         placeholder="0"
         placeholderTextColor="#6B7280"
         keyboardType="numeric"
       />
 
-      <Text style={styles.formLabel}>מחיר לחודש (אופציונלי)</Text>
+      <Text style={styles.formLabel}>מחיר לחודש</Text>
       <TextInput
         style={styles.input}
-        value={formData['price-per-month']?.toString() || ''}
-        onChangeText={(text) => setFormData({ ...formData, 'price-per-month': text ? parseFloat(text) : null })}
+        value={formData.price_per_month?.toString() || ''}
+        onChangeText={(text) => setFormData({ ...formData, price_per_month: text ? parseFloat(text) : null })}
         placeholder="0"
         placeholderTextColor="#6B7280"
         keyboardType="numeric"
       />
+
+      <Text style={styles.formLabel}>משך התחייבות (חודשים)</Text>
+      <TextInput
+        style={styles.input}
+        value={formData.duration_months?.toString() || ''}
+        onChangeText={(text) => setFormData({ ...formData, duration_months: parseInt(text) || 1 })}
+        placeholder="6"
+        placeholderTextColor="#6B7280"
+        keyboardType="numeric"
+      />
+
+      <Text style={[styles.formLabel, { marginTop: 16 }]}>אפשרויות תשלום</Text>
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>תשלום מראש</Text>
+        <Switch
+          value={formData.allow_upfront}
+          onValueChange={(value) => setFormData({ ...formData, allow_upfront: value })}
+          trackColor={{ false: '#374151', true: Colors.primary }}
+          thumbColor="#fff"
+        />
+      </View>
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>הוראת קבע</Text>
+        <Switch
+          value={formData.allow_recurring}
+          onValueChange={(value) => setFormData({ ...formData, allow_recurring: value })}
+          trackColor={{ false: '#374151', true: Colors.primary }}
+          thumbColor="#fff"
+        />
+      </View>
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>תשלום חודשי</Text>
+        <Switch
+          value={formData.allow_monthly}
+          onValueChange={(value) => setFormData({ ...formData, allow_monthly: value })}
+          trackColor={{ false: '#374151', true: Colors.primary }}
+          thumbColor="#fff"
+        />
+      </View>
 
       <Text style={styles.formLabel}>תיאור</Text>
       <TextInput
@@ -451,8 +480,8 @@ function SubscriptionPlanCard({
       <Text style={styles.formLabel}>הסתייגויות</Text>
       <TextInput
         style={[styles.input, styles.textArea]}
-        value={formData.desclaimers || ''}
-        onChangeText={(text) => setFormData({ ...formData, desclaimers: text })}
+        value={formData.disclaimer || ''}
+        onChangeText={(text) => setFormData({ ...formData, disclaimer: text })}
         placeholder="הסתייגויות"
         placeholderTextColor="#6B7280"
         multiline
@@ -471,10 +500,20 @@ function SubscriptionPlanCard({
       <Text style={styles.formLabel}>קישור Green Invoice</Text>
       <TextInput
         style={styles.input}
-        value={formData.green_invoice_URL || ''}
-        onChangeText={(text) => setFormData({ ...formData, green_invoice_URL: text })}
+        value={formData.green_invoice_url || ''}
+        onChangeText={(text) => setFormData({ ...formData, green_invoice_url: text })}
         placeholder="https://..."
         placeholderTextColor="#6B7280"
+      />
+
+      <Text style={styles.formLabel}>סדר תצוגה</Text>
+      <TextInput
+        style={styles.input}
+        value={formData.sort_order?.toString() || '0'}
+        onChangeText={(text) => setFormData({ ...formData, sort_order: parseInt(text) || 0 })}
+        placeholder="0"
+        placeholderTextColor="#6B7280"
+        keyboardType="numeric"
       />
 
       <View style={styles.switchRow}>
@@ -504,25 +543,30 @@ function SubscriptionPlanForm({
   onSave,
   onCancel,
 }: {
-  onSave: (data: Partial<SubscriptionPlan>) => void;
+  onSave: (data: Partial<Plan>) => void;
   onCancel: () => void;
 }) {
-  const [formData, setFormData] = useState<Partial<SubscriptionPlan>>({
+  const [formData, setFormData] = useState<Partial<Plan>>({
     name: '',
-    type: 'unlimited',
+    is_unlimited: true,
     sessions_per_week: null,
-    full_price_in_advance: 0,
-    'price-per-month': null,
+    price_upfront: null,
+    price_per_month: null,
+    duration_months: 6,
+    allow_upfront: true,
+    allow_recurring: true,
+    allow_monthly: true,
     description: '',
-    desclaimers: '',
+    disclaimer: '',
     image_url: '',
-    green_invoice_URL: '',
+    green_invoice_url: '',
     is_active: true,
+    sort_order: 0,
   });
 
   const handleSave = () => {
-    if (!formData.name || !formData.full_price_in_advance) {
-      Alert.alert('שגיאה', 'נא למלא את כל השדות הנדרשים');
+    if (!formData.name || (!formData.price_upfront && !formData.price_per_month)) {
+      Alert.alert('שגיאה', 'נא למלא שם ולפחות מחיר אחד');
       return;
     }
     onSave(formData);
@@ -546,27 +590,17 @@ function SubscriptionPlanForm({
         placeholderTextColor="#6B7280"
       />
 
-      <Text style={styles.formLabel}>סוג מנוי</Text>
-      <View style={styles.radioGroup}>
-        <TouchableOpacity
-          style={[styles.radioButton, formData.type === 'unlimited' && styles.radioButtonActive]}
-          onPress={() => setFormData({ ...formData, type: 'unlimited', sessions_per_week: null })}
-        >
-          <Text style={[styles.radioText, formData.type === 'unlimited' && styles.radioTextActive]}>
-            ללא הגבלה
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.radioButton, formData.type === 'limited' && styles.radioButtonActive]}
-          onPress={() => setFormData({ ...formData, type: 'limited' })}
-        >
-          <Text style={[styles.radioText, formData.type === 'limited' && styles.radioTextActive]}>
-            מוגבל
-          </Text>
-        </TouchableOpacity>
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>ללא הגבלת אימונים</Text>
+        <Switch
+          value={formData.is_unlimited}
+          onValueChange={(value) => setFormData({ ...formData, is_unlimited: value, sessions_per_week: value ? null : formData.sessions_per_week })}
+          trackColor={{ false: '#374151', true: Colors.primary }}
+          thumbColor="#fff"
+        />
       </View>
 
-      {formData.type === 'limited' && (
+      {!formData.is_unlimited && (
         <>
           <Text style={styles.formLabel}>אימונים לשבוע</Text>
           <TextInput
@@ -583,22 +617,61 @@ function SubscriptionPlanForm({
       <Text style={styles.formLabel}>מחיר מלא מראש</Text>
       <TextInput
         style={styles.input}
-        value={formData.full_price_in_advance?.toString() || ''}
-        onChangeText={(text) => setFormData({ ...formData, full_price_in_advance: parseFloat(text) || 0 })}
+        value={formData.price_upfront?.toString() || ''}
+        onChangeText={(text) => setFormData({ ...formData, price_upfront: text ? parseFloat(text) : null })}
         placeholder="0"
         placeholderTextColor="#6B7280"
         keyboardType="numeric"
       />
 
-      <Text style={styles.formLabel}>מחיר לחודש (אופציונלי)</Text>
+      <Text style={styles.formLabel}>מחיר לחודש</Text>
       <TextInput
         style={styles.input}
-        value={formData['price-per-month']?.toString() || ''}
-        onChangeText={(text) => setFormData({ ...formData, 'price-per-month': text ? parseFloat(text) : null })}
+        value={formData.price_per_month?.toString() || ''}
+        onChangeText={(text) => setFormData({ ...formData, price_per_month: text ? parseFloat(text) : null })}
         placeholder="0"
         placeholderTextColor="#6B7280"
         keyboardType="numeric"
       />
+
+      <Text style={styles.formLabel}>משך התחייבות (חודשים)</Text>
+      <TextInput
+        style={styles.input}
+        value={formData.duration_months?.toString() || '6'}
+        onChangeText={(text) => setFormData({ ...formData, duration_months: parseInt(text) || 1 })}
+        placeholder="6"
+        placeholderTextColor="#6B7280"
+        keyboardType="numeric"
+      />
+
+      <Text style={[styles.formLabel, { marginTop: 16 }]}>אפשרויות תשלום</Text>
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>תשלום מראש</Text>
+        <Switch
+          value={formData.allow_upfront}
+          onValueChange={(value) => setFormData({ ...formData, allow_upfront: value })}
+          trackColor={{ false: '#374151', true: Colors.primary }}
+          thumbColor="#fff"
+        />
+      </View>
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>הוראת קבע</Text>
+        <Switch
+          value={formData.allow_recurring}
+          onValueChange={(value) => setFormData({ ...formData, allow_recurring: value })}
+          trackColor={{ false: '#374151', true: Colors.primary }}
+          thumbColor="#fff"
+        />
+      </View>
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>תשלום חודשי</Text>
+        <Switch
+          value={formData.allow_monthly}
+          onValueChange={(value) => setFormData({ ...formData, allow_monthly: value })}
+          trackColor={{ false: '#374151', true: Colors.primary }}
+          thumbColor="#fff"
+        />
+      </View>
 
       <Text style={styles.formLabel}>תיאור</Text>
       <TextInput
@@ -614,8 +687,8 @@ function SubscriptionPlanForm({
       <Text style={styles.formLabel}>הסתייגויות</Text>
       <TextInput
         style={[styles.input, styles.textArea]}
-        value={formData.desclaimers || ''}
-        onChangeText={(text) => setFormData({ ...formData, desclaimers: text })}
+        value={formData.disclaimer || ''}
+        onChangeText={(text) => setFormData({ ...formData, disclaimer: text })}
         placeholder="הסתייגויות"
         placeholderTextColor="#6B7280"
         multiline
@@ -634,8 +707,8 @@ function SubscriptionPlanForm({
       <Text style={styles.formLabel}>קישור Green Invoice</Text>
       <TextInput
         style={styles.input}
-        value={formData.green_invoice_URL || ''}
-        onChangeText={(text) => setFormData({ ...formData, green_invoice_URL: text })}
+        value={formData.green_invoice_url || ''}
+        onChangeText={(text) => setFormData({ ...formData, green_invoice_url: text })}
         placeholder="https://..."
         placeholderTextColor="#6B7280"
       />
@@ -702,10 +775,10 @@ function TicketPlanCard({
   onUpdate,
   onDelete,
 }: {
-  plan: TicketPlan;
+  plan: Plan;
   expanded: boolean;
   onToggle: () => void;
-  onUpdate: (data: Partial<TicketPlan>) => void;
+  onUpdate: (data: Partial<Plan>) => void;
   onDelete: () => void;
 }) {
   const [formData, setFormData] = useState(plan);
@@ -729,7 +802,7 @@ function TicketPlanCard({
             </View>
           </View>
           <View style={styles.cardHeaderLeft}>
-            <Text style={styles.cardPrice}>₪{plan.price}</Text>
+            <Text style={styles.cardPrice}>₪{plan.price_total}</Text>
             <View style={[styles.statusDot, plan.is_active ? styles.statusActive : styles.statusInactive]} />
           </View>
         </View>
@@ -775,8 +848,8 @@ function TicketPlanCard({
       <Text style={styles.formLabel}>מחיר</Text>
       <TextInput
         style={styles.input}
-        value={formData.price?.toString() || ''}
-        onChangeText={(text) => setFormData({ ...formData, price: parseFloat(text) || 0 })}
+        value={formData.price_total?.toString() || ''}
+        onChangeText={(text) => setFormData({ ...formData, price_total: text ? parseFloat(text) : null })}
         placeholder="0"
         placeholderTextColor="#6B7280"
         keyboardType="numeric"
@@ -816,10 +889,20 @@ function TicketPlanCard({
       <Text style={styles.formLabel}>קישור Green Invoice</Text>
       <TextInput
         style={styles.input}
-        value={formData.green_invoice_URL || ''}
-        onChangeText={(text) => setFormData({ ...formData, green_invoice_URL: text })}
+        value={formData.green_invoice_url || ''}
+        onChangeText={(text) => setFormData({ ...formData, green_invoice_url: text })}
         placeholder="https://..."
         placeholderTextColor="#6B7280"
+      />
+
+      <Text style={styles.formLabel}>סדר תצוגה</Text>
+      <TextInput
+        style={styles.input}
+        value={formData.sort_order?.toString() || '0'}
+        onChangeText={(text) => setFormData({ ...formData, sort_order: parseInt(text) || 0 })}
+        placeholder="0"
+        placeholderTextColor="#6B7280"
+        keyboardType="numeric"
       />
 
       <View style={styles.switchRow}>
@@ -859,24 +942,25 @@ function TicketPlanForm({
   onSave,
   onCancel,
 }: {
-  onSave: (data: Partial<TicketPlan>) => void;
+  onSave: (data: Partial<Plan>) => void;
   onCancel: () => void;
 }) {
-  const [formData, setFormData] = useState<Partial<TicketPlan>>({
+  const [formData, setFormData] = useState<Partial<Plan>>({
     name: '',
-    total_sessions: 0,
-    validity_days: 0,
-    price: 0,
+    total_sessions: null,
+    validity_days: 90,
+    price_total: null,
     description: '',
     disclaimer: '',
     image_url: '',
-    green_invoice_URL: '',
+    green_invoice_url: '',
     is_for_new_members_only: false,
     is_active: true,
+    sort_order: 0,
   });
 
   const handleSave = () => {
-    if (!formData.name || !formData.total_sessions || !formData.price) {
+    if (!formData.name || !formData.total_sessions || !formData.price_total) {
       Alert.alert('שגיאה', 'נא למלא את כל השדות הנדרשים');
       return;
     }
@@ -916,7 +1000,7 @@ function TicketPlanForm({
         style={styles.input}
         value={formData.validity_days?.toString() || ''}
         onChangeText={(text) => setFormData({ ...formData, validity_days: parseInt(text) || 0 })}
-        placeholder="0"
+        placeholder="90"
         placeholderTextColor="#6B7280"
         keyboardType="numeric"
       />
@@ -924,8 +1008,8 @@ function TicketPlanForm({
       <Text style={styles.formLabel}>מחיר</Text>
       <TextInput
         style={styles.input}
-        value={formData.price?.toString() || ''}
-        onChangeText={(text) => setFormData({ ...formData, price: parseFloat(text) || 0 })}
+        value={formData.price_total?.toString() || ''}
+        onChangeText={(text) => setFormData({ ...formData, price_total: text ? parseFloat(text) : null })}
         placeholder="0"
         placeholderTextColor="#6B7280"
         keyboardType="numeric"
@@ -965,8 +1049,8 @@ function TicketPlanForm({
       <Text style={styles.formLabel}>קישור Green Invoice</Text>
       <TextInput
         style={styles.input}
-        value={formData.green_invoice_URL || ''}
-        onChangeText={(text) => setFormData({ ...formData, green_invoice_URL: text })}
+        value={formData.green_invoice_url || ''}
+        onChangeText={(text) => setFormData({ ...formData, green_invoice_url: text })}
         placeholder="https://..."
         placeholderTextColor="#6B7280"
       />

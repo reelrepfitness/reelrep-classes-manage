@@ -13,104 +13,167 @@ export const [ShopProvider, useShop] = createContextHook(() => {
   const [cart, setCart] = useState<CartItem[]>([]);
 
   const plansQuery = useQuery({
-    queryKey: ['subscription-plans'],
+    queryKey: ['plans'],
     queryFn: async () => {
-      console.log('[Shop] Fetching subscription plans...');
+      console.log('[Shop] Fetching plans...');
       const { data, error } = await supabase
-        .from('subscription_plans')
-        .select('id,name,type,sessions_per_week,description,full_price_in_advance,"price-per-month",green_invoice_URL,desclaimers')
-        .eq('is_active', true)
-        .order('type', { ascending: true });
-      if (error) {
-        console.error('[Shop] Error fetching subscription plans:', error);
-        throw error;
-      }
-      console.log('[Shop] Subscription plans:', data);
-      return data || [];
-    },
-  });
-
-  const ticketPlansQuery = useQuery({
-    queryKey: ['ticket-plans'],
-    queryFn: async () => {
-      console.log('[Shop] Fetching ticket plans...');
-      const { data, error } = await supabase
-        .from('ticket_plans')
+        .from('plans')
         .select('*')
         .eq('is_active', true)
-        .order('total_sessions', { ascending: true });
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: false });
       if (error) {
-        console.error('[Shop] Error fetching ticket plans:', error);
+        console.error('[Shop] Error fetching plans:', error);
         throw error;
       }
-      console.log('[Shop] Ticket plans:', data);
+      console.log('[Shop] Plans:', data);
       return data || [];
     },
   });
 
   const packages: SubscriptionPackage[] = useMemo(() => {
-    const subscriptions = !plansQuery.data ? [] : plansQuery.data.flatMap(plan => {
-      // Use full_price_in_advance for 6-month upfront payment
-      const months = 6;
-      const priceValue = plan.full_price_in_advance;
-      const price = priceValue ? Number(priceValue) : null;
+    if (!plansQuery.data) return [];
 
-      if (price === null || price === undefined || Number.isNaN(price)) return [];
+    const allPlans = plansQuery.data;
+    const subPlans = allPlans.filter((p: any) => p.category === 'subscription');
+    const ticketPlans = allPlans.filter((p: any) => p.category === 'ticket');
 
-      const isUnlimited = plan.type === 'unlimited';
+    // Generate subscription package variants based on payment options
+    const subscriptions: SubscriptionPackage[] = subPlans.flatMap((plan: any) => {
+      const isUnlimited = plan.is_unlimited;
       const highlight = plan.name?.includes('ELITE') || plan.name?.includes('ONE');
       const classesPerMonth = plan.sessions_per_week ? plan.sessions_per_week * 4 : 0;
-      const durationLabel = `${months} חודשים`;
 
       const baseFeatures: string[] = [];
       if (plan.description) {
-        // Split description by newlines and add each as a feature
         const descriptionLines = plan.description.split('\n').filter((line: string) => line.trim());
         baseFeatures.push(...descriptionLines);
       }
 
-      return [{
-        id: `${plan.id}-${months}`,
-        planId: plan.id,
-        type: plan.type as 'basic' | 'premium' | 'vip' | 'limited' | 'unlimited',
-        planType: plan.type,
-        name: plan.name,
-        price,
-        pricePerMonth: plan['price-per-month'] ? Number(plan['price-per-month']) : undefined,
-        currency: '₪',
-        duration: 'monthly',
-        durationLabel,
-        durationMonths: months,
-        features: baseFeatures,
-        classesPerMonth,
-        popular: highlight,
-        highlight,
-        greenInvoiceUrl: plan.green_invoice_URL || undefined,
-        disclaimer: plan.desclaimers || undefined,
-      } as SubscriptionPackage];
+      const variants: SubscriptionPackage[] = [];
+
+      // Upfront payment option — shows full commitment duration
+      if (plan.allow_upfront && plan.price_upfront) {
+        variants.push({
+          id: `${plan.id}-upfront`,
+          planId: plan.id,
+          type: isUnlimited ? 'unlimited' : 'limited',
+          planType: isUnlimited ? 'unlimited' : 'subscription',
+          name: plan.name,
+          price: Number(plan.price_upfront),
+          pricePerMonth: plan.price_per_month ? Number(plan.price_per_month) : undefined,
+          currency: '₪',
+          duration: 'monthly',
+          durationLabel: `${plan.duration_months} חודשים`,
+          durationMonths: plan.duration_months,
+          features: baseFeatures,
+          classesPerMonth,
+          popular: highlight,
+          highlight,
+          greenInvoiceUrl: plan.green_invoice_url || undefined,
+          disclaimer: plan.disclaimer || undefined,
+          paymentOption: 'upfront',
+        });
+      }
+
+      // Recurring payment option (הוראת קבע) — monthly price
+      if (plan.allow_recurring && plan.price_per_month) {
+        variants.push({
+          id: `${plan.id}-recurring`,
+          planId: plan.id,
+          type: isUnlimited ? 'unlimited' : 'limited',
+          planType: isUnlimited ? 'unlimited' : 'subscription',
+          name: plan.name,
+          price: Number(plan.price_per_month),
+          pricePerMonth: Number(plan.price_per_month),
+          currency: '₪',
+          duration: 'monthly',
+          durationLabel: 'לחודש (הו״ק)',
+          durationMonths: 1,
+          features: baseFeatures,
+          classesPerMonth,
+          popular: false,
+          highlight: false,
+          greenInvoiceUrl: plan.green_invoice_url || undefined,
+          disclaimer: plan.disclaimer || undefined,
+          paymentOption: 'recurring',
+        });
+      }
+
+      // Monthly manual payment option — monthly price
+      if (plan.allow_monthly && plan.price_per_month) {
+        variants.push({
+          id: `${plan.id}-monthly`,
+          planId: plan.id,
+          type: isUnlimited ? 'unlimited' : 'limited',
+          planType: isUnlimited ? 'unlimited' : 'subscription',
+          name: plan.name,
+          price: Number(plan.price_per_month),
+          pricePerMonth: Number(plan.price_per_month),
+          currency: '₪',
+          duration: 'monthly',
+          durationLabel: 'לחודש',
+          durationMonths: 1,
+          features: baseFeatures,
+          classesPerMonth,
+          popular: false,
+          highlight: false,
+          greenInvoiceUrl: plan.green_invoice_url || undefined,
+          disclaimer: plan.disclaimer || undefined,
+          paymentOption: 'monthly_manual',
+        });
+      }
+
+      // Fallback: if no payment options set, show upfront with price_upfront or price_per_month
+      if (variants.length === 0) {
+        const fallbackPrice = plan.price_upfront || plan.price_per_month;
+        if (fallbackPrice) {
+          variants.push({
+            id: `${plan.id}-default`,
+            planId: plan.id,
+            type: isUnlimited ? 'unlimited' : 'limited',
+            planType: isUnlimited ? 'unlimited' : 'subscription',
+            name: plan.name,
+            price: Number(fallbackPrice),
+            pricePerMonth: plan.price_per_month ? Number(plan.price_per_month) : undefined,
+            currency: '₪',
+            duration: 'monthly',
+            durationLabel: plan.duration_months > 1 ? `${plan.duration_months} חודשים` : 'לחודש',
+            durationMonths: plan.duration_months || 1,
+            features: baseFeatures,
+            classesPerMonth,
+            popular: highlight,
+            highlight,
+            greenInvoiceUrl: plan.green_invoice_url || undefined,
+            disclaimer: plan.disclaimer || undefined,
+            paymentOption: 'upfront',
+          });
+        }
+      }
+
+      return variants;
     });
 
-    const tickets = !ticketPlansQuery.data ? [] : ticketPlansQuery.data.map(plan => ({
+    // Ticket packages
+    const tickets: SubscriptionPackage[] = ticketPlans.map((plan: any) => ({
       id: plan.id,
       planId: plan.id,
       type: 'ticket' as const,
       planType: 'ticket',
       name: plan.name,
-      price: Number(plan.price),
+      price: Number(plan.price_total),
       currency: '₪',
       duration: 'one-time',
       durationLabel: `${plan.total_sessions} אימונים`,
       durationMonths: 0,
-      features: [
-        plan.description || '',
-      ].filter(Boolean),
+      features: [plan.description || ''].filter(Boolean),
       classesPerMonth: plan.total_sessions,
       totalClasses: plan.total_sessions,
       expiryDays: plan.validity_days,
       popular: plan.total_sessions === 20,
-      greenInvoiceUrl: plan.green_invoice_URL || undefined,
+      greenInvoiceUrl: plan.green_invoice_url || undefined,
       disclaimer: plan.disclaimer || undefined,
-    } as SubscriptionPackage));
+    }));
 
     // Sort subscriptions: ELITE before ONE
     const sortedSubscriptions = subscriptions.sort((a, b) => {
@@ -120,7 +183,7 @@ export const [ShopProvider, useShop] = createContextHook(() => {
     });
 
     return [...sortedSubscriptions, ...tickets];
-  }, [plansQuery.data, ticketPlansQuery.data]);
+  }, [plansQuery.data]);
 
   const cartQuery = useQuery({
     queryKey: ['cart', user?.id],
@@ -307,7 +370,7 @@ export const [ShopProvider, useShop] = createContextHook(() => {
   return useMemo(() => ({
     cart,
     packages,
-    isLoading: cartQuery.isLoading || plansQuery.isLoading || ticketPlansQuery.isLoading,
+    isLoading: cartQuery.isLoading || plansQuery.isLoading,
     isProcessing: checkoutMutation.isPending,
     addToCart,
     removeFromCart,
@@ -317,5 +380,5 @@ export const [ShopProvider, useShop] = createContextHook(() => {
     getTotal,
     getDiscountedTotal,
     checkout,
-  }), [cart, packages, cartQuery.isLoading, plansQuery.isLoading, ticketPlansQuery.isLoading, checkoutMutation.isPending, addToCart, removeFromCart, updateQuantity, clearCart, forceResetCart, getTotal, getDiscountedTotal, checkout]);
+  }), [cart, packages, cartQuery.isLoading, plansQuery.isLoading, checkoutMutation.isPending, addToCart, removeFromCart, updateQuantity, clearCart, forceResetCart, getTotal, getDiscountedTotal, checkout]);
 });

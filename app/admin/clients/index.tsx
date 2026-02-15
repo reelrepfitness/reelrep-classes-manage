@@ -1,7 +1,7 @@
 // app/admin/clients/index.tsx
 // Client Management Screen - Real Supabase Data
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -22,13 +22,47 @@ import {
   Ban,
   CreditCard,
   Ticket,
-  Plus,
   ChevronLeft,
 } from 'lucide-react-native';
+import LottieView from 'lottie-react-native';
 import Colors from '@/constants/colors';
 import Fonts from '@/constants/typography';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import { useAdminClients, ClientListItem } from '@/hooks/admin/useAdminClients';
+
+function AddClientButton({ onPress }: { onPress: () => void }) {
+  const lottieRef = useRef<LottieView>(null);
+  const hasPlayed = useRef(false);
+
+  useEffect(() => {
+    // Play once on mount (screen enter)
+    if (lottieRef.current && !hasPlayed.current) {
+      hasPlayed.current = true;
+      lottieRef.current.play();
+    }
+  }, []);
+
+  const handlePress = () => {
+    lottieRef.current?.play();
+    onPress();
+  };
+
+  return (
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
+      <LottieView
+        ref={lottieRef}
+        source={require('@/assets/animations/lottieflow-chat-17-1-ffffff-easey.json')}
+        autoPlay={false}
+        loop={false}
+        style={{ width: 44, height: 44 }}
+        colorFilters={[
+          { keypath: 'plus', color: '#d070b8' },
+          { keypath: 'body', color: '#d070b8' },
+        ]}
+      />
+    </TouchableOpacity>
+  );
+}
 
 export default function ClientManagement() {
   const router = useRouter();
@@ -118,7 +152,12 @@ export default function ClientManagement() {
 
   return (
     <View style={styles.container}>
-      <AdminHeader title="ניהול לקוחות" />
+      <AdminHeader
+        title="ניהול לקוחות"
+        rightAction={
+          <AddClientButton onPress={() => router.push('/admin/clients/new')} />
+        }
+      />
 
       {/* Stats Summary */}
       {!loading && (
@@ -135,17 +174,8 @@ export default function ClientManagement() {
         </View>
       )}
 
-      {/* Search & New Client */}
+      {/* Search */}
       <View style={styles.searchContainer}>
-        <TouchableOpacity
-          style={styles.newClientButton}
-          onPress={() => router.push('/admin/clients/new')}
-          activeOpacity={0.7}
-        >
-          <Plus size={24} color="#fff" />
-          <Text style={styles.newClientButtonText}>לקוח חדש</Text>
-        </TouchableOpacity>
-
         <View style={styles.searchBar}>
           <Search size={20} color="#94A3B8" />
           <TextInput
@@ -303,22 +333,6 @@ const styles = StyleSheet.create({
   searchContainer: {
     padding: 20,
     backgroundColor: '#fff',
-  },
-  newClientButton: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.primary,
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    marginBottom: 12,
-    gap: 0,
-  },
-  newClientButtonText: {
-    fontSize: 20,
-    fontFamily: Fonts.black,
-    color: '#fff',
   },
   searchBar: {
     flexDirection: 'row-reverse',

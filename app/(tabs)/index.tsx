@@ -23,6 +23,7 @@ import { DumbbellIcon, TrophyIcon, ShoppingCartIcon } from '@/components/QuickTo
 import { Lock } from 'lucide-react-native';
 import TopClientsPodium from '@/components/home/TopClientsPodium';
 import { useTopClients } from '@/hooks/useTopClients';
+import colors from '@/constants/colors';
 
 const { width } = Dimensions.get('window');
 const cardWidth = (width - 52) / 2; // splitRow padding (20*2) + gap (12)
@@ -568,7 +569,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 3,
     overflow: 'hidden',
@@ -597,19 +598,19 @@ const styles = StyleSheet.create({
     marginHorizontal: 14,
   },
   rankLabel: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '600',
     color: '#9CA3AF',
     marginBottom: 6,
     writingDirection: 'rtl',
   },
   rankValue: {
-    fontSize: 36,
+    fontSize: 40,
     fontWeight: '800',
     color: '#FFD700',
   },
   rankSublabel: {
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: '500',
     color: '#D1D5DB',
     marginTop: 4,
@@ -626,7 +627,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   weeklyLabel: {
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: '800',
     color: '#4B5563',
   },
@@ -640,7 +641,7 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   weeklySubtext: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '500',
     color: '#4B5563',
     textAlign: 'left',
@@ -655,14 +656,14 @@ const styles = StyleSheet.create({
     borderTopColor: '#F3F4F6',
   },
   lastWeekLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#bdbdbdff',
-  },
-  lastWeekValue: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#bcbcbcff',
+    color: '#888686ff',
+  },
+  lastWeekValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.primary,
   },
 
   // Action Cards Row

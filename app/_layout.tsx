@@ -38,12 +38,53 @@ function RootLayoutNav() {
       const data = response.notification.request.content.data;
 
       // Route based on notification type
-      if (data?.type === 'achievement_unlocked') {
-        // Navigate to home/profile screen where unlock dialog will show
-        router.push('/(tabs)');
-      } else if (data?.screen) {
-        // Generic screen routing
-        router.push(data.screen as any);
+      switch (data?.type) {
+        // User booking/class notifications → classes tab
+        case 'push_booking_confirmed':
+        case 'push_booking_cancelled':
+        case 'push_class_reminder':
+        case 'push_waitlist_available':
+        case 'push_new_class_available':
+        case 'push_inactive_reminder':
+          router.push('/(tabs)');
+          break;
+
+        // Motivation → home
+        case 'push_streak_motivation':
+        case 'achievement_unlocked':
+        case 'plates_earned':
+          router.push('/(tabs)');
+          break;
+
+        // Subscription → profile
+        case 'push_subscription_expiring':
+        case 'subscription_expiring':
+          router.push('/(tabs)/profile');
+          break;
+
+        // All admin notifications → notifications tab
+        case 'notify_payment_failed':
+        case 'notify_in_app_purchase':
+        case 'notify_class_cancelled':
+        case 'notify_form_submitted':
+        case 'notify_payment_success':
+        case 'notify_sub_unfrozen':
+        case 'notify_new_lead':
+        case 'notify_last_punch':
+        case 'notify_ticket_finished':
+        case 'notify_sub_expiring':
+        case 'notify_user_blocked':
+        case 'notify_user_unblocked':
+        case 'notify_penalty_applied':
+          router.push('/(tabs)/notifications');
+          break;
+
+        default:
+          // Generic screen routing fallback
+          if (data?.screen) {
+            router.push(data.screen as any);
+          }
+          break;
       }
     });
 

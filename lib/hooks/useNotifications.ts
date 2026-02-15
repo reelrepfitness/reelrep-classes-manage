@@ -93,24 +93,56 @@ export function useNotifications() {
 
     // Handle different notification types
     switch (data.type) {
+      // Legacy local notification types
       case 'plates_earned':
-        // Navigate to plates store or show details
         console.log('Plates earned notification tapped:', data);
         break;
-
       case 'achievement_unlocked':
-        // Navigate to achievements screen
         console.log('Achievement notification tapped:', data);
         break;
-
       case 'class_reminder':
-        // Navigate to classes screen
         console.log('Class reminder notification tapped:', data);
+        break;
+
+      // User push automations
+      case 'push_booking_confirmed':
+      case 'push_booking_cancelled':
+      case 'push_class_reminder':
+      case 'push_waitlist_available':
+      case 'push_new_class_available':
+      case 'push_inactive_reminder':
+        console.log('Class/booking notification tapped:', data);
+        break;
+      case 'push_streak_motivation':
+        console.log('Streak motivation notification tapped:', data);
+        break;
+      case 'push_subscription_expiring':
+        console.log('Subscription expiring notification tapped:', data);
+        break;
+
+      // Admin notifications
+      case 'notify_payment_failed':
+      case 'notify_payment_success':
+      case 'notify_in_app_purchase':
+      case 'notify_class_cancelled':
+      case 'notify_form_submitted':
+      case 'notify_sub_unfrozen':
+      case 'notify_new_lead':
+      case 'notify_last_punch':
+      case 'notify_ticket_finished':
+      case 'notify_sub_expiring':
+      case 'notify_user_blocked':
+      case 'notify_user_unblocked':
+      case 'notify_penalty_applied':
+        console.log('Admin notification tapped:', data);
         break;
 
       default:
         console.log('Generic notification tapped:', data);
     }
+
+    // Clear badge count when user taps a notification
+    Notifications.setBadgeCountAsync(0).catch(() => {});
   };
 
   const sendTestNotification = async () => {

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert,
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import { useAdminCoupons, CouponDetail, CouponUserAssignment, CouponPlanAssignment } from '@/hooks/admin/useAdminCoupons';
-import { useAdminPlans, SubscriptionPlan, TicketPlan } from '@/hooks/admin/useAdminPlans';
+import { useAdminPlans, Plan } from '@/hooks/admin/useAdminPlans';
 import UserPicker from '@/components/admin/UserPicker';
 import Colors from '@/constants/colors';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,7 +29,7 @@ export default function CouponDetailScreen() {
     removePlan
   } = useAdminCoupons();
 
-  const { fetchSubscriptionPlans, fetchTicketPlans } = useAdminPlans();
+  const { fetchPlans } = useAdminPlans();
 
   const [coupon, setCoupon] = useState<CouponDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,25 +74,14 @@ export default function CouponDetailScreen() {
   const loadPlans = useCallback(async () => {
     setLoadingPlans(true);
     try {
-      const [subscriptions, tickets] = await Promise.all([
-        fetchSubscriptionPlans(),
-        fetchTicketPlans()
-      ]);
+      const allPlans = await fetchPlans();
 
-      const plans: PlanWithType[] = [
-        ...subscriptions.map(s => ({
-          id: s.id,
-          name: s.name,
-          type: 'subscription' as const,
-          price: s.price
-        })),
-        ...tickets.map(t => ({
-          id: t.id,
-          name: t.name,
-          type: 'ticket' as const,
-          price: t.price
-        }))
-      ];
+      const plans: PlanWithType[] = allPlans.map((p: Plan) => ({
+        id: p.id,
+        name: p.name,
+        type: p.category as 'subscription' | 'ticket',
+        price: Number(p.category === 'ticket' ? p.price_total : (p.price_upfront || p.price_per_month)),
+      }));
 
       setAvailablePlans(plans);
     } catch (error) {
@@ -101,7 +90,7 @@ export default function CouponDetailScreen() {
     } finally {
       setLoadingPlans(false);
     }
-  }, [fetchSubscriptionPlans, fetchTicketPlans]);
+  }, [fetchPlans]);
 
   useEffect(() => {
     loadCoupon();

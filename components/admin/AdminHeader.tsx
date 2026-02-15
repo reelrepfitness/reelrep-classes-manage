@@ -27,6 +27,7 @@ const { width, height } = Dimensions.get('window');
 interface AdminHeaderProps {
     title?: string;
     disabled?: boolean;
+    rightAction?: React.ReactNode;
 }
 
 const MENU_ITEMS = [
@@ -42,7 +43,7 @@ const MENU_ITEMS = [
     { label: 'הגדרות', value: '/admin/settings', icon: 'settings' },
 ];
 
-export function AdminHeader({ title, disabled = false }: AdminHeaderProps) {
+export function AdminHeader({ title, disabled = false, rightAction }: AdminHeaderProps) {
     const router = useRouter();
     const pathname = usePathname();
     const insets = useSafeAreaInsets();
@@ -180,16 +181,26 @@ export function AdminHeader({ title, disabled = false }: AdminHeaderProps) {
                 end={{ x: 0, y: 1 }}
                 style={[styles.header, { paddingTop: insets.top }]}
             >
-                <TouchableOpacity
-                    activeOpacity={0.9}
-                    onPress={toggleMenu}
-                    style={styles.headerTouchable}
-                >
-                    <Text style={styles.headerTitle}>{currentTitle}</Text>
-                    <Animated.View style={chevronStyle}>
-                        <Ionicons name="chevron-down" size={16} color="#FFFFFF" />
-                    </Animated.View>
-                </TouchableOpacity>
+                <View style={styles.headerRow}>
+                    <View style={styles.headerSideSlot} />
+
+                    <TouchableOpacity
+                        activeOpacity={0.9}
+                        onPress={toggleMenu}
+                        style={styles.headerTouchable}
+                    >
+                        <Text style={styles.headerTitle}>{currentTitle}</Text>
+                        <Animated.View style={chevronStyle}>
+                            <Ionicons name="chevron-down" size={16} color="#FFFFFF" />
+                        </Animated.View>
+                    </TouchableOpacity>
+
+                    {rightAction ? (
+                        <View style={styles.headerSideSlot}>{rightAction}</View>
+                    ) : (
+                        <View style={styles.headerSideSlot} />
+                    )}
+                </View>
             </LinearGradient>
         </>
     );
@@ -211,11 +222,11 @@ const styles = StyleSheet.create({
         elevation: 5,
     },
     headerTouchable: {
+        flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
         gap: 4,
         paddingVertical: 8,
-        paddingHorizontal: 20,
     },
     headerTitle: {
         color: '#FFFFFF',
@@ -305,5 +316,15 @@ const styles = StyleSheet.create({
     destructiveText: {
         color: '#EF4444',
         fontWeight: '600',
+    },
+    headerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        width: '100%',
+    },
+    headerSideSlot: {
+        width: 44,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 });

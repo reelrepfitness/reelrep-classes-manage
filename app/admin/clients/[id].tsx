@@ -8,15 +8,18 @@ import {
     TouchableOpacity,
     Image,
     Alert,
-    TextInput, 
+    TextInput,
     RefreshControl,
     Linking,
+    Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
     ChevronRight,
+    ChevronDown,
+    ChevronUp,
     Plus,
     Minus,
     Calendar,
@@ -26,12 +29,16 @@ import {
     Ban,
     ShieldOff,
     Clock,
-    Award,
     TrendingUp,
     AlertTriangle,
     DollarSign,
     Ticket,
     CreditCard,
+    Bell,
+    FileText,
+    Send,
+    StickyNote,
+    History,
 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import Fonts from '@/constants/typography';
@@ -40,12 +47,19 @@ import {
     useAdminClients,
     ClientDetail,
     AvailablePlan,
+    BookingHistoryItem,
+    InvoiceHistoryItem,
+    PastPlanItem,
+    ClientNote,
 } from '@/hooks/admin/useAdminClients';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/constants/supabase';
 
 export default function ClientManagerScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const { user } = useAuth();
     const {
         fetchClientDetail,
         fetchAvailablePlans,
@@ -59,11 +73,14 @@ export default function ClientManagerScreen() {
         assignTicket,
         blockClient,
         unblockClient,
+        addClientNote,
+        deleteClientNote,
     } = useAdminClients();
 
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+    const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
     const [client, setClient] = useState<ClientDetail | null>(null);
     const [availablePlans, setAvailablePlans] = useState<AvailablePlan[]>([]);
@@ -72,6 +89,21 @@ export default function ClientManagerScreen() {
     const [assignEndDate, setAssignEndDate] = useState('');
     const [freezeReasonInput, setFreezeReasonInput] = useState('');
     const [showFreezeInput, setShowFreezeInput] = useState(false);
+
+    // Collapsible sections
+    const [showBookings, setShowBookings] = useState(false);
+    const [showInvoices, setShowInvoices] = useState(false);
+    const [showPastPlans, setShowPastPlans] = useState(false);
+
+    // Notes
+    const [noteInput, setNoteInput] = useState('');
+    const [addingNote, setAddingNote] = useState(false);
+
+    // Send notification modal
+    const [notificationModalVisible, setNotificationModalVisible] = useState(false);
+    const [notifTitle, setNotifTitle] = useState('');
+    const [notifBody, setNotifBody] = useState('');
+    const [sendingNotification, setSendingNotification] = useState(false);
 
     // ─── Data Loading ───
 
@@ -121,28 +153,25 @@ export default function ClientManagerScreen() {
         }
     };
 
-    const handleExtendDate = async (type: 'week' | 'month') => {
-        if (!client?.subscription) return;
-        const current = new Date(client.subscription.end_date);
-        const newDate = new Date(current);
-        if (type === 'week') newDate.setDate(newDate.getDate() + 7);
-        else newDate.setMonth(newDate.getMonth() + 1);
+    const onStartDateChange = async (_: any, selectedDate?: Date) => {
+        setShowStartDatePicker(false);
+        if (!selectedDate || !client?.subscription) return;
 
         setClient(prev => prev && prev.subscription ? {
             ...prev,
-            subscription: { ...prev.subscription, end_date: newDate.toISOString() },
+            subscription: { ...prev.subscription, start_date: selectedDate.toISOString() },
         } : prev);
 
         try {
-            await updateSubscription(client.subscription.id, { end_date: newDate.toISOString() });
+            await updateSubscription(client.subscription.id, { start_date: selectedDate.toISOString() });
         } catch {
             Alert.alert('שגיאה', 'לא ניתן לעדכן');
             await loadData();
         }
     };
 
-    const onDateChange = async (_: any, selectedDate?: Date) => {
-        setShowDatePicker(false);
+    const onEndDateChange = async (_: any, selectedDate?: Date) => {
+        setShowEndDatePicker(false);
         if (!selectedDate || !client?.subscription) return;
 
         setClient(prev => prev && prev.subscription ? {
@@ -322,6 +351,75 @@ export default function ClientManagerScreen() {
         }
     };
 
+    // ─── Notes ───
+
+    const handleAddNote = async () => {
+        if (!client || !user?.id || !noteInput.trim()) return;
+        setAddingNote(true);
+        try {
+            await addClientNote(client.id, user.id, noteInput.trim());
+            setNoteInput('');
+            await loadData();
+        } catch {
+            Alert.alert('שגיאה', 'לא ניתן להוסיף הערה');
+        } finally {
+            setAddingNote(false);
+        }
+    };
+
+    const handleDeleteNote = (noteId: string) => {
+        Alert.alert('מחיקת הערה', 'למחוק את ההערה?', [
+            { text: 'ביטול', style: 'cancel' },
+            {
+                text: 'מחק',
+                style: 'destructive',
+                onPress: async () => {
+                    try {
+                        await deleteClientNote(noteId);
+                        await loadData();
+                    } catch {
+                        Alert.alert('שגיאה', 'לא ניתן למחוק');
+                    }
+                },
+            },
+        ]);
+    };
+
+    // ─── Send Notification ───
+
+    const handleOpenNotificationModal = () => {
+        if (!client) return;
+        setNotifTitle(`הודעה ל-${client.full_name}`);
+        setNotifBody('');
+        setNotificationModalVisible(true);
+    };
+
+    const handleSendNotification = async () => {
+        if (!client || !notifBody.trim()) {
+            Alert.alert('שגיאה', 'יש להזין תוכן להתראה');
+            return;
+        }
+        setSendingNotification(true);
+        try {
+            const { error } = await supabase.functions.invoke('send-push-notification', {
+                body: {
+                    user_ids: [client.id],
+                    title: notifTitle.trim() || `הודעה ל-${client.full_name}`,
+                    body: notifBody.trim(),
+                    notification_type: 'general',
+                    data: { screen: '/(tabs)' },
+                },
+            });
+            if (error) throw error;
+            setNotificationModalVisible(false);
+            Alert.alert('הצלחה', 'ההתראה נשלחה');
+        } catch {
+            Alert.alert('שגיאה', 'שליחת ההתראה נכשלה');
+        } finally {
+            setSendingNotification(false);
+        }
+    };
+
     // ─── WhatsApp ───
 
     const handleWhatsApp = () => {
@@ -365,6 +463,65 @@ export default function ClientManagerScreen() {
 
     const isBlocked = client?.block_end_date && new Date(client.block_end_date) > new Date();
     const hasNoPlan = !client?.subscription && !client?.ticket;
+
+    const getBookingStatusColor = (status: string) => {
+        switch (status) {
+            case 'completed': return '#10B981';
+            case 'confirmed': return '#3B82F6';
+            case 'cancelled': return '#EF4444';
+            case 'no_show': return '#F59E0B';
+            default: return '#94A3B8';
+        }
+    };
+
+    const getBookingStatusText = (status: string) => {
+        switch (status) {
+            case 'completed': return 'השתתף';
+            case 'confirmed': return 'מאושר';
+            case 'cancelled': return 'בוטל';
+            case 'no_show': return 'לא הגיע';
+            default: return status;
+        }
+    };
+
+    const getPaymentStatusColor = (status: string) => {
+        switch (status) {
+            case 'paid': return '#10B981';
+            case 'pending': return '#F59E0B';
+            case 'cancelled': return '#EF4444';
+            default: return '#94A3B8';
+        }
+    };
+
+    const getPaymentStatusText = (status: string) => {
+        switch (status) {
+            case 'paid': return 'שולם';
+            case 'pending': return 'ממתין';
+            case 'cancelled': return 'בוטל';
+            default: return status;
+        }
+    };
+
+    const getPaymentTypeText = (type: number | null) => {
+        switch (type) {
+            case 1: return 'מזומן';
+            case 2: return 'אשראי';
+            case 4: return 'העברה בנקאית';
+            case 6: return 'Bit';
+            case 11: return 'הוראת קבע';
+            default: return '';
+        }
+    };
+
+    const getPlanStatusText = (status: string) => {
+        switch (status) {
+            case 'expired': return 'פג תוקף';
+            case 'cancelled': return 'בוטל';
+            case 'depleted': return 'נוצל';
+            case 'frozen': return 'מוקפא';
+            default: return status;
+        }
+    };
 
     // ─── Render ───
 
@@ -524,23 +681,24 @@ export default function ClientManagerScreen() {
 
                         <View style={styles.divider} />
 
-                        {/* Expiry */}
+                        {/* Dates */}
                         <View style={styles.dateSection}>
                             <View style={styles.dateRow}>
                                 <Calendar size={18} color="#64748B" />
-                                <Text style={styles.dateLabel}>בתוקף עד:</Text>
-                                <TouchableOpacity onPress={() => setShowDatePicker(true)}>
+                                <Text style={styles.dateLabel}>תאריך התחלה:</Text>
+                                <TouchableOpacity onPress={() => setShowStartDatePicker(true)}>
                                     <Text style={styles.dateValue}>
-                                        {formatDate(client.subscription.end_date)}
+                                        {formatDate(client.subscription.start_date)}
                                     </Text>
                                 </TouchableOpacity>
                             </View>
-                            <View style={styles.quickActions}>
-                                <TouchableOpacity style={styles.chip} onPress={() => handleExtendDate('week')}>
-                                    <Text style={styles.chipText}>+ שבוע</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.chip} onPress={() => handleExtendDate('month')}>
-                                    <Text style={styles.chipText}>+ חודש</Text>
+                            <View style={styles.dateRow}>
+                                <Calendar size={18} color="#64748B" />
+                                <Text style={styles.dateLabel}>תאריך סיום:</Text>
+                                <TouchableOpacity onPress={() => setShowEndDatePicker(true)}>
+                                    <Text style={styles.dateValue}>
+                                        {formatDate(client.subscription.end_date)}
+                                    </Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -726,9 +884,207 @@ export default function ClientManagerScreen() {
                     </View>
                 )}
 
+                {/* ── Past Plans ── */}
+                {client.pastPlans.length > 0 && (
+                    <View style={styles.sectionCard}>
+                        <TouchableOpacity
+                            style={styles.sectionHeader}
+                            onPress={() => setShowPastPlans(!showPastPlans)}
+                        >
+                            <View style={styles.sectionHeaderLeft}>
+                                <History size={18} color="#64748B" />
+                                <Text style={styles.sectionHeaderTitle}>היסטוריית תוכניות</Text>
+                            </View>
+                            <View style={styles.sectionHeaderRight}>
+                                <View style={styles.countBadge}>
+                                    <Text style={styles.countBadgeText}>{client.pastPlans.length}</Text>
+                                </View>
+                                {showPastPlans ? <ChevronUp size={20} color="#94A3B8" /> : <ChevronDown size={20} color="#94A3B8" />}
+                            </View>
+                        </TouchableOpacity>
+                        {showPastPlans && client.pastPlans.map(plan => (
+                            <View key={plan.id} style={styles.historyItem}>
+                                <View style={styles.historyItemLeft}>
+                                    {plan.type === 'ticket' ? (
+                                        <Ticket size={16} color="#F59E0B" />
+                                    ) : (
+                                        <CreditCard size={16} color="#64748B" />
+                                    )}
+                                    <View>
+                                        <Text style={styles.historyItemTitle}>{plan.name}</Text>
+                                        <Text style={styles.historyItemDate}>
+                                            {formatDate(plan.start_date)} - {formatDate(plan.end_date)}
+                                            {plan.sessions_info ? ` • ${plan.sessions_info} נותרו` : ''}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <View style={[styles.statusBadge, { backgroundColor: '#FEF2F2' }]}>
+                                    <Text style={[styles.statusBadgeText, { color: '#EF4444' }]}>
+                                        {getPlanStatusText(plan.status)}
+                                    </Text>
+                                </View>
+                            </View>
+                        ))}
+                    </View>
+                )}
+
+                {/* ── Booking History ── */}
+                {client.recentBookings.length > 0 && (
+                    <View style={styles.sectionCard}>
+                        <TouchableOpacity
+                            style={styles.sectionHeader}
+                            onPress={() => setShowBookings(!showBookings)}
+                        >
+                            <View style={styles.sectionHeaderLeft}>
+                                <Calendar size={18} color="#64748B" />
+                                <Text style={styles.sectionHeaderTitle}>היסטוריית הזמנות</Text>
+                            </View>
+                            <View style={styles.sectionHeaderRight}>
+                                <View style={styles.countBadge}>
+                                    <Text style={styles.countBadgeText}>{client.recentBookings.length}</Text>
+                                </View>
+                                {showBookings ? <ChevronUp size={20} color="#94A3B8" /> : <ChevronDown size={20} color="#94A3B8" />}
+                            </View>
+                        </TouchableOpacity>
+                        {showBookings && client.recentBookings.map(booking => (
+                            <View key={booking.id} style={styles.historyItem}>
+                                <View style={styles.historyItemLeft}>
+                                    <View style={[styles.statusDot, { backgroundColor: getBookingStatusColor(booking.status) }]} />
+                                    <View>
+                                        <Text style={styles.historyItemTitle}>{booking.class_title}</Text>
+                                        <Text style={styles.historyItemDate}>
+                                            {booking.class_date ? formatDate(booking.class_date) : formatDate(booking.booked_at)}
+                                            {booking.class_time ? ` • ${booking.class_time}` : ''}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <View style={[styles.statusBadge, { backgroundColor: getBookingStatusColor(booking.status) + '15' }]}>
+                                    <Text style={[styles.statusBadgeText, { color: getBookingStatusColor(booking.status) }]}>
+                                        {getBookingStatusText(booking.status)}
+                                    </Text>
+                                </View>
+                            </View>
+                        ))}
+                    </View>
+                )}
+
+                {/* ── Invoice/Payment History ── */}
+                {client.invoices.length > 0 && (
+                    <View style={styles.sectionCard}>
+                        <TouchableOpacity
+                            style={styles.sectionHeader}
+                            onPress={() => setShowInvoices(!showInvoices)}
+                        >
+                            <View style={styles.sectionHeaderLeft}>
+                                <FileText size={18} color="#64748B" />
+                                <Text style={styles.sectionHeaderTitle}>חשבוניות ותשלומים</Text>
+                            </View>
+                            <View style={styles.sectionHeaderRight}>
+                                <View style={styles.countBadge}>
+                                    <Text style={styles.countBadgeText}>{client.invoices.length}</Text>
+                                </View>
+                                {showInvoices ? <ChevronUp size={20} color="#94A3B8" /> : <ChevronDown size={20} color="#94A3B8" />}
+                            </View>
+                        </TouchableOpacity>
+                        {showInvoices && client.invoices.map(inv => (
+                            <TouchableOpacity
+                                key={inv.id}
+                                style={styles.historyItem}
+                                onPress={() => inv.pdf_url && Linking.openURL(inv.pdf_url)}
+                                disabled={!inv.pdf_url}
+                            >
+                                <View style={styles.historyItemLeft}>
+                                    <DollarSign size={16} color={getPaymentStatusColor(inv.payment_status)} />
+                                    <View>
+                                        <Text style={styles.historyItemTitle}>
+                                            ₪{inv.total_amount.toFixed(0)}
+                                            {inv.green_invoice_number ? ` • #${inv.green_invoice_number}` : ''}
+                                        </Text>
+                                        <Text style={styles.historyItemDate}>
+                                            {formatDate(inv.created_at)}
+                                            {getPaymentTypeText(inv.payment_type) ? ` • ${getPaymentTypeText(inv.payment_type)}` : ''}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <View style={styles.invoiceRight}>
+                                    <View style={[styles.statusBadge, { backgroundColor: getPaymentStatusColor(inv.payment_status) + '15' }]}>
+                                        <Text style={[styles.statusBadgeText, { color: getPaymentStatusColor(inv.payment_status) }]}>
+                                            {getPaymentStatusText(inv.payment_status)}
+                                        </Text>
+                                    </View>
+                                    {inv.pdf_url && <FileText size={14} color="#94A3B8" />}
+                                </View>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                )}
+
+                {/* ── Admin Notes ── */}
+                <View style={styles.sectionCard}>
+                    <View style={styles.sectionHeader}>
+                        <View style={styles.sectionHeaderLeft}>
+                            <StickyNote size={18} color="#64748B" />
+                            <Text style={styles.sectionHeaderTitle}>הערות מנהל</Text>
+                        </View>
+                        {client.notes.length > 0 && (
+                            <View style={styles.countBadge}>
+                                <Text style={styles.countBadgeText}>{client.notes.length}</Text>
+                            </View>
+                        )}
+                    </View>
+
+                    <View style={styles.noteInputRow}>
+                        <TextInput
+                            style={styles.noteInput}
+                            value={noteInput}
+                            onChangeText={setNoteInput}
+                            placeholder="הוסף הערה..."
+                            placeholderTextColor="#94A3B8"
+                            textAlign="right"
+                            multiline
+                        />
+                        <TouchableOpacity
+                            style={[styles.noteAddBtn, !noteInput.trim() && { opacity: 0.4 }]}
+                            onPress={handleAddNote}
+                            disabled={!noteInput.trim() || addingNote}
+                        >
+                            {addingNote ? (
+                                <Spinner size="sm" />
+                            ) : (
+                                <Send size={18} color="#fff" />
+                            )}
+                        </TouchableOpacity>
+                    </View>
+
+                    {client.notes.map(note => (
+                        <TouchableOpacity
+                            key={note.id}
+                            style={styles.noteItem}
+                            onLongPress={() => handleDeleteNote(note.id)}
+                        >
+                            <Text style={styles.noteText}>{note.note}</Text>
+                            <Text style={styles.noteMeta}>
+                                {note.admin_name} • {formatDate(note.created_at)}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+
                 {/* ── Admin Actions Grid ── */}
                 <Text style={styles.sectionTitle}>פעולות מנהל</Text>
                 <View style={styles.actionsGrid}>
+                    {/* Send Notification */}
+                    <TouchableOpacity
+                        style={styles.actionCard}
+                        onPress={handleOpenNotificationModal}
+                    >
+                        <View style={[styles.iconCircle, { backgroundColor: '#F0FDF4' }]}>
+                            <Bell size={24} color="#10B981" />
+                        </View>
+                        <Text style={styles.actionTitle}>שלח התראה</Text>
+                        <Text style={styles.actionSubtitle}>הודעה ללקוח</Text>
+                    </TouchableOpacity>
+
                     {/* Freeze/Unfreeze (only if subscription) */}
                     {client.subscription && (
                         <TouchableOpacity
@@ -795,14 +1151,77 @@ export default function ClientManagerScreen() {
                 </View>
             </ScrollView>
 
-            {showDatePicker && client.subscription && (
+            {showStartDatePicker && client.subscription && (
+                <DateTimePicker
+                    value={new Date(client.subscription.start_date)}
+                    mode="date"
+                    display="default"
+                    onChange={onStartDateChange}
+                />
+            )}
+
+            {showEndDatePicker && client.subscription && (
                 <DateTimePicker
                     value={new Date(client.subscription.end_date)}
                     mode="date"
                     display="default"
-                    onChange={onDateChange}
+                    onChange={onEndDateChange}
                 />
             )}
+
+            {/* Send Notification Modal */}
+            <Modal visible={notificationModalVisible} transparent animationType="fade">
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContainer}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>שלח התראה</Text>
+                            <TouchableOpacity onPress={() => setNotificationModalVisible(false)}>
+                                <Text style={{ fontSize: 18, color: '#94A3B8' }}>X</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <Text style={styles.modalSubtext}>שליחת התראה ל-{client.full_name}</Text>
+
+                        <Text style={styles.modalLabel}>כותרת</Text>
+                        <TextInput
+                            style={styles.modalInput}
+                            value={notifTitle}
+                            onChangeText={setNotifTitle}
+                            placeholder="כותרת ההתראה"
+                            placeholderTextColor="#94A3B8"
+                            textAlign="right"
+                        />
+
+                        <Text style={styles.modalLabel}>תוכן ההודעה</Text>
+                        <TextInput
+                            style={[styles.modalInput, { minHeight: 100 }]}
+                            value={notifBody}
+                            onChangeText={setNotifBody}
+                            placeholder="כתוב את ההודעה כאן..."
+                            placeholderTextColor="#94A3B8"
+                            textAlign="right"
+                            multiline
+                            textAlignVertical="top"
+                            autoFocus
+                        />
+
+                        <TouchableOpacity
+                            style={[styles.modalSendBtn, sendingNotification && { opacity: 0.6 }]}
+                            onPress={handleSendNotification}
+                            disabled={sendingNotification}
+                        >
+                            {sendingNotification ? (
+                                <Spinner size="sm" />
+                            ) : (
+                                <Bell size={18} color="#fff" />
+                            )}
+                            <Text style={styles.modalSendBtnText}>
+                                {sendingNotification ? 'שולח...' : 'שלח התראה'}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -818,6 +1237,7 @@ const styles = StyleSheet.create({
         paddingBottom: 16,
         borderBottomLeftRadius: 25,
         borderBottomRightRadius: 25,
+        marginBottom:10,
         overflow: 'hidden',
     },
     backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-end' },
@@ -886,7 +1306,7 @@ const styles = StyleSheet.create({
     cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     cardTitle: { fontSize: 16, color: '#64748B', fontWeight: '600' },
     planName: {
-        fontSize: 14, fontWeight: '700', color: '#000', backgroundColor: '#F3F4F6',
+        fontSize: 16, fontWeight: '700', color: '#000', backgroundColor: '#F3F4F6',
         paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, overflow: 'hidden',
     },
     counterLabel: { fontSize: 13, color: '#94A3B8', fontWeight: '600', textAlign: 'center', marginBottom: 8 },
@@ -900,13 +1320,10 @@ const styles = StyleSheet.create({
     counterValue: { fontSize: 48, fontWeight: '800', color: '#000', fontVariant: ['tabular-nums'] },
     counterTotal: { fontSize: 24, fontWeight: '600', color: '#94A3B8' },
     divider: { height: 1, backgroundColor: '#E5E7EB', marginBottom: 20 },
-    dateSection: { gap: 16 },
+    dateSection: { gap: 12 },
     dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    dateLabel: { fontSize: 15, color: '#64748B', marginLeft: 8, flex: 1 },
-    dateValue: { fontSize: 16, fontWeight: '700', color: '#000' },
-    quickActions: { flexDirection: 'row', gap: 12 },
-    chip: { backgroundColor: '#F3F4F6', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 },
-    chipText: { fontSize: 13, fontWeight: '600', color: '#000' },
+    dateLabel: { fontSize: 15, color: '#64748B', marginLeft: 8, flex: 1, textAlign: 'left',},
+    dateValue: { fontSize: 18, fontWeight: '700', color: '#000', textAlign: 'left',flex:3 },
     debtBanner: {
         flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 16,
         backgroundColor: '#FEF2F2', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12,
@@ -987,4 +1404,74 @@ const styles = StyleSheet.create({
     },
     actionTitle: { fontSize: 16, fontWeight: '700', color: '#000', marginBottom: 4 },
     actionSubtitle: { fontSize: 12, color: '#64748B', fontWeight: '500' },
+
+    // Collapsible Sections
+    sectionCard: {
+        backgroundColor: '#fff', borderRadius: 20, padding: 16, marginBottom: 20,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8,
+    },
+    sectionHeader: {
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    },
+    sectionHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    sectionHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    sectionHeaderTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
+    countBadge: {
+        backgroundColor: '#F1F5F9', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2,
+    },
+    countBadgeText: { fontSize: 13, fontWeight: '700', color: '#64748B' },
+
+    // History Items
+    historyItem: {
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+        paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9', marginTop: 4,
+    },
+    historyItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+    historyItemTitle: { fontSize: 16, fontWeight: '600', color: '#0F172A' },
+    historyItemDate: { fontSize: 13, color: '#94A3B8', marginTop: 2 },
+    statusDot: { width: 10, height: 10, borderRadius: 5 },
+    statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+    statusBadgeText: { fontSize: 13, fontWeight: '700' },
+    invoiceRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+
+    // Notes
+    noteInputRow: {
+        flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginTop: 12,
+    },
+    noteInput: {
+        flex: 1, backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0',
+        paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#0F172A', maxHeight: 80,
+    },
+    noteAddBtn: {
+        width: 42, height: 42, borderRadius: 21, backgroundColor: Colors.primary,
+        alignItems: 'center', justifyContent: 'center',
+    },
+    noteItem: {
+        paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#F1F5F9', marginTop: 4,
+    },
+    noteText: { fontSize: 14, color: '#0F172A', textAlign: 'right', lineHeight: 20 },
+    noteMeta: { fontSize: 11, color: '#94A3B8', textAlign: 'right', marginTop: 4 },
+
+    // Modal
+    modalOverlay: {
+        flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20,
+    },
+    modalContainer: {
+        backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '100%',
+    },
+    modalHeader: {
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8,
+    },
+    modalTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
+    modalSubtext: { fontSize: 13, color: '#94A3B8', textAlign: 'right', marginBottom: 16 },
+    modalLabel: { fontSize: 14, fontWeight: '600', color: '#374151', textAlign: 'right', marginBottom: 6 },
+    modalInput: {
+        backgroundColor: '#F3F4F6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
+        fontSize: 15, color: '#0F172A', textAlign: 'right', marginBottom: 14,
+    },
+    modalSendBtn: {
+        backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center',
+        flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 6,
+    },
+    modalSendBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

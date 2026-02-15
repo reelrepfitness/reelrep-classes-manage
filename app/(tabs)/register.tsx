@@ -125,20 +125,28 @@ export default function POSCartScreen() {
             try {
                 let data: any[] = [];
                 if (activeTab === 'subscription') {
-                    // Match ShopContext fetch
                     const { data: subs } = await supabase
-                        .from('subscription_plans')
-                        .select('id,name,type,sessions_per_week,description,full_price_in_advance,"price-per-month"')
-                        .eq('is_active', true);
+                        .from('plans')
+                        .select('id,name,is_unlimited,sessions_per_week,description,price_upfront,price_per_month')
+                        .eq('is_active', true)
+                        .eq('category', 'subscription');
                     data = (subs || []).map((p: any) => ({
                         ...p,
                         type: 'subscription',
-                        price: p.full_price_in_advance ? Number(p.full_price_in_advance) : 0,
-                        pricePerMonth: p['price-per-month'] ? Number(p['price-per-month']) : undefined,
+                        price: p.price_upfront ? Number(p.price_upfront) : 0,
+                        pricePerMonth: p.price_per_month ? Number(p.price_per_month) : undefined,
                     }));
                 } else {
-                    const { data: ticks } = await supabase.from('ticket_plans').select('*').eq('is_active', true);
-                    data = (ticks || []).map((p: any) => ({ ...p, type: 'ticket' }));
+                    const { data: ticks } = await supabase
+                        .from('plans')
+                        .select('*')
+                        .eq('is_active', true)
+                        .eq('category', 'ticket');
+                    data = (ticks || []).map((p: any) => ({
+                        ...p,
+                        type: 'ticket',
+                        price: p.price_total ? Number(p.price_total) : 0,
+                    }));
                 }
                 setPlans(data);
             } catch (e) {

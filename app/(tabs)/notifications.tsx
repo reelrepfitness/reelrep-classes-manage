@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, FlatList, RefreshControl, Alert } from 'r
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { Bell, Check, FileText, CheckCircle, XCircle } from 'lucide-react-native';
+import { Bell, Check, FileText, CheckCircle, XCircle, DollarSign } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/constants/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -210,6 +210,98 @@ function RequestCard({
     );
 }
 
+function PaymentApprovalCard({
+    request,
+    onApprove,
+    onDecline,
+}: {
+    request: Notification;
+    onApprove: () => void;
+    onDecline: () => void;
+}) {
+    const isPending = request.status === 'pending';
+    const payload = request.payload || {};
+
+    const getPaymentMethodLabel = (method: string) => {
+        switch (method) {
+            case 'bit': return 'Bit';
+            case 'cash': return 'מזומן';
+            case 'bank_transfer': return 'העברה בנקאית';
+            default: return method || '';
+        }
+    };
+
+    const getStatusBadge = () => {
+        switch (request.status) {
+            case 'approved':
+                return <View className="bg-green-100 px-2 py-1 rounded-full"><Text className="text-green-600 text-xs font-bold">אושר</Text></View>;
+            case 'declined':
+                return <View className="bg-red-100 px-2 py-1 rounded-full"><Text className="text-red-600 text-xs font-bold">נדחה</Text></View>;
+            default:
+                return <View className="bg-orange-100 px-2 py-1 rounded-full"><Text className="text-orange-600 text-xs font-bold">ממתין</Text></View>;
+        }
+    };
+
+    const cartItems = payload.cart_items || [];
+    const planNames = cartItems.map((i: any) => i.name).join(', ');
+
+    return (
+        <View className="bg-white rounded-2xl p-4 mb-3 border border-gray-100 shadow-sm">
+            {/* Header */}
+            <View className="flex-row items-center justify-between mb-2">
+                <View className="flex-row items-center gap-2">
+                    <DollarSign size={18} color={Colors.primary} />
+                    <Text className="text-base font-bold text-[#09090B]">בקשת תשלום</Text>
+                </View>
+                {getStatusBadge()}
+            </View>
+
+            {/* Client name */}
+            <Text className="text-sm font-semibold text-[#09090B] text-right mb-1">
+                {payload.client_name || 'לקוח'}
+            </Text>
+
+            {/* Plan details */}
+            {planNames ? (
+                <Text className="text-sm text-gray-600 text-right mb-2">{planNames}</Text>
+            ) : (
+                <Text className="text-sm text-gray-500 text-right mb-2">{request.message}</Text>
+            )}
+
+            {/* Amount + payment method row */}
+            <View className="bg-gray-50 rounded-lg p-3 mb-2 flex-row items-center justify-between">
+                <Text className="text-base font-bold text-[#09090B]">₪{payload.amount ?? 0}</Text>
+                <Text className="text-sm text-gray-500">{getPaymentMethodLabel(payload.payment_method)}</Text>
+            </View>
+
+            {/* Timestamp */}
+            <Text className="text-xs text-gray-400 text-right mb-3">
+                {getRelativeTime(request.created_at)}
+            </Text>
+
+            {/* Approve / Decline buttons */}
+            {isPending && (
+                <View className="flex-row gap-3">
+                    <TouchableOpacity
+                        onPress={onDecline}
+                        className="flex-1 flex-row py-2.5 rounded-xl items-center justify-center gap-2 border border-gray-300 bg-transparent"
+                    >
+                        <XCircle size={18} color="#6B7280" />
+                        <Text className="text-gray-600 font-bold">דחה</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={onApprove}
+                        className="flex-1 flex-row py-2.5 rounded-xl items-center justify-center gap-2 bg-[#09090B]"
+                    >
+                        <CheckCircle size={18} color="white" />
+                        <Text className="text-white font-bold">אשר</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+        </View>
+    );
+}
+
 export default function NotificationsScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
@@ -231,7 +323,7 @@ export default function NotificationsScreen() {
                 const { data, error } = await supabase
                     .from('admin_notifications')
                     .select('*')
-                    .in('type', ['freeze_request', 'extension_request'])
+                    .in('type', ['freeze_request', 'extension_request', 'payment_approval'])
                     .order('created_at', { ascending: false })
                     .limit(50);
                 if (error) throw error;
@@ -299,24 +391,86 @@ export default function NotificationsScreen() {
     }, [isAdmin, markAsReadMutation, router]);
 
     const handleApprove = (request: Notification) => {
-        Alert.alert('אישור בקשה', 'האם לאשר את הבקשה?', [
-            { text: 'ביטול', style: 'cancel' },
-            {
-                text: 'אשר',
-                onPress: () => updateRequestMutation.mutate({ id: request.id, status: 'approved' })
-            }
-        ]);
+        if (request.type === 'payment_approval') {
+            const approvalId = request.payload?.approval_id;
+            if (!approvalId) return;
+
+            Alert.alert('אישור תשלום', `לאשר תשלום של ₪${request.payload?.amount ?? 0}?`, [
+                { text: 'ביטול', style: 'cancel' },
+                {
+                    text: 'אשר',
+                    onPress: async () => {
+                        try {
+                            const { error } = await supabase.functions.invoke('manual-payment-approval', {
+                                body: { approvalId, action: 'approve' },
+                            });
+                            if (error) throw error;
+
+                            await supabase.from('admin_notifications')
+                                .update({ status: 'approved', is_read: true, updated_at: new Date().toISOString() })
+                                .eq('id', request.id);
+
+                            queryClient.invalidateQueries({ queryKey: ['notifications'] });
+                            queryClient.invalidateQueries({ queryKey: ['unread-notifications'] });
+                            Alert.alert('הצלחה', 'התשלום אושר והמנוי/כרטיסייה הופעלו');
+                        } catch (err: any) {
+                            console.error('[Notifications] Approve error:', err);
+                            Alert.alert('שגיאה', 'לא ניתן לאשר את התשלום');
+                        }
+                    },
+                },
+            ]);
+        } else {
+            Alert.alert('אישור בקשה', 'האם לאשר את הבקשה?', [
+                { text: 'ביטול', style: 'cancel' },
+                {
+                    text: 'אשר',
+                    onPress: () => updateRequestMutation.mutate({ id: request.id, status: 'approved' })
+                }
+            ]);
+        }
     };
 
     const handleDecline = (request: Notification) => {
-        Alert.alert('דחיית בקשה', 'האם לדחות את הבקשה?', [
-            { text: 'ביטול', style: 'cancel' },
-            {
-                text: 'דחה',
-                style: 'destructive',
-                onPress: () => updateRequestMutation.mutate({ id: request.id, status: 'declined' })
-            }
-        ]);
+        if (request.type === 'payment_approval') {
+            const approvalId = request.payload?.approval_id;
+            if (!approvalId) return;
+
+            Alert.alert('דחיית תשלום', 'לדחות את בקשת התשלום?', [
+                { text: 'ביטול', style: 'cancel' },
+                {
+                    text: 'דחה',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const { error } = await supabase.functions.invoke('manual-payment-approval', {
+                                body: { approvalId, action: 'reject' },
+                            });
+                            if (error) throw error;
+
+                            await supabase.from('admin_notifications')
+                                .update({ status: 'declined', is_read: true, updated_at: new Date().toISOString() })
+                                .eq('id', request.id);
+
+                            queryClient.invalidateQueries({ queryKey: ['notifications'] });
+                            queryClient.invalidateQueries({ queryKey: ['unread-notifications'] });
+                        } catch (err: any) {
+                            console.error('[Notifications] Decline error:', err);
+                            Alert.alert('שגיאה', 'לא ניתן לדחות את התשלום');
+                        }
+                    },
+                },
+            ]);
+        } else {
+            Alert.alert('דחיית בקשה', 'האם לדחות את הבקשה?', [
+                { text: 'ביטול', style: 'cancel' },
+                {
+                    text: 'דחה',
+                    style: 'destructive',
+                    onPress: () => updateRequestMutation.mutate({ id: request.id, status: 'declined' })
+                }
+            ]);
+        }
     };
 
     const onRefresh = useCallback(async () => {
@@ -387,11 +541,19 @@ export default function NotificationsScreen() {
                 }
                 renderItem={({ item }) => (
                     activeTab === 'requests' ? (
-                        <RequestCard
-                            request={item}
-                            onApprove={() => handleApprove(item)}
-                            onDecline={() => handleDecline(item)}
-                        />
+                        item.type === 'payment_approval' ? (
+                            <PaymentApprovalCard
+                                request={item}
+                                onApprove={() => handleApprove(item)}
+                                onDecline={() => handleDecline(item)}
+                            />
+                        ) : (
+                            <RequestCard
+                                request={item}
+                                onApprove={() => handleApprove(item)}
+                                onDecline={() => handleDecline(item)}
+                            />
+                        )
                     ) : (
                         <NotificationCard
                             notification={item}

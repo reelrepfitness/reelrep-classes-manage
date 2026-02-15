@@ -95,27 +95,18 @@ export function useAdminCoupons() {
 
     const enrichedPlans: CouponPlanAssignment[] = [];
     if (planAssignments && planAssignments.length > 0) {
-      const subIds = planAssignments.filter(p => p.plan_type === 'subscription').map(p => p.plan_id);
-      const ticketIds = planAssignments.filter(p => p.plan_type === 'ticket').map(p => p.plan_id);
+      const allPlanIds = planAssignments.map(p => p.plan_id);
+      const planNames: Record<string, string> = {};
 
-      let subNames: Record<string, string> = {};
-      let ticketNames: Record<string, string> = {};
-
-      if (subIds.length > 0) {
-        const { data } = await supabase.from('subscription_plans').select('id, name').in('id', subIds);
-        data?.forEach(p => { subNames[p.id] = p.name; });
-      }
-      if (ticketIds.length > 0) {
-        const { data } = await supabase.from('ticket_plans').select('id, name').in('id', ticketIds);
-        data?.forEach(p => { ticketNames[p.id] = p.name; });
+      if (allPlanIds.length > 0) {
+        const { data } = await supabase.from('plans').select('id, name').in('id', allPlanIds);
+        data?.forEach(p => { planNames[p.id] = p.name; });
       }
 
       for (const assignment of planAssignments) {
         enrichedPlans.push({
           ...assignment,
-          plan_name: assignment.plan_type === 'subscription'
-            ? subNames[assignment.plan_id]
-            : ticketNames[assignment.plan_id],
+          plan_name: planNames[assignment.plan_id],
         });
       }
     }

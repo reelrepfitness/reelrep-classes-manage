@@ -59,6 +59,11 @@ export interface ClientDetail {
   // Relations
   subscription: SubscriptionDetail | null;
   ticket: TicketDetail | null;
+  // History
+  recentBookings: BookingHistoryItem[];
+  invoices: InvoiceHistoryItem[];
+  pastPlans: PastPlanItem[];
+  notes: ClientNote[];
 }
 
 export interface SubscriptionDetail {
@@ -105,6 +110,45 @@ export interface AvailablePlan {
   validity_days?: number;
 }
 
+export interface BookingHistoryItem {
+  id: string;
+  status: string;
+  booked_at: string;
+  attended_at: string | null;
+  cancelled_at: string | null;
+  class_title: string;
+  class_date: string | null;
+  class_time: string | null;
+}
+
+export interface InvoiceHistoryItem {
+  id: string;
+  total_amount: number;
+  payment_status: string;
+  payment_type: number | null;
+  description: string | null;
+  created_at: string;
+  pdf_url: string | null;
+  green_invoice_number: number | null;
+}
+
+export interface PastPlanItem {
+  id: string;
+  name: string;
+  type: 'subscription' | 'ticket';
+  status: string;
+  start_date: string;
+  end_date: string;
+  sessions_info?: string;
+}
+
+export interface ClientNote {
+  id: string;
+  note: string;
+  admin_name: string;
+  created_at: string;
+}
+
 // ─── Hook ────────────────────────────────────────────────
 
 export function useAdminClients() {
@@ -130,7 +174,7 @@ export function useAdminClients() {
       .select(`
         id, user_id, plan_status, is_active, sessions_remaining, end_date,
         outstanding_balance, has_debt,
-        subscription_plans:subscription_id ( name )
+        plans:plan_id ( name )
       `)
       .in('user_id', userIds)
       .eq('is_active', true)
@@ -141,7 +185,7 @@ export function useAdminClients() {
       .from('user_tickets')
       .select(`
         id, user_id, status, sessions_remaining, total_sessions, expiry_date, has_debt,
-        ticket_plans:plan_id ( name )
+        plans:plan_id ( name )
       `)
       .in('user_id', userIds)
       .eq('status', 'active')
@@ -172,7 +216,7 @@ export function useAdminClients() {
         late_cancellations: p.late_cancellations || 0,
         subscription: sub ? {
           id: sub.id,
-          plan_name: (sub.subscription_plans as any)?.name || 'מנוי',
+          plan_name: (sub.plans as any)?.name || 'מנוי',
           plan_status: sub.plan_status || 'active',
           is_active: sub.is_active,
           sessions_remaining: sub.sessions_remaining,
@@ -182,7 +226,7 @@ export function useAdminClients() {
         } : null,
         ticket: tkt ? {
           id: tkt.id,
-          plan_name: (tkt.ticket_plans as any)?.name || 'כרטיסייה',
+          plan_name: (tkt.plans as any)?.name || 'כרטיסייה',
           status: tkt.status,
           sessions_remaining: tkt.sessions_remaining,
           total_sessions: tkt.total_sessions,
@@ -209,10 +253,10 @@ export function useAdminClients() {
     const { data: subData } = await supabase
       .from('user_subscriptions')
       .select(`
-        id, subscription_id, plan_status, is_active, start_date, end_date,
+        id, plan_id, plan_status, is_active, start_date, end_date,
         sessions_remaining, outstanding_balance, has_debt, debt_amount,
         freeze_reason, freeze_start_date, freeze_end_date, payment_method,
-        subscription_plans:subscription_id ( name, type, sessions_per_week )
+        plans:plan_id ( name, category, is_unlimited, sessions_per_week )
       `)
       .eq('user_id', userId)
       .eq('is_active', true)
@@ -226,7 +270,7 @@ export function useAdminClients() {
       .select(`
         id, plan_id, status, total_sessions, sessions_remaining,
         purchase_date, expiry_date, has_debt, debt_amount, notes,
-        ticket_plans:plan_id ( name )
+        plans:plan_id ( name )
       `)
       .eq('user_id', userId)
       .eq('status', 'active')
@@ -239,16 +283,57 @@ export function useAdminClients() {
       .from('class_bookings')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', userId)
-      .not('attended_at', 'is', null);
+      .eq('status', 'completed');
 
     const { data: lastBooking } = await supabase
       .from('class_bookings')
-      .select('attended_at')
+      .select('booked_at')
       .eq('user_id', userId)
-      .not('attended_at', 'is', null)
-      .order('attended_at', { ascending: false })
+      .eq('status', 'completed')
+      .order('booked_at', { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    // 6. Recent bookings history
+    const { data: recentBookingsData } = await supabase
+      .from('class_bookings')
+      .select(`id, status, booked_at, attended_at, cancelled_at, classes:class_id ( title, class_date, time )`)
+      .eq('user_id', userId)
+      .order('booked_at', { ascending: false })
+      .limit(20);
+
+    // 7. Invoice history (from DB, no external API calls)
+    const { data: invoiceData } = await supabase
+      .from('invoices')
+      .select('id, total_amount, payment_status, payment_type, description, created_at, pdf_url, green_invoice_number')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    // 8. Past plans
+    const { data: pastSubs } = await supabase
+      .from('user_subscriptions')
+      .select(`id, plan_status, start_date, end_date, plans:plan_id ( name )`)
+      .eq('user_id', userId)
+      .eq('is_active', false)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    const { data: pastTickets } = await supabase
+      .from('user_tickets')
+      .select(`id, status, total_sessions, sessions_remaining, purchase_date, expiry_date, plans:plan_id ( name )`)
+      .eq('user_id', userId)
+      .neq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    // 9. Admin notes
+    const { data: notesData } = await supabase
+      .from('admin_client_notes')
+      .select('id, note, created_at, profiles:admin_id ( full_name )')
+      .eq('client_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(30);
 
     // 5. Highest achievement
     const { data: userAchievements } = await supabase
@@ -272,12 +357,12 @@ export function useAdminClients() {
     // Build subscription detail
     let subscription: SubscriptionDetail | null = null;
     if (subData) {
-      const plan = subData.subscription_plans as any;
+      const plan = subData.plans as any;
       subscription = {
         id: subData.id,
-        subscription_id: subData.subscription_id,
+        subscription_id: subData.plan_id,
         plan_name: plan?.name || 'מנוי',
-        plan_type: plan?.type || 'unlimited',
+        plan_type: plan?.is_unlimited ? 'unlimited' : (plan?.category || 'subscription'),
         sessions_per_week: plan?.sessions_per_week || null,
         plan_status: subData.plan_status || 'active',
         is_active: subData.is_active,
@@ -297,7 +382,7 @@ export function useAdminClients() {
     // Build ticket detail
     let ticket: TicketDetail | null = null;
     if (ticketData) {
-      const tPlan = ticketData.ticket_plans as any;
+      const tPlan = ticketData.plans as any;
       ticket = {
         id: ticketData.id,
         plan_id: ticketData.plan_id,
@@ -313,6 +398,59 @@ export function useAdminClients() {
       };
     }
 
+    // Build booking history
+    const recentBookings: BookingHistoryItem[] = (recentBookingsData || []).map((b: any) => ({
+      id: b.id,
+      status: b.status,
+      booked_at: b.booked_at,
+      attended_at: b.attended_at,
+      cancelled_at: b.cancelled_at,
+      class_title: b.classes?.title || 'שיעור',
+      class_date: b.classes?.class_date || null,
+      class_time: b.classes?.time || null,
+    }));
+
+    // Build invoice history
+    const invoices: InvoiceHistoryItem[] = (invoiceData || []).map((inv: any) => ({
+      id: inv.id,
+      total_amount: Number(inv.total_amount) || 0,
+      payment_status: inv.payment_status || 'pending',
+      payment_type: inv.payment_type,
+      description: inv.description,
+      created_at: inv.created_at,
+      pdf_url: inv.pdf_url,
+      green_invoice_number: inv.green_invoice_number,
+    }));
+
+    // Build past plans
+    const pastPlans: PastPlanItem[] = [
+      ...(pastSubs || []).map((s: any) => ({
+        id: s.id,
+        name: (s.plans as any)?.name || 'מנוי',
+        type: 'subscription' as const,
+        status: s.plan_status || 'expired',
+        start_date: s.start_date,
+        end_date: s.end_date,
+      })),
+      ...(pastTickets || []).map((t: any) => ({
+        id: t.id,
+        name: (t.plans as any)?.name || 'כרטיסייה',
+        type: 'ticket' as const,
+        status: t.status,
+        start_date: t.purchase_date,
+        end_date: t.expiry_date,
+        sessions_info: `${t.sessions_remaining}/${t.total_sessions}`,
+      })),
+    ];
+
+    // Build notes
+    const notes: ClientNote[] = (notesData || []).map((n: any) => ({
+      id: n.id,
+      note: n.note,
+      admin_name: (n.profiles as any)?.full_name || 'מנהל',
+      created_at: n.created_at,
+    }));
+
     return {
       id: profile.id,
       full_name: profile.full_name || profile.email || 'לקוח',
@@ -326,53 +464,37 @@ export function useAdminClients() {
       late_cancellations: profile.late_cancellations || 0,
       total_workouts: profile.total_workouts || 0,
       attendedCount: attendedCount || 0,
-      lastClassDate: lastBooking?.attended_at || null,
+      lastClassDate: lastBooking?.booked_at || null,
       highestAchievement,
       subscription,
       ticket,
+      recentBookings,
+      invoices,
+      pastPlans,
+      notes,
     };
   }, []);
 
   // ─── Fetch available plans ───
 
   const fetchAvailablePlans = useCallback(async (): Promise<AvailablePlan[]> => {
-    const [{ data: subs }, { data: tickets }] = await Promise.all([
-      supabase
-        .from('subscription_plans')
-        .select('id, name, type, full_price_in_advance, sessions_per_week')
-        .eq('is_active', true)
-        .order('name'),
-      supabase
-        .from('ticket_plans')
-        .select('id, name, total_sessions, validity_days, price')
-        .eq('is_active', true)
-        .order('name'),
-    ]);
+    const { data, error } = await supabase
+      .from('plans')
+      .select('id, name, category, price_per_month, price_upfront, price_total, sessions_per_week, total_sessions, validity_days')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true });
 
-    const plans: AvailablePlan[] = [];
+    if (error) throw error;
 
-    for (const s of (subs || [])) {
-      plans.push({
-        id: s.id,
-        name: s.name,
-        type: 'subscription',
-        price: Number(s.full_price_in_advance),
-        sessions_per_week: s.sessions_per_week,
-      });
-    }
-
-    for (const t of (tickets || [])) {
-      plans.push({
-        id: t.id,
-        name: t.name,
-        type: 'ticket',
-        price: Number(t.price),
-        total_sessions: t.total_sessions,
-        validity_days: t.validity_days,
-      });
-    }
-
-    return plans;
+    return (data || []).map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      type: p.category as 'subscription' | 'ticket',
+      price: Number(p.category === 'ticket' ? p.price_total : (p.price_upfront || p.price_per_month)),
+      sessions_per_week: p.sessions_per_week,
+      total_sessions: p.total_sessions,
+      validity_days: p.validity_days,
+    }));
   }, []);
 
   // ─── Mutations ─────────────────────────────────────────
@@ -387,7 +509,7 @@ export function useAdminClients() {
       .from('user_subscriptions')
       .insert({
         user_id: userId,
-        subscription_id: planId,
+        plan_id: planId,
         start_date: startDate,
         end_date: endDate,
         is_active: true,
@@ -432,6 +554,7 @@ export function useAdminClients() {
     subId: string,
     updates: {
       sessions_remaining?: number;
+      start_date?: string;
       end_date?: string;
       plan_status?: string;
       outstanding_balance?: number;
@@ -529,6 +652,23 @@ export function useAdminClients() {
     if (error) throw error;
   }, []);
 
+  const addClientNote = useCallback(async (clientId: string, adminId: string, note: string) => {
+    const { error } = await supabase
+      .from('admin_client_notes')
+      .insert({ client_id: clientId, admin_id: adminId, note });
+
+    if (error) throw error;
+  }, []);
+
+  const deleteClientNote = useCallback(async (noteId: string) => {
+    const { error } = await supabase
+      .from('admin_client_notes')
+      .delete()
+      .eq('id', noteId);
+
+    if (error) throw error;
+  }, []);
+
   return {
     loading,
     setLoading,
@@ -545,5 +685,7 @@ export function useAdminClients() {
     cancelTicket,
     blockClient,
     unblockClient,
+    addClientNote,
+    deleteClientNote,
   };
 }

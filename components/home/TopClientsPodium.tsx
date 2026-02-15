@@ -222,12 +222,12 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   rankText: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: 12,
+    color: '#000000ff',
+    fontWeight: '600',
+    fontSize: 16,
   },
   athleteName: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '900',
     textAlign: 'center',
     color: '#374151',
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   podiumBarCount: {
-    fontSize: 22,
+    fontSize: 25,
     fontWeight: '900',
     color: 'rgba(0,0,0,0.45)',
   },

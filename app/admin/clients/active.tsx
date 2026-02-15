@@ -25,11 +25,11 @@ export default function ActiveClientsScreen() {
           email,
           user_subscriptions(
             id,
-            subscription_id,
+            plan_id,
             is_active,
             start_date,
             end_date,
-            subscription_plans(name, type)
+            plans:plan_id(name, category)
           )
         `)
                 .order('created_at', { ascending: false });
@@ -87,7 +87,7 @@ export default function ActiveClientsScreen() {
                     </View>
                 ) : (clients || []).map((client: any) => {
                     const subscription = client.user_subscriptions?.[0];
-                    const plan = subscription?.subscription_plans;
+                    const plan = (subscription?.plans as any);
                     const isActive = subscription?.is_active;
 
                     return (
@@ -149,12 +149,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     headerTitle: {
-        fontSize: 18,
+        fontSize: 24,
         fontWeight: '800',
         color: '#0F172A',
     },
     headerSubtitle: {
-        fontSize: 13,
+        fontSize: 15,
         color: '#64748B',
         fontWeight: '600',
         marginTop: 2,
@@ -172,12 +172,12 @@ const styles = StyleSheet.create({
         alignItems: 'flex-start',
     },
     toggleLabel: {
-        fontSize: 15,
+        fontSize: 18,
         fontWeight: '700',
         color: '#1E293B',
     },
     toggleSublabel: {
-        fontSize: 12,
+        fontSize: 14,
         color: '#64748B',
         marginTop: 2,
     },
@@ -220,17 +220,17 @@ const styles = StyleSheet.create({
     },
     clientInfo: {
         flex: 1,
-        marginRight: 12,
+        marginLeft: 10,
         alignItems: 'flex-start',
     },
     clientName: {
-        fontSize: 16,
+        fontSize: 18,
         fontWeight: '800',
         color: '#0F172A',
         marginBottom: 2,
     },
     clientEmail: {
-        fontSize: 12,
+        fontSize: 14,
         color: '#64748B',
     },
     cardFooter: {
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
         borderRadius: 4,
     },
     planName: {
-        fontSize: 13,
+        fontSize: 15,
         fontWeight: '700',
         color: '#475569',
     },

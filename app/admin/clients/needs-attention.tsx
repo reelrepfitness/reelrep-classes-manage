@@ -26,11 +26,11 @@ export default function NeedsAttentionScreen() {
           email,
           user_subscriptions(
             id,
-            subscription_id,
+            plan_id,
             is_active,
             end_date,
             sessions_remaining,
-            subscription_plans(name, type)
+            plans:plan_id(name, category, is_unlimited)
           )
         `)
                 .order('created_at', { ascending: false });
@@ -77,8 +77,8 @@ export default function NeedsAttentionScreen() {
             >
                 {(clients || []).map((client: any) => {
                     const subscription = client.user_subscriptions?.[0];
-                    const plan = subscription?.subscription_plans;
-                    const isTicket = plan?.type === 'ticket';
+                    const plan = (subscription?.plans as any);
+                    const isTicket = plan?.category === 'ticket';
                     const endDate = new Date(subscription?.end_date);
                     const daysLeft = Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
@@ -129,7 +129,7 @@ export default function NeedsAttentionScreen() {
                                     </View>
                                 )}
 
-                                {isTicket && subscription?.sessions_remaining !== undefined && (
+                                {(isTicket || !plan?.is_unlimited) && subscription?.sessions_remaining !== undefined && (
                                     <Text style={styles.sessionsRemaining}>
                                         {subscription.sessions_remaining} אימונים נותרו
                                     </Text>

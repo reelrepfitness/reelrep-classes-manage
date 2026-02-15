@@ -216,8 +216,11 @@ export default function CartScreen() {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
 
-        const finalAmount = total;
+        // Calculate fresh from current state to avoid stale closure issues
+        const currentSubtotal = getTotal();
+        const finalAmount = Math.max(0, currentSubtotal - discount);
         const invoiceId = `invoice-${Date.now()}`;
+        const purchaseDescription = `רכישה: ${cart.map(i => i.package.name).join(', ')}`;
 
         const cartItemsFormatted = cart.map(item => ({
             plan_id: item.package.planId,
@@ -228,16 +231,112 @@ export default function CartScreen() {
             duration_months: item.package.durationMonths,
             total_sessions: item.package.totalClasses,
             validity_days: item.package.expiryDays,
+            payment_option: item.package.paymentOption,
         }));
 
         setProcessingPayment(true);
 
         try {
+            // ── FREE PURCHASE (100% coupon) — handle first, regardless of payment method ──
+            if (finalAmount <= 0) {
+                const { data: invoiceData, error: invoiceError } = await supabase
+                    .from('invoices')
+                    .insert({
+                        user_id: user.id,
+                        client_id: user.id,
+                        green_invoice_id: `free-${Date.now()}`,
+                        green_document_type: 320,
+                        amount: 0,
+                        vat_amount: 0,
+                        total_amount: 0,
+                        payment_type: selectedPaymentType,
+                        payment_status: 'paid',
+                        items: cartItemsFormatted.map(item => ({
+                            description: item.name,
+                            quantity: item.quantity,
+                            price: item.price,
+                            currency: 'ILS',
+                            vatType: 0,
+                        })),
+                        cart_items: cartItemsFormatted,
+                        description: purchaseDescription,
+                        ...(couponId ? { coupon_id: couponId, discount_amount: discount } : {}),
+                    })
+                    .select('id')
+                    .single();
+
+                if (invoiceError || !invoiceData) {
+                    console.error('[Shop] Free purchase invoice error:', invoiceError);
+                    throw new Error('שגיאה ביצירת חשבונית');
+                }
+
+                // Mark coupon as used
+                if (couponId) {
+                    await supabase.rpc('use_coupon', { p_coupon_id: couponId });
+                }
+
+                // Create tickets/subscriptions immediately
+                for (const item of cartItemsFormatted) {
+                    if (item.plan_type === 'ticket') {
+                        const expiryDate = new Date();
+                        expiryDate.setDate(expiryDate.getDate() + (item.validity_days || 90));
+                        const { error: ticketError } = await supabase.from('user_tickets').insert({
+                            user_id: user!.id,
+                            plan_id: item.plan_id,
+                            total_sessions: item.total_sessions || 0,
+                            sessions_remaining: item.total_sessions || 0,
+                            status: 'active',
+                            purchase_date: new Date().toISOString(),
+                            expiry_date: expiryDate.toISOString(),
+                            payment_method: 'coupon',
+                            payment_reference: `COUPON-${invoiceData.id}`,
+                            invoice_id: invoiceData.id,
+                            has_debt: false,
+                            debt_amount: 0,
+                        });
+                        if (ticketError) {
+                            console.error('[Shop] Ticket insert error:', ticketError);
+                            throw new Error('שגיאה ביצירת כרטיסייה');
+                        }
+                    } else {
+                        // Subscription types: 'subscription', 'unlimited', etc.
+                        const startDate = new Date();
+                        const endDate = new Date();
+                        endDate.setMonth(endDate.getMonth() + (item.duration_months || 1));
+                        const { error: subError } = await supabase.from('user_subscriptions').insert({
+                            user_id: user!.id,
+                            plan_id: item.plan_id,
+                            start_date: startDate.toISOString(),
+                            end_date: endDate.toISOString(),
+                            is_active: true,
+                            plan_status: 'active',
+                            payment_method: 'coupon',
+                            payment_reference: `COUPON-${invoiceData.id}`,
+                            invoice_id: invoiceData.id,
+                            has_debt: false,
+                            debt_amount: 0,
+                            outstanding_balance: 0,
+                        });
+                        if (subError) {
+                            console.error('[Shop] Subscription insert error:', subError);
+                            throw new Error('שגיאה ביצירת מנוי');
+                        }
+                    }
+                }
+
+                setPaymentConfirmTitle('הרכישה הושלמה!');
+                setPaymentConfirmMessage('המנוי/כרטיסייה הופעלו בהצלחה.');
+                setPaymentConfirmPhase('entering');
+                setShowPaymentConfirm(true);
+                return;
+            }
+
+            // ── CREDIT CARD ──
             if (selectedPaymentType === PAYMENT_TYPES.CREDIT_CARD) {
                 const { formUrl, paymentId } = await createPaymentForm(
                     invoiceId,
                     finalAmount,
-                    `רכישה: ${cart.map(i => i.package.name).join(', ')}`,
+                    purchaseDescription,
                     user.name || user.email,
                     user.email,
                     cartItemsFormatted
@@ -260,6 +359,7 @@ export default function CartScreen() {
                     throw new Error('לא התקבל קישור לתשלום');
                 }
             } else {
+                // ── MANUAL PAYMENT (cash/bit) ──
                 const { data: invoiceData, error: invoiceError } = await supabase
                     .from('invoices')
                     .insert({
@@ -280,7 +380,7 @@ export default function CartScreen() {
                             vatType: 0,
                         })),
                         cart_items: cartItemsFormatted,
-                        description: `רכישה: ${cart.map(i => i.package.name).join(', ')}`,
+                        description: purchaseDescription,
                         ...(couponId ? { coupon_id: couponId, discount_amount: discount } : {}),
                     })
                     .select('id')
@@ -296,84 +396,73 @@ export default function CartScreen() {
                     await supabase.rpc('use_coupon', { p_coupon_id: couponId });
                 }
 
-                if (finalAmount === 0) {
-                    // Free purchase (100% coupon) — auto-create subscriptions/tickets
-                    await supabase.from('invoices').update({ payment_status: 'paid' }).eq('id', invoiceData.id);
+                // Create pending approval for admin
+                const paymentMethodLabel = selectedPaymentType === PAYMENT_TYPES.BIT ? 'bit' : 'cash';
+                const { data: approvalData, error: approvalError } = await supabase
+                    .from('pending_payment_approvals')
+                    .insert({
+                        invoice_id: invoiceData.id,
+                        user_id: user!.id,
+                        payment_method: paymentMethodLabel,
+                        amount: finalAmount,
+                        cart_items: cartItemsFormatted,
+                        status: 'pending',
+                    })
+                    .select('id')
+                    .single();
 
-                    for (const item of cartItemsFormatted) {
-                        if (item.plan_type === 'ticket') {
-                            const expiryDate = new Date();
-                            expiryDate.setDate(expiryDate.getDate() + (item.validity_days || 90));
-                            await supabase.from('user_tickets').insert({
-                                user_id: user!.id,
-                                plan_id: item.plan_id,
-                                total_sessions: item.total_sessions || 0,
-                                sessions_remaining: item.total_sessions || 0,
-                                status: 'active',
-                                purchase_date: new Date().toISOString(),
-                                expiry_date: expiryDate.toISOString(),
-                                payment_method: 'coupon',
-                                payment_reference: `COUPON-${invoiceData.id}`,
-                                invoice_id: invoiceData.id,
-                                has_debt: false,
-                                debt_amount: 0,
-                            });
-                        } else if (item.plan_type === 'subscription') {
-                            const startDate = new Date();
-                            const endDate = new Date();
-                            endDate.setMonth(endDate.getMonth() + (item.duration_months || 1));
-                            await supabase.from('user_subscriptions').insert({
-                                user_id: user!.id,
-                                subscription_id: item.plan_id,
-                                start_date: startDate.toISOString(),
-                                end_date: endDate.toISOString(),
-                                is_active: true,
-                                plan_status: 'active',
-                                payment_method: 'coupon',
-                                payment_reference: `COUPON-${invoiceData.id}`,
-                                invoice_id: invoiceData.id,
-                                has_debt: false,
-                                debt_amount: 0,
-                                outstanding_balance: 0,
-                            });
-                        }
-                    }
-
-                    setPaymentConfirmTitle('הרכישה הושלמה!');
-                    setPaymentConfirmMessage('המנוי/כרטיסייה הופעלו בהצלחה.');
-                    setPaymentConfirmPhase('entering');
-                    setShowPaymentConfirm(true);
-                } else {
-                    // Manual payment — create approval for admin
-                    const { error: approvalError } = await supabase
-                        .from('pending_payment_approvals')
-                        .insert({
-                            invoice_id: invoiceData.id,
-                            user_id: user!.id,
-                            payment_method: selectedPaymentType === PAYMENT_TYPES.BIT ? 'bit' : 'cash',
-                            amount: finalAmount,
-                            cart_items: cartItemsFormatted,
-                            status: 'pending',
-                        });
-
-                    if (approvalError) {
-                        console.error('[Shop] Approval insert error:', approvalError);
-                        throw new Error('שגיאה ביצירת בקשת אישור');
-                    }
-
-                    setPaymentConfirmTitle(
-                        selectedPaymentType === PAYMENT_TYPES.BIT ? 'תשלום ב-Bit' : 'תשלום במזומן'
-                    );
-                    setPaymentConfirmMessage(
-                        `סכום לתשלום: ₪${finalAmount}\n\n` +
-                        (selectedPaymentType === PAYMENT_TYPES.BIT
-                            ? 'אנא בצע העברה למספר: 050-XXX-XXXX\n'
-                            : 'אנא הגע לסטודיו לביצוע התשלום.\n') +
-                        'המנוי/כרטיסייה יופעלו לאחר אישור המנהל.'
-                    );
-                    setPaymentConfirmPhase('entering');
-                    setShowPaymentConfirm(true);
+                if (approvalError) {
+                    console.error('[Shop] Approval insert error:', approvalError);
+                    throw new Error('שגיאה ביצירת בקשת אישור');
                 }
+
+                // Notify admins — in-app notification
+                await supabase.from('admin_notifications').insert({
+                    type: 'payment_approval',
+                    title: 'בקשת תשלום חדשה',
+                    message: `${user.name || user.email} ביקש/ה לרכוש ${cart.map(i => i.package.name).join(', ')} - ₪${finalAmount}`,
+                    payload: {
+                        approval_id: approvalData.id,
+                        client_id: user.id,
+                        client_name: user.name || user.email,
+                        amount: finalAmount,
+                        payment_method: paymentMethodLabel,
+                        cart_items: cartItemsFormatted,
+                    },
+                    is_read: false,
+                    status: 'pending',
+                });
+
+                // Push-notify all admins
+                const { data: admins } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .eq('is_admin', true);
+
+                if (admins?.length) {
+                    supabase.functions.invoke('send-push-notification', {
+                        body: {
+                            user_ids: admins.map((a: any) => a.id),
+                            title: 'בקשת תשלום חדשה',
+                            body: `${user.name || user.email} מבקש/ת אישור ל${cart.map(i => i.package.name).join(', ')} - ₪${finalAmount}`,
+                            notification_type: 'payment_approval',
+                            data: { approval_id: approvalData.id },
+                        },
+                    }).catch(err => console.warn('[Shop] Push notification error:', err));
+                }
+
+                setPaymentConfirmTitle(
+                    selectedPaymentType === PAYMENT_TYPES.BIT ? 'תשלום ב-Bit' : 'תשלום במזומן'
+                );
+                setPaymentConfirmMessage(
+                    `סכום לתשלום: ₪${finalAmount}\n\n` +
+                    (selectedPaymentType === PAYMENT_TYPES.BIT
+                        ? 'אנא בצע העברה למספר: 050-XXX-XXXX\n'
+                        : 'אנא הגע לסטודיו לביצוע התשלום.\n') +
+                    'המנוי/כרטיסייה יופעלו לאחר אישור המנהל.'
+                );
+                setPaymentConfirmPhase('entering');
+                setShowPaymentConfirm(true);
             }
         } catch (error: any) {
             console.error('[Shop] Payment error:', error);

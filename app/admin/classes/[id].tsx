@@ -894,25 +894,60 @@ export default function AdminClassDetailsScreen() {
     };
 
     // Footer action handlers
+    const [sendNotificationModalVisible, setSendNotificationModalVisible] = useState(false);
+    const [notificationTitle, setNotificationTitle] = useState('');
+    const [notificationBody, setNotificationBody] = useState('');
+    const [sendingNotification, setSendingNotification] = useState(false);
+
     const handleSendNotification = () => {
         if (confirmedParticipants.length === 0) {
             Alert.alert('אין משתתפים', 'אין משתתפים רשומים לשיעור זה');
             return;
         }
-        Alert.alert(
-            'שלח התראה',
-            `לשלוח התראה ל-${confirmedParticipants.length} משתתפים?`,
-            [
-                { text: 'ביטול', style: 'cancel' },
-                {
-                    text: 'שלח',
-                    onPress: () => {
-                        // TODO: Implement push notification to participants
-                        Alert.alert('הצלחה', 'ההתראה נשלחה לכל המשתתפים');
-                    }
+        setNotificationTitle(`עדכון - ${classItem.title}`);
+        setNotificationBody('');
+        setSendNotificationModalVisible(true);
+    };
+
+    const handleSendNotificationSubmit = async () => {
+        if (!notificationBody.trim()) {
+            Alert.alert('שגיאה', 'יש להזין תוכן להתראה');
+            return;
+        }
+
+        const userIds = confirmedParticipants
+            .map(p => p.user_id)
+            .filter(Boolean);
+
+        if (userIds.length === 0) {
+            Alert.alert('שגיאה', 'לא נמצאו משתמשים לשליחה');
+            return;
+        }
+
+        setSendingNotification(true);
+        try {
+            const { error } = await supabase.functions.invoke('send-push-notification', {
+                body: {
+                    user_ids: userIds,
+                    title: notificationTitle.trim() || `עדכון - ${classItem.title}`,
+                    body: notificationBody.trim(),
+                    notification_type: 'push_class_reminder',
+                    data: {
+                        class_id: classItem.id,
+                        screen: '/(tabs)',
+                    },
                 },
-            ]
-        );
+            });
+
+            if (error) throw error;
+            setSendNotificationModalVisible(false);
+            Alert.alert('הצלחה', `ההתראה נשלחה ל-${userIds.length} משתתפים`);
+        } catch (error) {
+            console.error('Error sending notification:', error);
+            Alert.alert('שגיאה', 'שליחת ההתראה נכשלה');
+        } finally {
+            setSendingNotification(false);
+        }
     };
 
     const handleDuplicateContent = () => {
@@ -924,6 +959,23 @@ export default function AdminClassDetailsScreen() {
             Alert.alert('שגיאה', 'אין תוכן לשכפול (תיאור או תוכנית אימון)');
         }
     };
+    const cancelClassInDb = async () => {
+        if (!classItem?.id || classItem.id.startsWith('virtual_')) return;
+
+        // Deactivate the class
+        await supabase
+            .from('classes')
+            .update({ is_active: false })
+            .eq('id', classItem.id);
+
+        // Cancel all confirmed bookings
+        await supabase
+            .from('class_bookings')
+            .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+            .eq('class_id', classItem.id)
+            .in('status', ['confirmed', 'waiting_list']);
+    };
+
     const handleCancelClass = () => {
         Alert.alert(
             'ביטול אימון',
@@ -933,18 +985,48 @@ export default function AdminClassDetailsScreen() {
                 {
                     text: 'שלח התראה על הביטול',
                     onPress: async () => {
-                        // TODO: Send notification then cancel
-                        Alert.alert('האימון בוטל', 'התראה נשלחה לכל המשתתפים');
-                        router.back();
+                        try {
+                            // Send cancellation notification to all participants
+                            const userIds = confirmedParticipants
+                                .map(p => p.user_id)
+                                .filter(Boolean);
+
+                            if (userIds.length > 0) {
+                                await supabase.functions.invoke('send-push-notification', {
+                                    body: {
+                                        user_ids: userIds,
+                                        title: 'אימון בוטל',
+                                        body: `האימון ${classItem.title} ב-${classItem.time} בוטל`,
+                                        notification_type: 'push_booking_cancelled',
+                                        data: {
+                                            class_id: classItem.id,
+                                            screen: '/(tabs)',
+                                        },
+                                    },
+                                });
+                            }
+
+                            await cancelClassInDb();
+                            Alert.alert('האימון בוטל', 'התראה נשלחה לכל המשתתפים');
+                            router.back();
+                        } catch (error) {
+                            console.error('Error cancelling class:', error);
+                            Alert.alert('שגיאה', 'ביטול האימון נכשל');
+                        }
                     }
                 },
                 {
                     text: 'המשך ללא התראה',
                     style: 'destructive',
                     onPress: async () => {
-                        // TODO: Cancel without notification
-                        Alert.alert('האימון בוטל', 'האימון בוטל ללא שליחת התראה');
-                        router.back();
+                        try {
+                            await cancelClassInDb();
+                            Alert.alert('האימון בוטל', 'האימון בוטל ללא שליחת התראה');
+                            router.back();
+                        } catch (error) {
+                            console.error('Error cancelling class:', error);
+                            Alert.alert('שגיאה', 'ביטול האימון נכשל');
+                        }
                     }
                 },
             ]
@@ -1191,6 +1273,87 @@ export default function AdminClassDetailsScreen() {
                 onRemove={handleRemoveParticipant}
             />
 
+            {/* Send Notification Modal */}
+            <Modal visible={sendNotificationModalVisible} transparent animationType="fade">
+                <View style={modalStyles.overlay}>
+                    <View style={modalStyles.container}>
+                        <View style={modalStyles.header}>
+                            <Text style={modalStyles.title}>שלח התראה</Text>
+                            <TouchableOpacity onPress={() => setSendNotificationModalVisible(false)}>
+                                <Icon name="x" size={24} color="#6B7280" strokeWidth={2} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <Text style={{ fontSize: 13, color: '#6B7280', textAlign: 'left', marginBottom: 12 }}>
+                            ההתראה תישלח ל-{confirmedParticipants.length} משתתפים
+                        </Text>
+
+                        <Text style={{ fontSize: 16, fontWeight: '600', color: '#374151', textAlign: 'left', marginBottom: 6 }}>כותרת</Text>
+                        <TextInput
+                            style={{
+                                backgroundColor: '#F3F4F6',
+                                borderRadius: 12,
+                                paddingHorizontal: 14,
+                                paddingVertical: 12,
+                                fontSize: 15,
+                                color: '#111827',
+                                textAlign: "right",
+                                marginBottom: 14,
+                            }}
+                            value={notificationTitle}
+                            onChangeText={setNotificationTitle}
+                            placeholder="כותרת ההתראה"
+                            placeholderTextColor="#9CA3AF"
+                        />
+
+                        <Text style={{ fontSize: 16, fontWeight: '600', color: '#374151', textAlign: 'left', marginBottom: 6 }}>תוכן ההודעה</Text>
+                        <TextInput
+                            style={{
+                                backgroundColor: '#F3F4F6',
+                                borderRadius: 12,
+                                paddingHorizontal: 14,
+                                paddingVertical: 12,
+                                fontSize: 15,
+                                color: '#111827',
+                                textAlign: 'right',
+                                minHeight: 100,
+                                marginBottom: 20,
+                            }}
+                            value={notificationBody}
+                            onChangeText={setNotificationBody}
+                            placeholder="כתוב את ההודעה כאן..."
+                            placeholderTextColor="#9CA3AF"
+                            multiline
+                            textAlignVertical="top"
+                            autoFocus
+                        />
+
+                        <TouchableOpacity
+                            style={{
+                                backgroundColor: sendingNotification ? '#9CA3AF' : Colors.primary,
+                                borderRadius: 12,
+                                paddingVertical: 14,
+                                alignItems: 'center',
+                                flexDirection: 'row',
+                                justifyContent: 'center',
+                                gap: 8,
+                            }}
+                            onPress={handleSendNotificationSubmit}
+                            disabled={sendingNotification}
+                        >
+                            {sendingNotification ? (
+                                <Spinner size="sm" />
+                            ) : (
+                                <Icon name="bell" size={18} color="#FFFFFF" strokeWidth={2} />
+                            )}
+                            <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '700' }}>
+                                {sendingNotification ? 'שולח...' : 'שלח התראה'}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
             {/* Footer Actions */}
             <LinearGradient
                 colors={['#1F2937', '#111827']}
@@ -1203,7 +1366,7 @@ export default function AdminClassDetailsScreen() {
                         style={[styles.footerBtn, styles.footerBtnDanger]}
                         onPress={handleCancelClass}
                     >
-                        <Icon name="x-circle" size={20} color="#EF4444" strokeWidth={2} />
+                        <Icon name="x-circle" size={24} color="#EF4444" strokeWidth={2} />
                         <Text style={[styles.footerBtnText, { color: '#EF4444' }]}>בטל אימון</Text>
                     </TouchableOpacity>
 
@@ -1211,7 +1374,7 @@ export default function AdminClassDetailsScreen() {
                         style={styles.footerBtn}
                         onPress={() => setAddClientModalVisible(true)}
                     >
-                        <UserAddIcon size={20} color="#FFFFFF" />
+                        <UserAddIcon size={24} color="#FFFFFF" />
                         <Text style={styles.footerBtnText}>הוסף משתתף</Text>
                     </TouchableOpacity>
 
@@ -1219,7 +1382,7 @@ export default function AdminClassDetailsScreen() {
                         style={styles.footerBtn}
                         onPress={handleDuplicateContent}
                     >
-                        <Icon name="copy" size={20} color="#FFFFFF" strokeWidth={2} />
+                        <Icon name="copy" size={24} color="#FFFFFF" strokeWidth={2} />
                         <Text style={styles.footerBtnText}>שכפל תוכן</Text>
                     </TouchableOpacity>
 
@@ -1227,7 +1390,7 @@ export default function AdminClassDetailsScreen() {
                         style={styles.footerBtn}
                         onPress={handleSendNotification}
                     >
-                        <Icon name="bell" size={20} color="#FFFFFF" strokeWidth={2} />
+                        <Icon name="bell" size={24} color="#FFFFFF" strokeWidth={2} />
                         <Text style={styles.footerBtnText}>שלח התראה</Text>
                     </TouchableOpacity>
                 </View>
@@ -1268,8 +1431,8 @@ const styles = StyleSheet.create({
         elevation: 8,
     },
     headerBackButton: {
-        width: 44,
-        height: 44,
+        width: 40,
+        height: 40,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -1279,8 +1442,8 @@ const styles = StyleSheet.create({
         marginHorizontal: 8,
     },
     headerTitle: {
-        fontSize: 20,
-        fontWeight: '700',
+        fontSize: 25,
+        fontWeight: '800',
         color: '#FFFFFF',
         textAlign: 'center',
     },
@@ -1302,8 +1465,8 @@ const styles = StyleSheet.create({
         borderRadius: 3,
     },
     progressText: {
-        fontSize: 14,
-        fontWeight: '900',
+        fontSize: 18,
+        fontWeight: '700',
         color: '#FFFFFF',
     },
     headerSpacer: {
@@ -1367,13 +1530,13 @@ const styles = StyleSheet.create({
         alignItems: 'flex-start',
     },
     trainerName: {
-        fontSize: 17,
+        fontSize: 18,
         fontWeight: '900',
         color: '#111827',
         textAlign: 'left',
     },
     trainerRole: {
-        fontSize: 13,
+        fontSize: 15,
         color: '#6B7280',
         fontWeight: '500',
         textAlign: 'left',
@@ -1392,16 +1555,16 @@ const styles = StyleSheet.create({
         elevation: 2,
     },
     sectionTitle: {
-        fontSize: 15,
+        fontSize: 20,
         fontWeight: '900',
         color: '#111827',
         textAlign: 'left',
         marginBottom: 6,
     },
     slotsSubtitle: {
-        fontSize: 13,
+        fontSize: 16,
         color: '#6B7280',
-        fontWeight: '500',
+        fontWeight: '700',
         textAlign: 'left',
         marginBottom: 16,
     },
@@ -1475,13 +1638,13 @@ const styles = StyleSheet.create({
         gap: 4,
     },
     slotFirstName: {
-        fontSize: 18,
+        fontSize: 20,
         fontWeight: '900',
         color: '#000000ff',
         textAlign: 'left',
     },
     slotLastName: {
-        fontSize: 12,
+        fontSize: 15,
         fontWeight: '500',
         color: '#000000ff',
         textAlign: 'left',
@@ -1522,7 +1685,7 @@ const styles = StyleSheet.create({
         gap: 4,
     },
     footerBtnText: {
-        fontSize: 10,
+        fontSize: 13,
         fontWeight: '600',
         color: '#FFFFFF',
         textAlign: 'center',

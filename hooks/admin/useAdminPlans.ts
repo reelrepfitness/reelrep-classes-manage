@@ -3,56 +3,57 @@ import { supabase } from '@/constants/supabase';
 
 // ─── Types ───────────────────────────────────────────────
 
-export interface SubscriptionPlan {
+export interface Plan {
   id: string;
   name: string;
-  type: string;
+  category: 'subscription' | 'ticket';
+  price_per_month: number | null;
+  price_upfront: number | null;
+  price_total: number | null;
+  duration_months: number;
   sessions_per_week: number | null;
-  full_price_in_advance: number;
-  'price-per-month': number | null;
+  total_sessions: number | null;
+  validity_days: number;
+  is_unlimited: boolean;
+  allow_recurring: boolean;
+  allow_upfront: boolean;
+  allow_monthly: boolean;
   description: string | null;
-  desclaimers: string | null;
+  disclaimer: string | null;
   image_url: string | null;
-  green_invoice_URL: string | null;
+  sort_order: number;
+  is_for_new_members_only: boolean;
+  green_invoice_url: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
 }
 
-export interface TicketPlan {
-  id: string;
-  name: string;
-  total_sessions: number;
-  validity_days: number;
-  price: number;
-  description: string | null;
-  disclaimer: string | null;
-  image_url: string | null;
-  green_invoice_URL: string | null;
-  is_for_new_members_only: boolean;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
+// Backward-compat aliases for files that still import the old names
+export type SubscriptionPlan = Plan;
+export type TicketPlan = Plan;
 
 // ─── Hook ────────────────────────────────────────────────
 
 export function useAdminPlans() {
 
-  // ── Subscription Plans ──
-
-  const fetchSubscriptionPlans = useCallback(async (): Promise<SubscriptionPlan[]> => {
-    const { data, error } = await supabase
-      .from('subscription_plans')
+  const fetchPlans = useCallback(async (category?: 'subscription' | 'ticket'): Promise<Plan[]> => {
+    let query = supabase
+      .from('plans')
       .select('*')
+      .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false });
+    if (category) {
+      query = query.eq('category', category);
+    }
+    const { data, error } = await query;
     if (error) throw error;
     return data || [];
   }, []);
 
-  const createSubscriptionPlan = useCallback(async (plan: Partial<SubscriptionPlan>) => {
+  const createPlan = useCallback(async (plan: Partial<Plan>) => {
     const { data, error } = await supabase
-      .from('subscription_plans')
+      .from('plans')
       .insert(plan)
       .select()
       .single();
@@ -60,67 +61,45 @@ export function useAdminPlans() {
     return data;
   }, []);
 
-  const updateSubscriptionPlan = useCallback(async (id: string, updates: Partial<SubscriptionPlan>) => {
+  const updatePlan = useCallback(async (id: string, updates: Partial<Plan>) => {
     const { error } = await supabase
-      .from('subscription_plans')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .from('plans')
+      .update(updates)
       .eq('id', id);
     if (error) throw error;
   }, []);
 
-  const deleteSubscriptionPlan = useCallback(async (id: string) => {
+  const deletePlan = useCallback(async (id: string) => {
     const { error } = await supabase
-      .from('subscription_plans')
+      .from('plans')
       .delete()
       .eq('id', id);
     if (error) throw error;
   }, []);
 
-  // ── Ticket Plans ──
-
-  const fetchTicketPlans = useCallback(async (): Promise<TicketPlan[]> => {
-    const { data, error } = await supabase
-      .from('ticket_plans')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return data || [];
-  }, []);
-
-  const createTicketPlan = useCallback(async (plan: Partial<TicketPlan>) => {
-    const { data, error } = await supabase
-      .from('ticket_plans')
-      .insert(plan)
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
-  }, []);
-
-  const updateTicketPlan = useCallback(async (id: string, updates: Partial<TicketPlan>) => {
-    const { error } = await supabase
-      .from('ticket_plans')
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq('id', id);
-    if (error) throw error;
-  }, []);
-
-  const deleteTicketPlan = useCallback(async (id: string) => {
-    const { error } = await supabase
-      .from('ticket_plans')
-      .delete()
-      .eq('id', id);
-    if (error) throw error;
-  }, []);
+  // Backward-compat wrappers
+  const fetchSubscriptionPlans = useCallback(() => fetchPlans('subscription'), [fetchPlans]);
+  const fetchTicketPlans = useCallback(() => fetchPlans('ticket'), [fetchPlans]);
+  const createSubscriptionPlan = createPlan;
+  const createTicketPlan = createPlan;
+  const updateSubscriptionPlan = updatePlan;
+  const updateTicketPlan = updatePlan;
+  const deleteSubscriptionPlan = deletePlan;
+  const deleteTicketPlan = deletePlan;
 
   return {
+    fetchPlans,
+    createPlan,
+    updatePlan,
+    deletePlan,
+    // Backward-compat
     fetchSubscriptionPlans,
-    createSubscriptionPlan,
-    updateSubscriptionPlan,
-    deleteSubscriptionPlan,
     fetchTicketPlans,
+    createSubscriptionPlan,
     createTicketPlan,
+    updateSubscriptionPlan,
     updateTicketPlan,
+    deleteSubscriptionPlan,
     deleteTicketPlan,
   };
 }

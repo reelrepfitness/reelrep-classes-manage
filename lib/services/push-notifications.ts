@@ -15,8 +15,40 @@ Notifications.setNotificationHandler({
   }),
 });
 
+// All notification types matching backend triggers
+export type NotificationType =
+  // User push automations
+  | 'push_class_reminder'
+  | 'push_booking_confirmed'
+  | 'push_booking_cancelled'
+  | 'push_waitlist_available'
+  | 'push_streak_motivation'
+  | 'push_inactive_reminder'
+  | 'push_subscription_expiring'
+  | 'push_new_class_available'
+  // Admin notifications
+  | 'notify_payment_failed'
+  | 'notify_in_app_purchase'
+  | 'notify_class_cancelled'
+  | 'notify_form_submitted'
+  | 'notify_payment_success'
+  | 'notify_sub_unfrozen'
+  | 'notify_new_lead'
+  | 'notify_last_punch'
+  | 'notify_ticket_finished'
+  | 'notify_sub_expiring'
+  | 'notify_user_blocked'
+  | 'notify_user_unblocked'
+  | 'notify_penalty_applied'
+  // Legacy local notification types
+  | 'plates_earned'
+  | 'achievement_unlocked'
+  | 'class_reminder'
+  | 'subscription_expiring'
+  | 'general';
+
 export interface NotificationData {
-  type: 'plates_earned' | 'achievement_unlocked' | 'class_reminder' | 'subscription_expiring' | 'general';
+  type: NotificationType;
   title: string;
   body: string;
   data?: Record<string, any>;
@@ -81,6 +113,24 @@ export class PushNotificationService {
           importance: Notifications.AndroidImportance.HIGH,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#4ade80',
+          sound: 'default',
+        });
+
+        // Bookings notification channel
+        await Notifications.setNotificationChannelAsync('bookings', {
+          name: 'Bookings & Classes',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#3B82F6',
+          sound: 'default',
+        });
+
+        // Admin alerts notification channel
+        await Notifications.setNotificationChannelAsync('admin-alerts', {
+          name: 'Admin Alerts',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#EF4444',
           sound: 'default',
         });
       }

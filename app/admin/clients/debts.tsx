@@ -24,7 +24,7 @@ export default function DebtsScreen() {
           user_subscriptions(
             id,
             outstanding_balance,
-            subscription_plans(name)
+            plans:plan_id(name)
           )
         `)
                 .order('created_at', { ascending: false });
@@ -80,7 +80,7 @@ export default function DebtsScreen() {
                 {(Array.isArray(clients) ? clients : []).map((client: any) => {
                     const subscription = client.user_subscriptions?.[0];
                     const balance = subscription?.outstanding_balance || 0;
-                    const plan = subscription?.subscription_plans;
+                    const plan = (subscription?.plans as any);
 
                     return (
                         <View key={client.id} style={styles.clientCard}>
